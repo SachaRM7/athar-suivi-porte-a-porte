@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.local
+dist/
+test-results/
+playwright-report/
+*.tsbuildinfo
+tools/jdk-21/
+tools/temurin-21.zip
+tools/pmtiles/
+functions/node_modules/
+firestore-debug.log
+firebase-debug.log

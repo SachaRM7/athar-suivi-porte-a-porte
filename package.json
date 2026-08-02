@@ -1,0 +1,52 @@
+{
+  "name": "athar-prototypes",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "verify:build": "npm run build && node scripts/verify-build.mjs",
+    "preview": "vite preview --port 5274",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:e2e": "playwright test",
+    "test:emulator": "powershell -ExecutionPolicy Bypass -File scripts/run-emulator-tests.ps1",
+    "test:emulator:run": "vitest run --config vitest.emulator.config.ts",
+    "prove:firebase-auth-real": "node scripts/prove-real-firebase-auth.mjs"
+  },
+  "dependencies": {
+    "@protomaps/basemaps": "^5.7.2",
+    "@turf/boolean-point-in-polygon": "^7.3.5",
+    "@turf/helpers": "^7.3.5",
+    "@vitejs/plugin-react": "latest",
+    "firebase": "latest",
+    "geofire-common": "^6.0.0",
+    "maplibre-gl": "5.24.0",
+    "pmtiles": "^4.4.1",
+    "react": "latest",
+    "react-dom": "latest",
+    "terra-draw": "^1.32.2",
+    "terra-draw-maplibre-gl-adapter": "^1.4.1",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@firebase/rules-unit-testing": "latest",
+    "@playwright/test": "latest",
+    "@types/pngjs": "^6.0.5",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest",
+    "fake-indexeddb": "^6.2.5",
+    "firebase-admin": "latest",
+    "firebase-tools": "latest",
+    "pngjs": "^7.0.0",
+    "typescript": "latest",
+    "typescript-eslint": "latest",
+    "vitest": "latest"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Zone de test - Toulouse" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [1.4326, 43.6044],
+          [1.4470, 43.6044],
+          [1.4470, 43.6122],
+          [1.4326, 43.6122],
+          [1.4326, 43.6044]
+        ]]
+      }
+    }
+  ]
+}
