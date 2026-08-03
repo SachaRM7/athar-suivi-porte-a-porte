@@ -1,0 +1,174 @@
+{
+  "_app2.css": {
+    "file": "assets/app2.css",
+    "src": "_app2.css"
+  },
+  "_chunk-client-CDjGd9sh.js": {
+    "file": "assets/chunk-client-CDjGd9sh.js",
+    "name": "client",
+    "imports": [
+      "_chunk-rolldown-runtime-BpQH8Ho1.js",
+      "index.html",
+      "_chunk-device-storage-DgpyszPv.js",
+      "_chunk-index.esm-DH0FhWIm.js",
+      "_chunk-index.esm-BITX8vM5.js",
+      "_chunk-index.esm-CNsrvQne.js",
+      "_chunk-index.esm-3gpPCOe2.js"
+    ]
+  },
+  "_chunk-device-storage-DgpyszPv.js": {
+    "file": "assets/chunk-device-storage-DgpyszPv.js",
+    "name": "device-storage",
+    "imports": [
+      "_chunk-rolldown-runtime-BpQH8Ho1.js",
+      "index.html"
+    ]
+  },
+  "_chunk-index.esm-3gpPCOe2.js": {
+    "file": "assets/chunk-index.esm-3gpPCOe2.js",
+    "name": "index.esm",
+    "imports": [
+      "_chunk-index.esm-DH0FhWIm.js"
+    ]
+  },
+  "_chunk-index.esm-BITX8vM5.js": {
+    "file": "assets/chunk-index.esm-BITX8vM5.js",
+    "name": "index.esm",
+    "imports": [
+      "_chunk-index.esm-DH0FhWIm.js"
+    ]
+  },
+  "_chunk-index.esm-CNsrvQne.js": {
+    "file": "assets/chunk-index.esm-CNsrvQne.js",
+    "name": "index.esm",
+    "imports": [
+      "_chunk-index.esm-DH0FhWIm.js"
+    ]
+  },
+  "_chunk-index.esm-DH0FhWIm.js": {
+    "file": "assets/chunk-index.esm-DH0FhWIm.js",
+    "name": "index.esm"
+  },
+  "_chunk-maplibre-gl-CHoKlNq-.js": {
+    "file": "assets/chunk-maplibre-gl-CHoKlNq-.js",
+    "name": "maplibre-gl",
+    "imports": [
+      "_chunk-rolldown-runtime-BpQH8Ho1.js"
+    ],
+    "css": [
+      "assets/app2.css"
+    ]
+  },
+  "_chunk-rolldown-runtime-BpQH8Ho1.js": {
+    "file": "assets/chunk-rolldown-runtime-BpQH8Ho1.js",
+    "name": "rolldown-runtime"
+  },
+  "_chunk-workspace-repositories-1oDTDfk7.js": {
+    "file": "assets/chunk-workspace-repositories-1oDTDfk7.js",
+    "name": "workspace-repositories",
+    "imports": [
+      "_chunk-rolldown-runtime-BpQH8Ho1.js",
+      "index.html",
+      "_chunk-device-storage-DgpyszPv.js"
+    ]
+  },
+  "index.html": {
+    "file": "assets/app.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "imports": [
+      "_chunk-rolldown-runtime-BpQH8Ho1.js"
+    ],
+    "dynamicImports": [
+      "src/infrastructure/firebase/admin-members-gateway.ts",
+      "_chunk-client-CDjGd9sh.js",
+      "src/features/map/components/OfflineMap.tsx",
+      "src/features/map/components/MapPage.tsx",
+      "src/features/map/components/MapPreview.tsx",
+      "src/infrastructure/firebase/auth-session-gateway.ts",
+      "src/infrastructure/firebase/username-auth-gateway.ts",
+      "_chunk-device-storage-DgpyszPv.js"
+    ],
+    "css": [
+      "assets/app.css"
+    ]
+  },
+  "src/features/map/components/MapPage.tsx": {
+    "file": "assets/chunk-MapPage-6T5r-rRb.js",
+    "name": "MapPage",
+    "src": "src/features/map/components/MapPage.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_chunk-workspace-repositories-1oDTDfk7.js",
+      "_chunk-client-CDjGd9sh.js",
+      "_chunk-index.esm-CNsrvQne.js"
+    ],
+    "dynamicImports": [
+      "src/features/map/components/WorkspaceMap.tsx"
+    ]
+  },
+  "src/features/map/components/MapPreview.tsx": {
+    "file": "assets/chunk-MapPreview-CKY1nmyp.js",
+    "name": "MapPreview",
+    "src": "src/features/map/components/MapPreview.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_chunk-workspace-repositories-1oDTDfk7.js"
+    ],
+    "dynamicImports": [
+      "src/features/map/components/WorkspaceMap.tsx"
+    ]
+  },
+  "src/features/map/components/OfflineMap.tsx": {
+    "file": "assets/chunk-OfflineMap-m2xNu_zC.js",
+    "name": "OfflineMap",
+    "src": "src/features/map/components/OfflineMap.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_chunk-maplibre-gl-CHoKlNq-.js"
+    ]
+  },
+  "src/features/map/components/WorkspaceMap.tsx": {
+    "file": "assets/chunk-WorkspaceMap-CY9uIgVe.js",
+    "name": "WorkspaceMap",
+    "src": "src/features/map/components/WorkspaceMap.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html",
+      "_chunk-workspace-repositories-1oDTDfk7.js",
+      "_chunk-maplibre-gl-CHoKlNq-.js"
+    ]
+  },
+  "src/infrastructure/firebase/admin-members-gateway.ts": {
+    "file": "assets/chunk-admin-members-gateway-BLc86Brz.js",
+    "name": "admin-members-gateway",
+    "src": "src/infrastructure/firebase/admin-members-gateway.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_chunk-index.esm-3gpPCOe2.js"
+    ]
+  },
+  "src/infrastructure/firebase/auth-session-gateway.ts": {
+    "file": "assets/chunk-auth-session-gateway-DfVsHQDW.js",
+    "name": "auth-session-gateway",
+    "src": "src/infrastructure/firebase/auth-session-gateway.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_chunk-index.esm-BITX8vM5.js",
+      "_chunk-index.esm-CNsrvQne.js"
+    ]
+  },
+  "src/infrastructure/firebase/username-auth-gateway.ts": {
+    "file": "assets/chunk-username-auth-gateway-BcCMmfsB.js",
+    "name": "username-auth-gateway",
+    "src": "src/infrastructure/firebase/username-auth-gateway.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_chunk-index.esm-BITX8vM5.js"
+    ]
+  }
+}

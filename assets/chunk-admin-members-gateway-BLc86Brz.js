@@ -1,0 +1,1 @@
+import{r as e}from"./chunk-index.esm-3gpPCOe2.js";async function t(t,n){return(await e(t,`createMember`)(n)).data}export{t as createMemberWithFunction};
