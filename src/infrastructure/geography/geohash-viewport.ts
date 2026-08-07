@@ -18,6 +18,20 @@ export type ViewportQueryResult = {
   falsePositiveCount: number;
 };
 
+export function normalizeGeohashRanges(ranges: readonly [string, string][]): readonly [string, string][] {
+  const sorted = [...ranges].sort(([leftStart, leftEnd], [rightStart, rightEnd]) => leftStart.localeCompare(rightStart) || leftEnd.localeCompare(rightEnd));
+  const merged: [string, string][] = [];
+  for (const [start, end] of sorted) {
+    const previous = merged.at(-1);
+    if (previous && start <= previous[1]) {
+      if (end > previous[1]) previous[1] = end;
+    } else {
+      merged.push([start, end]);
+    }
+  }
+  return merged;
+}
+
 function inside(viewport: Viewport, door: GeohashDoor): boolean {
   return door.latitude >= viewport.south && door.latitude <= viewport.north &&
     door.longitude >= viewport.west && door.longitude <= viewport.east;
@@ -59,7 +73,7 @@ export function viewportGeohashRanges(viewport: Viewport, subdivisions = 6): rea
       for (const range of geohashQueryBounds(center, radius)) ranges.set(`${range[0]}:${range[1]}`, range);
     }
   }
-  return [...ranges.values()];
+  return normalizeGeohashRanges([...ranges.values()]);
 }
 
 export function queryDoorsForViewport(doors: readonly GeohashDoor[], viewport: Viewport, subdivisions = 6): ViewportQueryResult {

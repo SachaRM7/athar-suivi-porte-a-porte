@@ -1,0 +1,30 @@
+{
+  "kind": "athar-pilot-manifest",
+  "schemaVersion": 1,
+  "projectId": "athar-dev31",
+  "workspaceId": "main",
+  "statuses": [
+    { "id": "unvisited", "label": "Pas visite", "color": "#8C9494", "order": 0, "active": true },
+    { "id": "retry", "label": "A revenir", "color": "#D8A200", "order": 1, "active": true },
+    { "id": "contacted", "label": "Contact", "color": "#16835F", "order": 2, "active": true },
+    { "id": "do-not-return", "label": "Ne pas revenir", "color": "#B8403B", "order": 3, "active": true }
+  ],
+  "zone": {
+    "id": "pilot-zone-example",
+    "name": "Zone exemple",
+    "color": "#16835F",
+    "coverageState": "prepared",
+    "assigneeLabel": null,
+    "geometry": {
+      "type": "Polygon",
+      "vertices": [
+        { "latitude": 43.6000, "longitude": 1.4400 },
+        { "latitude": 43.6000, "longitude": 1.4410 },
+        { "latitude": 43.6010, "longitude": 1.4410 },
+        { "latitude": 43.6000, "longitude": 1.4400 }
+      ]
+    },
+    "bbox": { "north": 43.6010, "south": 43.6000, "east": 1.4410, "west": 1.4400 }
+  },
+  "buildings": []
+}

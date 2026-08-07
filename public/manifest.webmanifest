@@ -2,7 +2,8 @@
   "name": "Athar",
   "short_name": "Athar",
   "display": "standalone",
-  "start_url": "/",
+  "start_url": ".",
+  "scope": ".",
   "background_color": "#f4f1e8",
   "theme_color": "#143d36"
 }

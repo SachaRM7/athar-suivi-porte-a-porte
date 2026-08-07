@@ -1,7 +1,8 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import { addProtocol, Map as MapLibreMap, NavigationControl, type Map } from 'maplibre-gl';
-import { layers, namedFlavor } from '@protomaps/basemaps';
 import { PMTiles, Protocol, type Source } from 'pmtiles';
+import { withBasePath } from '../../../app/config/public-paths';
+import { createBasemapLayers, MAP_STYLE_CONFIG, stripBasemap, TOWNCENTER_MAP_PALETTE } from '../config/map-style';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 class LocalPackageSource implements Source {
@@ -23,11 +24,10 @@ class LocalPackageSource implements Source {
 }
 
 const protocol = new Protocol();
-const archive = new PMTiles(new LocalPackageSource('/fixtures/toulouse.pmtiles'));
+const archive = new PMTiles(new LocalPackageSource(withBasePath('/fixtures/toulouse.pmtiles')));
 protocol.add(archive);
 addProtocol('pmtiles', protocol.tile);
-const basemapLayers = layers('protomaps', namedFlavor('light'), { lang: 'en' }).filter((layer) => layer.type !== 'symbol');
-const queryableLayerIds = basemapLayers.filter((layer) => layer.type !== 'background').map((layer) => layer.id);
+const queryableLayerIds = createBasemapLayers('protomaps', 'protomaps-buildings').filter((layer) => layer.type !== 'background').map((layer) => layer.id);
 
 export default function OfflineMap(): ReactElement {
   const element = useRef<HTMLDivElement>(null);
@@ -42,12 +42,18 @@ export default function OfflineMap(): ReactElement {
       if (cancelled || !element.current) return;
       element.current.dataset.archiveReady = 'true';
       element.current.dataset.centerTileBytes = String(centerTile.data.byteLength);
-      const instance = new MapLibreMap({ container: element.current, center: [1.4398, 43.6083], zoom: 14.7, attributionControl: { compact: true }, style: { version: 8, sources: {}, layers: [] } });
+      const instance = new MapLibreMap({
+        container: element.current, center: [1.4398, 43.6083], zoom: 14.7,
+        attributionControl: { compact: true },
+         style: { version: 8, glyphs: withBasePath('/fonts/{fontstack}/{range}.pbf'), sources: {}, layers: [] }, pitch: 48, bearing: -12
+      });
       map.current = instance;
       instance.on('error', (event) => console.error('MapLibre offline map error', event.error));
       instance.once('load', () => {
-        instance.addSource('protomaps', { type: 'vector', tiles: ['pmtiles://athar-toulouse-local/{z}/{x}/{y}'], minzoom: header.minZoom, maxzoom: header.maxZoom, bounds: [header.minLon, header.minLat, header.maxLon, header.maxLat], attribution: '<a href="https://protomaps.com">Protomaps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' });
-        basemapLayers.forEach((layer) => instance.addLayer(layer));
+         instance.addSource('protomaps', { type: 'vector', tiles: ['pmtiles://athar-toulouse-local/{z}/{x}/{y}'], minzoom: header.minZoom, maxzoom: header.maxZoom, bounds: [header.minLon, header.minLat, header.maxLon, header.maxLat], attribution: '<a href="https://protomaps.com">Protomaps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' });
+         instance.addSource('protomaps-buildings', { type: 'vector', tiles: ['pmtiles://athar-toulouse-local/{z}/{x}/{y}'], minzoom: header.minZoom, maxzoom: Math.min(header.maxZoom, MAP_STYLE_CONFIG.buildingTileMaxZoom), bounds: [header.minLon, header.minLat, header.maxLon, header.maxLat] });
+         createBasemapLayers('protomaps', 'protomaps-buildings').forEach((layer) => instance.addLayer(layer));
+         stripBasemap(instance, TOWNCENTER_MAP_PALETTE);
       });
       instance.on('idle', () => { if (element.current) element.current.dataset.mapReady = 'true'; });
       instance.on('render', () => {

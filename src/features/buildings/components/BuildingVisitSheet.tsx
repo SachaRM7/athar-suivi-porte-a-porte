@@ -1,0 +1,356 @@
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactElement } from 'react';
+import type { Outbox } from '../../../domain/sync/outbox';
+import type { Building, Door, Status } from '../../../domain/workspace/models';
+import type { DoorStructureTarget } from '../../../domain/workspace/building-structure';
+import { buildBuildingStructureDiff, generateUniformDoorTargets, normalizeDoorLabel, type StructureAmbiguity } from '../../../domain/workspace/building-structure';
+import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
+import { floorLabel, floorProgress, overallProgress, compareDoorsForFloor } from '../model/building-detail';
+import { recordLocalVisit } from '../../visits/model/record-local-visit';
+import type { FieldVisitSync } from '../../visits/model/use-field-visit-sync';
+import { isTrustedDevice, setTrustedDevice } from '../../../infrastructure/offline/device-storage';
+
+type BuildingVisitSheetProps = {
+  authorId: string;
+  building: Building | null;
+  canEditStructure: boolean;
+  outbox: Outbox;
+  repositories: WorkspaceRepositories;
+  sync?: FieldVisitSync;
+  onBuildingChange(building: Building): void;
+  onClose(): void;
+};
+
+type ManualTarget = DoorStructureTarget;
+
+function byId(statuses: readonly Status[]): ReadonlyMap<string, Status> {
+  return new Map(statuses.map((status) => [status.id, status]));
+}
+
+function percent(ratio: number): string { return `${Math.round(ratio * 100)} %`; }
+
+function statusForeground(color: string): string {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) return '#17211e';
+  const value = Number.parseInt(match[1], 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return red * .299 + green * .587 + blue * .114 < 145 ? '#fffdf6' : '#17211e';
+}
+
+function parseManualTargets(value: string): ManualTarget[] {
+  return value.split('\n').flatMap((line, index): ManualTarget[] => {
+    const [floor, label, identity] = line.split('|').map((part) => part.trim());
+    if (!line.trim()) return [];
+    if (!label || !Number.isInteger(Number(floor))) throw new Error(`Ligne ${index + 1}: etage et libelle obligatoires.`);
+    if (identity === 'new:') throw new Error(`Ligne ${index + 1}: le nouvel ID est obligatoire apres new:.`);
+    return [{
+      floor: Number(floor),
+      label,
+      ...(identity?.startsWith('new:') ? { newDoorId: identity.slice(4) } : identity ? { existingDoorId: identity } : {}),
+      sortOrder: index
+    }];
+  });
+}
+
+function manualTargetLine(target: DoorStructureTarget): string {
+  const identity = target.newDoorId ? `new:${target.newDoorId}` : target.existingDoorId ?? '';
+  return `${target.floor} | ${target.label} | ${identity}`;
+}
+
+export function BuildingVisitSheet({ authorId, building, canEditStructure, outbox, repositories, sync, onBuildingChange, onClose }: BuildingVisitSheetProps): ReactElement | null {
+  const [doors, setDoors] = useState<readonly Door[]>([]);
+  const [structureDoors, setStructureDoors] = useState<readonly Door[]>([]);
+  const [statuses, setStatuses] = useState<readonly Status[]>([]);
+  const [floor, setFloor] = useState(0);
+  const [selectedDoorId, setSelectedDoorId] = useState<string | null>(null);
+  const [openPaletteDoorId, setOpenPaletteDoorId] = useState<string | null>(null);
+  const [showPassageNote, setShowPassageNote] = useState(false);
+  const [note, setNote] = useState('');
+  const [pendingCount, setPendingCount] = useState(0);
+  const [message, setMessage] = useState('A jour localement.');
+  const [trustedDevice, setTrustedDeviceState] = useState(isTrustedDevice);
+  const [bulkStatusId, setBulkStatusId] = useState('');
+  const [structureMode, setStructureMode] = useState<'quick-floor' | 'manage' | null>(null);
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  const [quickDoorCount, setQuickDoorCount] = useState('4');
+  const [quickFirstLabel, setQuickFirstLabel] = useState('101');
+  const [floorCount, setFloorCount] = useState('2');
+  const [doorsPerFloor, setDoorsPerFloor] = useState('4');
+  const [firstLabel, setFirstLabel] = useState('101');
+  const [manualPlan, setManualPlan] = useState('');
+  const [showManual, setShowManual] = useState(false);
+  const [ambiguities, setAmbiguities] = useState<readonly StructureAmbiguity[]>([]);
+
+  const refresh = useCallback(async () => {
+    if (!building) return;
+    const [nextDoors, allStructureDoors, nextStatuses, entries] = await Promise.all([
+      repositories.doors.listByBuilding(building.id),
+      canEditStructure ? repositories.doors.listStructureByBuilding(building.id) : Promise.resolve([]),
+      repositories.statuses.list(),
+      outbox.all()
+    ]);
+    const sorted = [...nextDoors].sort((left, right) => left.floor - right.floor || compareDoorsForFloor(left, right));
+    setDoors(sorted);
+    setStructureDoors([...allStructureDoors].sort((left, right) => left.floor - right.floor || compareDoorsForFloor(left, right)));
+    setStatuses(nextStatuses.filter((status) => status.active));
+    setPendingCount(entries.filter((entry) => entry.state === 'pending').length);
+    setFloor((current) => sorted.some((door) => door.floor === current) ? current : (floorProgress(sorted)[0]?.floor ?? 0));
+    setBulkStatusId((current) => current || nextStatuses.find((status) => status.active)?.id || '');
+  }, [building, canEditStructure, outbox, repositories]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void refresh().catch((error) => {
+        setDoors([]);
+        setStructureDoors([]);
+        setMessage(error instanceof Error ? error.message : 'Donnees du batiment indisponibles.');
+      });
+    });
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!sync?.reconciledDoors.length) return;
+    const snapshots = new Map(sync.reconciledDoors.map((door) => [door.id, door]));
+    const applySnapshots = (values: readonly Door[]) => values.map((door) => {
+      const snapshot = snapshots.get(door.id);
+      return snapshot ? {
+        ...door,
+        currentStatusId: snapshot.currentStatusId,
+        revision: snapshot.revision,
+        lastVisitId: snapshot.lastVisitId
+      } : door;
+    });
+    queueMicrotask(() => {
+      setDoors(applySnapshots);
+      setStructureDoors(applySnapshots);
+    });
+  }, [sync?.reconciledDoors]);
+
+  const statusesById = useMemo(() => byId(statuses), [statuses]);
+  const paletteStatuses = useMemo(() => {
+    const priority = new Map([['contacted', 0], ['retry', 1], ['do-not-return', 2], ['unvisited', 3]]);
+    return [...statuses].sort((left, right) => (priority.get(left.id) ?? 10) - (priority.get(right.id) ?? 10) || left.order - right.order);
+  }, [statuses]);
+  const floors = useMemo(() => floorProgress(doors), [doors]);
+  const total = useMemo(() => overallProgress(doors), [doors]);
+  const floorDoors = useMemo(() => doors.filter((door) => door.floor === floor).sort(compareDoorsForFloor), [doors, floor]);
+  const paletteDoor = doors.find((door) => door.id === openPaletteDoorId) ?? null;
+  const selectedEntry = sync?.entries.find((entry) => entry.doorId === selectedDoorId && entry.state !== 'pending')
+    ?? sync?.entries.find((entry) => entry.state !== 'pending')
+    ?? sync?.entries.find((entry) => entry.doorId === selectedDoorId && entry.state === 'pending');
+  const pendingEntries = sync?.entries.filter((entry) => entry.state === 'pending').length ?? pendingCount;
+  const syncLabel = !sync ? `${pendingCount} attente(s)`
+    : !sync.online ? 'Hors ligne'
+      : selectedEntry?.state === 'conflict' ? 'Conflit a resoudre'
+        : selectedEntry?.state === 'rejected' ? 'Ecriture rejetee'
+          : pendingEntries > 0 ? `${pendingEntries} changement(s) en attente`
+            : 'A jour';
+
+  if (!building) return null;
+  const openedBuilding = building;
+
+  async function record(door: Door, statusId: string): Promise<boolean> {
+    try {
+      const result = await recordLocalVisit(repositories, outbox, { authorId, doorId: door.id, statusId, note });
+      setNote('');
+      setMessage(`Porte ${door.label}: passage ${result.visit.id.slice(0, 8)} cree, revision ${result.door.revision}.`);
+      return true;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Passage local refuse.');
+      return false;
+    }
+  }
+
+  async function applyStatus(door: Door, statusId: string): Promise<void> {
+    if (await record(door, statusId)) {
+      setSelectedDoorId(door.id);
+      setOpenPaletteDoorId(null);
+      await refresh();
+      await sync?.synchronize();
+    }
+  }
+
+  async function applyBulk(scope: readonly Door[]): Promise<void> {
+    if (!bulkStatusId) return;
+    const targets = scope.filter((door) => door.currentStatusId !== bulkStatusId);
+    let applied = 0;
+    for (const door of targets) {
+      if (!(await record(door, bulkStatusId))) break;
+      applied += 1;
+    }
+    await refresh();
+    await sync?.synchronize();
+    setMessage(`${applied} porte(s) mises a jour localement sur ${targets.length}.`);
+  }
+
+  async function applyStructure(targets: readonly DoorStructureTarget[]): Promise<void> {
+    let previewId = 0;
+    const preview = buildBuildingStructureDiff({
+      building: openedBuilding,
+      doors: structureDoors,
+      targets,
+      authorId,
+      createDoorId: () => `preview-door-${previewId++}`
+    });
+    if (preview.ambiguities.length > 0) {
+      setAmbiguities(preview.ambiguities);
+      setMessage('Des renommages sont ambigus: choisissez la porte historique a conserver.');
+      return;
+    }
+    const affectedDoorIds = new Set([...preview.updated.map((update) => update.doorId), ...preview.archivedDoorIds]);
+    const entries = await outbox.all();
+    if (entries.some((entry) => affectedDoorIds.has(entry.doorId))) {
+      setMessage('Structure bloquee: synchronisez ou resolvez les passages locaux des portes concernees.');
+      return;
+    }
+    const diff = await repositories.applyBuildingStructure({
+      buildingId: openedBuilding.id,
+      expectedStructureRevision: openedBuilding.structureRevision,
+      targets,
+      authorId,
+      createDoorId: () => `door-${crypto.randomUUID()}`
+    });
+    onBuildingChange(diff.building);
+    setAmbiguities([]);
+    setMessage(`Structure enregistree: ${diff.created.length} ajoutee(s), ${diff.updated.length} ajustee(s), ${diff.archivedDoorIds.length} archivee(s).`);
+    await refresh();
+  }
+
+  async function runStructure(buildTargets: () => readonly DoorStructureTarget[]): Promise<void> {
+    try {
+      await applyStructure(buildTargets());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Modification de structure refusee.');
+    }
+  }
+
+  async function addDoorsToCurrentFloor(): Promise<void> {
+    const count = Number(quickDoorCount);
+    const first = Number(quickFirstLabel);
+    if (!Number.isInteger(count) || count < 1 || count > 50 || !Number.isInteger(first) || first < 0) {
+      setMessage('Indiquez entre 1 et 50 portes et un premier numero valide.');
+      return;
+    }
+    const existing = structureDoors.filter((door) => door.active).map((door) => ({
+      floor: door.floor,
+      label: door.label,
+      sortOrder: door.sortOrder,
+      existingDoorId: door.id
+    }));
+    const labels = new Set(existing.filter((target) => target.floor === floor).map((target) => normalizeDoorLabel(target.label)));
+    const additions = Array.from({ length: count }, (_, index) => {
+      const label = String(first + index);
+      if (labels.has(normalizeDoorLabel(label))) throw new Error(`La porte ${label} existe deja a cet etage.`);
+      labels.add(normalizeDoorLabel(label));
+      return { floor, label, sortOrder: structureDoors.length + index, newDoorId: `door-${crypto.randomUUID()}` };
+    });
+    try {
+      await applyStructure([...existing, ...additions]);
+      setStructureMode(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Ajout des portes refuse.');
+    }
+  }
+
+  function resolveAmbiguity(ambiguity: StructureAmbiguity, doorId: string): void {
+    const lines = parseManualTargets(manualPlan).map((target) => (
+      target.floor === ambiguity.target.floor && normalizeDoorLabel(target.label) === normalizeDoorLabel(ambiguity.target.label)
+        ? manualTargetLine({ ...target, existingDoorId: doorId, newDoorId: undefined })
+        : manualTargetLine(target)
+    ));
+    setManualPlan(lines.join('\n'));
+    setAmbiguities((current) => current.filter((candidate) => candidate !== ambiguity));
+  }
+
+  return (
+    <div className="building-detail-layer">
+      <button aria-label="Fermer le detail du batiment" className="building-detail-backdrop" onClick={onClose} type="button" />
+      <aside aria-label="Detail du batiment" aria-modal="true" className="building-sheet" role="dialog">
+        <header className="building-sheet-toolbar">
+          <button aria-label="Fermer le batiment" className="building-toolbar-action" onClick={onClose} type="button">X</button>
+          <strong>Athar</strong>
+          {canEditStructure ? <button aria-label="Configurer le batiment" className="building-toolbar-action" onClick={() => setStructureMode('manage')} type="button">...</button> : <span />}
+        </header>
+
+        <section className="building-identity">
+          <p className="eyebrow">Athar / tournee locale</p>
+          <h2>{building.addressLabel}</h2>
+          <div className="building-progress-row">
+            <span className="metric-pill">{total.doorCount} portes</span>
+            <span aria-hidden="true" className="building-progress-track"><i style={{ width: `${total.ratio * 100}%` }} /></span>
+            <span className="metric-pill">{percent(total.ratio)} traite</span>
+          </div>
+          <p aria-live="polite" className="building-sync-state">{syncLabel}</p>
+        </section>
+
+        <section className="floor-explorer" aria-label="Navigation par etage">
+          <nav className="floor-rail" aria-label="Etages">
+            {floors.map((item) => <button aria-current={item.floor === floor ? 'page' : undefined} aria-label={`${floorLabel(item.floor)} ${item.treatedCount}/${item.doorCount}`} className="floor-tab" key={item.floor} onClick={() => { setFloor(item.floor); setSelectedDoorId(null); setOpenPaletteDoorId(null); }} style={{ '--progress': `${item.ratio * 100}%` } as CSSProperties} type="button"><b>{floorLabel(item.floor)}</b><span aria-hidden="true" /></button>)}
+          </nav>
+          <div className="floor-content">
+            <div className="floor-heading"><h3>{floorLabel(floor)}</h3><span>{floorDoors.length} porte{floorDoors.length > 1 ? 's' : ''} / {floorProgress(floorDoors)[0] ? percent(floorProgress(floorDoors)[0].ratio) : '0 %'}</span></div>
+            <div className="door-grid" aria-label={`Portes ${floorLabel(floor)}`}>
+              {floorDoors.map((door) => {
+                const status = statusesById.get(door.currentStatusId);
+                const open = openPaletteDoorId === door.id;
+                const statusColor = status?.color ?? '#8C9494';
+                return <div className="door-card" key={door.id}>
+                  <button aria-expanded={open} aria-label={`Porte ${door.label}, ${status?.label ?? door.currentStatusId}`} className="door-row" onClick={() => { setSelectedDoorId(door.id); setShowPassageNote(false); setOpenPaletteDoorId(open ? null : door.id); setMessage(`Porte ${door.label} selectionnee.`); }} style={{ '--status-color': statusColor, '--status-foreground': statusForeground(statusColor) } as CSSProperties} type="button"><span className="door-row-label">{door.label}</span><span aria-hidden="true" className="door-state-dot" /><span className="door-row-status">{status?.label ?? door.currentStatusId}</span></button>
+                </div>;
+              })}
+              {canEditStructure && <button aria-label={`Ajouter des portes au ${floorLabel(floor)}`} className="door-add" onClick={() => { setQuickFirstLabel(String((Math.max(0, ...floorDoors.map((door) => Number(door.label) || 0))) + 1)); setStructureMode('quick-floor'); }} type="button"><b aria-hidden="true">+</b><span>Ajouter</span></button>}
+            </div>
+          </div>
+        </section>
+
+        <section className="building-secondary-actions" aria-label="Actions secondaires">
+          <button aria-expanded={showBulkActions} className="text-button" onClick={() => setShowBulkActions((current) => !current)} type="button">Actions groupees et note</button>
+          {showBulkActions && <div className="bulk-actions">
+            <p className="eyebrow">Statut a appliquer</p>
+            <div className="bulk-statuses">{statuses.map((status) => <button aria-pressed={bulkStatusId === status.id} className="bulk-status" key={status.id} onClick={() => setBulkStatusId(status.id)} style={{ '--status-color': status.color } as CSSProperties} type="button">{status.label}</button>)}</div>
+            <div className="bulk-commands"><button className="secondary-action" disabled={!bulkStatusId} onClick={() => void applyBulk(floorDoors)} type="button">Tout l'etage</button><button className="primary-action" disabled={!bulkStatusId} onClick={() => void applyBulk(doors)} type="button">Tout le batiment</button></div>
+            <label className="note-control">Note du prochain passage<textarea aria-label="Note courte" maxLength={280} onChange={(event) => setNote(event.target.value)} rows={2} value={note} /></label>
+            <p className="privacy-note">Ne pas saisir de donnees sensibles sur les occupants.</p>
+          </div>}
+        </section>
+
+        {sync && selectedEntry?.state === 'conflict' && selectedEntry.conflict && <section className="sync-resolution" aria-label="Resolution du conflit"><p className="eyebrow">Conflit a resoudre</p><p>Serveur : statut {selectedEntry.conflict.currentStatusId}, revision {selectedEntry.conflict.revision}.</p><div className="sync-resolution-actions"><button className="primary-action" disabled={sync.syncing} onClick={() => void sync.reapplyConflict(selectedEntry.commandId)} type="button">Reappliquer</button><button className="secondary-action" disabled={sync.syncing} onClick={() => void sync.abandonConflict(selectedEntry.commandId)} type="button">Abandonner la chaine</button></div></section>}
+        {sync && selectedEntry?.state === 'rejected' && <p className="sync-rejection" role="status">Ecriture rejetee : {selectedEntry.rejection}. Elle ne peut pas etre reappliquee comme un conflit.</p>}
+        {sync && <div className="sync-controls"><button className="secondary-action" disabled={!sync.online || sync.syncing} onClick={() => void sync.synchronize()} type="button">Synchroniser</button><label className="trusted-device-control"><input checked={trustedDevice} onChange={(event) => { const trusted = event.target.checked; setTrustedDeviceState(trusted); setTrustedDevice(trusted); window.location.reload(); }} type="checkbox" />Appareil de confiance</label></div>}
+        <p className="workspace-map-message" role="status">{message}</p>
+
+        {paletteDoor && <div className="door-status-layer">
+          <button aria-label="Fermer le choix de statut" className="door-status-backdrop" onClick={() => setOpenPaletteDoorId(null)} type="button" />
+          <section aria-label={`Statut pour porte ${paletteDoor.label}`} className="door-status-sheet" role="dialog">
+            <h3>Porte {paletteDoor.label}</h3>
+            <p>Choisissez le resultat du passage.</p>
+            <div className="status-palette">{paletteStatuses.map((candidate) => <button aria-label={`Marquer porte ${paletteDoor.label}: ${candidate.label}`} className="status-swatch" key={candidate.id} onClick={() => void applyStatus(paletteDoor, candidate.id)} style={{ '--status-color': candidate.color } as CSSProperties} type="button"><span aria-hidden="true" /><b>{candidate.label}</b></button>)}</div>
+            <button aria-expanded={showPassageNote} className="passage-note-toggle" onClick={() => setShowPassageNote((current) => !current)} type="button">+ note courte et detail</button>
+            {showPassageNote && <label className="passage-note-field">Note du passage<textarea aria-label={`Note pour porte ${paletteDoor.label}`} maxLength={280} onChange={(event) => setNote(event.target.value)} rows={2} value={note} /></label>}
+            <p className="privacy-note">Ne rien noter sur les occupants.</p>
+          </section>
+        </div>}
+
+        {structureMode && <div className="structure-sheet-layer">
+          <button aria-label="Fermer la configuration" className="structure-sheet-backdrop" onClick={() => setStructureMode(null)} type="button" />
+          <section aria-label={structureMode === 'quick-floor' ? 'Ajouter des portes' : 'Configurer le batiment'} className="structure-sheet" role="dialog">
+            <header><div><p className="eyebrow">{structureMode === 'quick-floor' ? floorLabel(floor) : 'Structure'}</p><h3>{structureMode === 'quick-floor' ? 'Ajouter des portes' : 'Configurer le batiment'}</h3></div><button aria-label="Fermer la configuration" className="icon-action" onClick={() => setStructureMode(null)} type="button">X</button></header>
+            {structureMode === 'quick-floor' ? <>
+              <p className="structure-sheet-lead">Creez les portes de cet etage en une fois. Elles commencent en Pas visite.</p>
+              <div className="quick-door-fields"><label>Combien<input aria-label="Nombre de portes a ajouter" min="1" max="50" onChange={(event) => setQuickDoorCount(event.target.value)} type="number" value={quickDoorCount} /></label><label>Premier numero<input aria-label="Premier numero de porte" min="0" onChange={(event) => setQuickFirstLabel(event.target.value)} type="number" value={quickFirstLabel} /></label></div>
+              <button className="primary-action" onClick={() => void addDoorsToCurrentFloor()} type="button">Generer les portes</button>
+            </> : <div className="structure-panel">
+              <div className="structure-fields"><label>Etages<input min="1" onChange={(event) => setFloorCount(event.target.value)} type="number" value={floorCount} /></label><label>Portes / etage<input min="1" onChange={(event) => setDoorsPerFloor(event.target.value)} type="number" value={doorsPerFloor} /></label><label>Premier numero<input min="0" onChange={(event) => setFirstLabel(event.target.value)} type="number" value={firstLabel} /></label></div>
+              <button className="secondary-action" onClick={() => void runStructure(() => generateUniformDoorTargets({ floorCount: Number(floorCount), doorsPerFloor: Number(doorsPerFloor), firstLabel: Number(firstLabel) }))} type="button">Generer sans effacer l'historique</button>
+              <button className="text-button" onClick={() => { if (!showManual) setManualPlan(structureDoors.filter((door) => door.active).map((door) => `${door.floor} | ${door.label} | ${door.id}`).join('\n')); setShowManual((current) => !current); }} type="button">Ajustement manuel</button>
+              {showManual && <><label className="manual-plan-label">Plan manuel (etage | porte | ID ou new:ID)<textarea aria-label="Plan manuel de portes" onChange={(event) => setManualPlan(event.target.value)} rows={5} value={manualPlan} /></label><button className="secondary-action" onClick={() => void runStructure(() => parseManualTargets(manualPlan))} type="button">Appliquer le plan manuel</button></>}
+              {ambiguities.length > 0 && <section className="structure-ambiguities" aria-label="Renommages ambigus"><p>Choisir la porte historique:</p>{ambiguities.map((ambiguity) => <div key={`${ambiguity.target.floor}-${ambiguity.target.label}`}><strong>{floorLabel(ambiguity.target.floor)} / {ambiguity.target.label}</strong>{ambiguity.candidateDoorIds.map((doorId) => <button className="secondary-action" key={doorId} onClick={() => resolveAmbiguity(ambiguity, doorId)} type="button">Conserver {doorId}</button>)}</div>)}</section>}
+              <div className="archived-doors"><p className="eyebrow">Archivees</p>{structureDoors.filter((door) => !door.active).length === 0 ? <span>Aucune</span> : structureDoors.filter((door) => !door.active).map((door) => <span key={door.id}>{floorLabel(door.floor)} / {door.label} - rev. {door.revision}</span>)}</div>
+            </div>}
+          </section>
+        </div>}
+      </aside>
+    </div>
+  );
+}

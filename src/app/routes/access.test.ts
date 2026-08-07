@@ -14,6 +14,7 @@ const activeMember = {
 describe('route access', () => {
   it('redirects anonymous users and blocks inactive users', () => {
     expect(resolveRouteAccess({ status: 'anonymous' })).toBe('login');
+    expect(resolveRouteAccess({ status: 'unregistered', user: {} as User })).toBe('unregistered');
     expect(resolveRouteAccess({ status: 'inactive', user: {} as User })).toBe('inactive');
   });
 

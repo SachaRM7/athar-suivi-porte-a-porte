@@ -1,0 +1,970 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Athar — maquette UI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Kufi+Arabic:wght@600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --paper:#FCFCFB;
+  --sunk:#EEF1ED;
+  --ink:#14181A;
+  --ink-soft:#5C6663;
+  --hairline:#DCE1DC;
+  --brand:#16324F;
+  --brand-lift:#23517D;
+  --accent:#E0A106;
+
+  --st-todo:#8B948F;
+  --st-open:#1F7A5A;
+  --st-away:#C87A0A;
+  --st-linked:#2456A6;
+  --st-no:#A93B2E;
+  --st-locked:#6B5AA8;
+  --st-sisters:#C25B7C;
+
+  --shadow:0 1px 2px rgba(20,24,26,.06), 0 8px 24px -8px rgba(20,24,26,.18);
+  --shadow-lg:0 2px 4px rgba(20,24,26,.06), 0 20px 48px -12px rgba(20,24,26,.28);
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:#DDE0DA;
+  font-family:"IBM Plex Sans",system-ui,sans-serif;
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  padding:26px 20px 60px;
+}
+
+/* ---------- chrome de la page de maquette (hors design) ---------- */
+.page-head{max-width:1240px;margin:0 auto 20px;display:flex;flex-wrap:wrap;gap:14px;align-items:baseline;justify-content:space-between}
+.page-head h1{font-family:"Space Grotesk";font-size:18px;font-weight:600;margin:0;letter-spacing:-.01em}
+.page-head p{margin:0;font-size:12.5px;color:#5A625E;font-family:"IBM Plex Mono";}
+.switch{display:flex;background:var(--paper);border:1px solid var(--hairline);border-radius:999px;padding:3px;gap:2px}
+.switch button{font:500 12px/1 "IBM Plex Mono";letter-spacing:.06em;text-transform:uppercase;border:0;background:none;color:var(--ink-soft);padding:8px 16px;border-radius:999px;cursor:pointer}
+.switch button[aria-pressed=true]{background:var(--brand);color:#fff}
+
+.stage{max-width:1240px;margin:0 auto}
+.stage[data-view=mobile] #desktop{display:none}
+.stage[data-view=desktop] #mobile{display:none}
+#mobile{display:flex;justify-content:center}
+
+/* ---------- carte simulée ---------- */
+.map{position:absolute;inset:0;overflow:hidden;background:#E5E9E2}
+.map svg{width:100%;height:100%;display:block}
+
+/* ---------- coques ---------- */
+.frame-desktop{position:relative;height:760px;border-radius:18px;overflow:hidden;box-shadow:var(--shadow-lg);border:1px solid rgba(20,24,26,.14)}
+.phone{position:relative;width:390px;height:812px;border-radius:44px;padding:11px;background:#101314;box-shadow:var(--shadow-lg)}
+.phone-screen{position:relative;width:100%;height:100%;border-radius:34px;overflow:hidden;background:#E5E9E2}
+.notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:112px;height:28px;background:#101314;border-radius:0 0 16px 16px;z-index:60}
+
+/* ---------- éléments partagés ---------- */
+.wordmark{display:flex;align-items:center;gap:9px}
+.wordmark .ar{font-family:"Noto Kufi Arabic";font-size:18px;color:var(--brand);line-height:1}
+.wordmark .la{font-family:"Space Grotesk";font-weight:600;font-size:14.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink)}
+.rule{width:1px;height:22px;background:var(--hairline)}
+
+.microlabel{font-family:"IBM Plex Mono";font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft)}
+
+.zonechip{display:flex;align-items:center;gap:10px;background:var(--paper);border:1px solid var(--hairline);border-radius:999px;padding:6px 14px 6px 7px;cursor:pointer;box-shadow:var(--shadow)}
+.zonechip .ring{position:relative;width:30px;height:30px;flex:none}
+.zonechip .ring svg{position:absolute;inset:0}
+.zonechip .ring b{position:absolute;inset:0;display:grid;place-items:center;font-family:"IBM Plex Mono";font-size:9.5px;font-weight:600;color:var(--brand)}
+.zonechip .txt{display:flex;flex-direction:column;line-height:1.25;text-align:left}
+.zonechip .txt strong{font-family:"Space Grotesk";font-size:14px;font-weight:600;letter-spacing:-.005em}
+.zonechip .txt span{font-family:"IBM Plex Mono";font-size:10.5px;color:var(--ink-soft)}
+.zonechip .caret{color:var(--ink-soft);font-size:11px}
+
+.modeswitch{display:flex;background:var(--paper);border:1px solid var(--hairline);border-radius:999px;padding:3px;box-shadow:var(--shadow)}
+.modeswitch button{border:0;background:none;cursor:pointer;padding:7px 15px;border-radius:999px;font:500 12px/1 "IBM Plex Sans";color:var(--ink-soft)}
+.modeswitch button[aria-pressed=true]{background:var(--brand);color:#fff}
+
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;font:600 12px/1 "IBM Plex Mono";box-shadow:var(--shadow);border:2px solid var(--paper)}
+
+/* trace bar — signature */
+.trace{display:flex;align-items:flex-end;gap:2px;height:26px}
+.trace i{width:4px;border-radius:1px;display:block;opacity:.92}
+.trace .gap{width:9px;background:none}
+
+.filters{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.filters button{flex:none;border:1px solid var(--hairline);background:var(--paper);border-radius:999px;padding:6px 11px;font:500 12px/1 "IBM Plex Sans";color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;gap:6px}
+.filters button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:#fff}
+.filters .dot{width:7px;height:7px;border-radius:50%}
+.filters b{font-family:"IBM Plex Mono";font-weight:500;font-size:11px;opacity:.75}
+
+.blist{display:flex;flex-direction:column}
+.bitem{display:flex;gap:11px;align-items:flex-start;padding:12px 4px;border-top:1px solid var(--hairline);cursor:pointer;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%;font:inherit}
+.bitem:first-child{border-top:0}
+.bitem:hover{background:rgba(22,50,79,.035)}
+.bitem[aria-selected=true]{background:rgba(22,50,79,.06)}
+.bitem .pin{width:9px;height:9px;border-radius:50%;margin-top:6px;flex:none;box-shadow:0 0 0 3px rgba(255,255,255,.9)}
+.bitem .pin.flag{box-shadow:0 0 0 2px var(--paper),0 0 0 4.5px var(--st-sisters)}
+.filters .dot.flag{background:none;border:2px solid var(--st-sisters);width:9px;height:9px}
+.legend .row i.flag{background:none;border:2px solid var(--st-sisters);width:9px;height:9px}
+.legend .sub{border-top:1px solid var(--hairline);margin-top:8px;padding-top:8px}
+
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chips button{border:1.5px solid var(--hairline);background:var(--paper);border-radius:999px;padding:8px 13px;font:500 12.5px/1 "IBM Plex Sans";color:var(--ink-soft);cursor:pointer}
+.chips button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:#fff}
+
+.flagrow{display:flex;align-items:center;gap:12px;background:var(--sunk);border-radius:12px;padding:12px 13px;cursor:pointer;border:1.5px solid transparent;width:100%;text-align:left;font:inherit}
+.flagrow[aria-pressed=true]{border-color:var(--st-sisters);background:rgba(194,91,124,.07)}
+.flagrow .lbl{flex:1;min-width:0}
+.flagrow .lbl strong{display:block;font:600 13.5px/1.2 "IBM Plex Sans";color:var(--ink)}
+.flagrow .lbl span{display:block;font-size:11.5px;color:var(--ink-soft);margin-top:3px}
+.flagrow .tgl{width:42px;height:24px;border-radius:999px;background:#D2D8D3;position:relative;flex:none;transition:background .18s}
+.flagrow .tgl::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s}
+.flagrow[aria-pressed=true] .tgl{background:var(--st-sisters)}
+.flagrow[aria-pressed=true] .tgl::after{transform:translateX(18px)}
+.bitem .body{flex:1;min-width:0}
+.bitem .addr{font-family:"IBM Plex Mono";font-size:13px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bitem .meta{font-size:11.5px;color:var(--ink-soft);margin-top:3px;display:flex;gap:8px;align-items:center}
+.bitem .meta s{text-decoration:none;color:var(--hairline)}
+.bitem .right{flex:none;text-align:right;margin-top:3px}
+.bitem .dist{font-family:"IBM Plex Mono";font-size:11px;color:var(--ink-soft);display:block}
+.bitem .last{font-family:"IBM Plex Mono";font-size:10.5px;color:#9AA29E;display:block;margin-top:4px}
+.bitem .last.stale{color:var(--st-away);font-weight:500}
+.bitem .last.never{color:#B4BAB5}
+
+.fab{border:0;border-radius:999px;cursor:pointer;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:9px;font:600 14px/1 "IBM Plex Sans"}
+.fab-primary{background:var(--accent);color:#20180A;padding:15px 20px}
+.fab-ghost{background:var(--paper);color:var(--ink);width:46px;height:46px;justify-content:center;padding:0}
+
+.legend{background:rgba(252,252,251,.94);backdrop-filter:blur(8px);border:1px solid var(--hairline);border-radius:12px;padding:10px 12px;box-shadow:var(--shadow)}
+.legend .row{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-soft);padding:2px 0}
+.legend .row i{width:8px;height:8px;border-radius:50%;display:block}
+
+.search{display:flex;align-items:center;gap:8px;background:var(--sunk);border-radius:10px;padding:9px 11px}
+.search input{border:0;background:none;outline:none;font:400 13px "IBM Plex Sans";width:100%;color:var(--ink)}
+.search input::placeholder{color:#9AA29E}
+
+/* ---------- desktop ---------- */
+.d-top{position:absolute;top:16px;left:16px;right:16px;display:flex;align-items:center;gap:12px;z-index:20}
+.d-brand{display:flex;align-items:center;gap:12px;background:var(--paper);border:1px solid var(--hairline);border-radius:999px;padding:8px 16px;box-shadow:var(--shadow)}
+.d-spacer{flex:1}
+.d-panel{position:absolute;top:74px;left:16px;bottom:16px;width:352px;background:var(--paper);border:1px solid var(--hairline);border-radius:var(--r);box-shadow:var(--shadow-lg);display:flex;flex-direction:column;overflow:hidden;z-index:15}
+.d-panel-head{padding:15px 16px 12px;border-bottom:1px solid var(--hairline)}
+.d-panel-scroll{flex:1;overflow-y:auto;padding:2px 16px 16px}
+.d-panel-foot{border-top:1px solid var(--hairline);padding:12px 16px;background:var(--sunk)}
+.d-fabs{position:absolute;right:18px;bottom:18px;display:flex;align-items:center;gap:10px;z-index:20}
+.d-legend{position:absolute;left:388px;bottom:18px;z-index:15}
+.d-edit{position:absolute;left:50%;transform:translateX(-50%);bottom:18px;z-index:25;display:none;background:var(--brand);border-radius:999px;padding:7px;box-shadow:var(--shadow-lg);align-items:center;gap:4px}
+.d-edit button{border:0;background:none;color:#C9D6E4;font:500 13px/1 "IBM Plex Sans";padding:10px 15px;border-radius:999px;cursor:pointer;display:flex;gap:7px;align-items:center}
+.d-edit button:hover{background:rgba(255,255,255,.09);color:#fff}
+.d-edit .danger:hover{background:rgba(169,59,46,.9);color:#fff}
+.d-edit .sep{width:1px;height:20px;background:rgba(255,255,255,.18)}
+.frame-desktop[data-mode=edition] .d-edit{display:flex}
+.frame-desktop[data-mode=edition] .d-legend{display:none}
+
+/* ---------- mobile ---------- */
+.m-top{position:absolute;top:52px;left:12px;right:12px;display:flex;align-items:center;gap:8px;z-index:30}
+.m-icon{width:38px;height:38px;flex:none;border-radius:50%;background:var(--paper);border:1px solid var(--hairline);box-shadow:var(--shadow);display:grid;place-items:center;cursor:pointer}
+.m-fabs{position:absolute;right:14px;bottom:322px;display:flex;flex-direction:column;gap:10px;z-index:30;transition:bottom .3s cubic-bezier(.2,.8,.2,1)}
+.sheet{position:absolute;left:0;right:0;bottom:0;height:306px;background:var(--paper);border-radius:22px 22px 0 0;box-shadow:0 -8px 32px -8px rgba(20,24,26,.3);z-index:40;display:flex;flex-direction:column;transition:height .3s cubic-bezier(.2,.8,.2,1)}
+.sheet .grip{padding:9px 0 3px;display:grid;place-items:center;cursor:grab}
+.sheet .grip i{width:38px;height:4px;border-radius:2px;background:#CDD3CD;display:block}
+.sheet-head{padding:6px 16px 12px}
+.sheet-scroll{flex:1;overflow-y:auto;padding:0 16px 18px}
+.phone-screen[data-sheet=full] .sheet,.phone-screen[data-sheet=building] .sheet{height:620px}
+.phone-screen[data-sheet=building] .m-fabs{bottom:636px}
+.phone-screen[data-sheet=full] .m-fabs{bottom:636px}
+.phone-screen[data-sheet=detail] .sheet{height:392px}
+.phone-screen[data-sheet=detail] .m-fabs{bottom:408px}
+
+.statusgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.statusgrid button{border:1.5px solid var(--hairline);background:var(--paper);border-radius:12px;padding:13px 12px;font:500 13.5px/1.2 "IBM Plex Sans";color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:9px;text-align:left}
+.statusgrid button i{width:10px;height:10px;border-radius:50%;flex:none}
+.statusgrid button:hover{border-color:var(--ink-soft)}
+.statusgrid button.wide{grid-column:1/-1;justify-content:center}
+
+.progressbar{height:5px;border-radius:3px;background:var(--sunk);overflow:hidden;display:flex}
+.progressbar i{display:block;height:100%}
+
+.bldg{padding:2px 0 22px}
+.floor{position:relative;padding:0 0 4px 46px}
+.floor::before{content:"";position:absolute;left:19px;top:0;bottom:0;width:1.5px;background:var(--hairline)}
+.floor:last-of-type::before{bottom:14px}
+.floor-tag{position:absolute;left:0;top:9px;width:38px;text-align:center;font:600 11px/1 "IBM Plex Mono";color:var(--ink-soft);background:var(--paper);padding:4px 0;z-index:2}
+.floor-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:11px 0 8px}
+.floor-head .n{font:500 11px/1 "IBM Plex Mono";letter-spacing:.08em;text-transform:uppercase;color:#9AA29E}
+.floor-head .p{font:500 11px/1 "IBM Plex Mono";color:var(--ink-soft)}
+.doors{display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:7px;padding-bottom:14px}
+.door{position:relative;aspect-ratio:1/.86;border-radius:10px;border:1.5px solid;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;padding:7px 8px;font:inherit;text-align:left}
+.door .num{font:600 13px/1 "IBM Plex Mono";letter-spacing:-.02em;color:var(--ink)}
+.door .bar{height:3px;border-radius:2px}
+.door:hover{transform:translateY(-1px)}
+.door.flag{outline:2px solid var(--st-sisters);outline-offset:2px}
+.door.new{border-style:dashed;border-color:var(--hairline);background:none;align-items:center;justify-content:center;color:#9AA29E}
+.ground{position:relative;margin-left:46px;height:9px;border-radius:2px;background:repeating-linear-gradient(45deg,#CFD5CF 0 3px,transparent 3px 7px);border-top:1.5px solid #B9C0B9}
+.ground-lbl{font:500 10px/1 "IBM Plex Mono";letter-spacing:.1em;color:#9AA29E;margin:7px 0 0 46px;text-transform:uppercase}
+.floorbtn{border:0;background:none;font:500 11px/1 "IBM Plex Sans";color:var(--brand-lift);cursor:pointer;padding:0}
+
+.bldg.editing .doors{padding-top:9px}
+.door .del{position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:var(--st-no);color:#fff;display:grid;place-items:center;font:600 13px/1 "IBM Plex Sans";border:2px solid var(--paper);cursor:pointer;z-index:3}
+.door.confirm{border-color:var(--st-no)!important;background:rgba(169,59,46,.12)!important;align-items:center;justify-content:center;padding:4px}
+.door.confirm .num,.door.confirm .bar,.door.confirm .del{display:none}
+.door .ask{display:none;flex-direction:column;align-items:center;gap:5px}
+.door.confirm .ask{display:flex}
+.door .ask b{font:600 8.5px/1.1 "IBM Plex Mono";color:var(--st-no);text-align:center;letter-spacing:-.02em}
+.door .ask span{display:flex;gap:4px}
+.door .ask i{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-style:normal;font:600 11px/1 "IBM Plex Sans"}
+.door .ask .y{background:var(--st-no);color:#fff}
+.door .ask .n{background:var(--paper);border:1px solid var(--hairline);color:var(--ink-soft)}
+.floorbtn.del{color:var(--st-no)}
+.addfloor{width:100%;border:1.5px dashed var(--hairline);background:none;border-radius:10px;padding:11px;margin:0 0 14px 46px;width:calc(100% - 46px);font:500 12px "IBM Plex Sans";color:var(--ink-soft);cursor:pointer}
+.addfloor:hover{border-color:var(--brand-lift);color:var(--brand-lift)}
+.editbar{position:sticky;bottom:0;background:var(--paper);border-top:1px solid var(--hairline);padding:11px 0 2px;margin-top:6px;display:flex;gap:8px;align-items:center}
+.editbar .txt{flex:1;font-size:11.5px;color:var(--ink-soft);line-height:1.4}
+.editbar button{border:0;background:var(--brand);color:#fff;border-radius:9px;padding:10px 16px;font:600 12.5px "IBM Plex Sans";cursor:pointer}
+
+.map.placing{cursor:crosshair}
+.map.placing svg{pointer-events:none}
+.hint{position:absolute;top:74px;left:50%;transform:translateX(-50%);z-index:70;background:var(--brand);color:#fff;border-radius:999px;padding:11px 18px;font:500 12.5px "IBM Plex Sans";box-shadow:var(--shadow-lg);display:none;align-items:center;gap:11px;white-space:nowrap}
+.hint.on{display:flex}
+.hint button{border:0;background:rgba(255,255,255,.16);color:#fff;border-radius:999px;padding:6px 12px;font:500 11.5px "IBM Plex Sans";cursor:pointer}
+
+.empty{text-align:center;padding:30px 16px 20px}
+.empty .ic{width:58px;height:58px;border-radius:17px;background:var(--sunk);display:grid;place-items:center;margin:0 auto 15px}
+.empty h4{font:600 16.5px/1.25 "Space Grotesk";margin:0 0 8px;letter-spacing:-.015em}
+.empty p{font-size:12.5px;color:var(--ink-soft);line-height:1.6;margin:0 auto 20px;max-width:266px}
+.empty .btn-primary{max-width:280px;margin:0 auto}
+.empty .btn-ghost{max-width:280px;margin:9px auto 0}
+.addbldg{width:100%;border:1.5px dashed var(--hairline);background:none;border-radius:12px;padding:13px;margin-top:14px;font:500 13px "IBM Plex Sans";color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.addbldg:hover{border-color:var(--brand-lift);color:var(--brand-lift)}
+
+.ovl{position:absolute;inset:0;background:rgba(10,14,16,.42);z-index:90;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(2px)}
+.ovl.open{display:flex}
+.ovl.center{align-items:center}
+.dlg{background:var(--paper);width:100%;border-radius:20px 20px 0 0;padding:20px 18px 22px;max-height:90%;overflow:auto;box-shadow:0 -8px 40px rgba(0,0,0,.3)}
+.ovl.center .dlg{border-radius:16px;max-width:400px;box-shadow:var(--shadow-lg)}
+.dlg h3{font:600 19px/1.2 "Space Grotesk";margin:6px 0 5px;letter-spacing:-.02em}
+.dlg .sub{font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:18px}
+.field{margin-bottom:15px}
+.field>.microlabel{display:block;margin-bottom:8px}
+.stepper{display:flex;align-items:center;border:1.5px solid var(--hairline);border-radius:12px;overflow:hidden}
+.stepper button{width:46px;height:46px;border:0;background:var(--sunk);font:400 20px/1 "IBM Plex Sans";cursor:pointer;color:var(--ink)}
+.stepper button:disabled{color:#C4CAC5;cursor:default}
+.stepper .v{flex:1;text-align:center;font:600 15px/1 "IBM Plex Mono"}
+.stepper .v em{font-style:normal;font-weight:400;font-size:12px;color:var(--ink-soft);margin-left:5px}
+.prev{background:var(--sunk);border-radius:12px;padding:11px 12px;margin-bottom:16px}
+.pf{display:flex;align-items:center;gap:9px;padding:3px 0}
+.pf .lb{width:40px;flex:none;font:600 10.5px/1 "IBM Plex Mono";color:var(--ink-soft)}
+.pf .cells{display:flex;gap:3px;flex-wrap:wrap}
+.pf .c{font:500 9.5px/1 "IBM Plex Mono";background:var(--paper);border:1px solid var(--hairline);border-radius:4px;padding:5px 5px;color:var(--ink-soft)}
+.pf .grd{height:1.5px;background:repeating-linear-gradient(45deg,#C4CAC5 0 3px,transparent 3px 6px);flex:1;margin-left:49px}
+.btn-primary{width:100%;border:0;border-radius:12px;background:var(--brand);color:#fff;font:600 14px "IBM Plex Sans";padding:15px;cursor:pointer}
+.btn-ghost{width:100%;border:1.5px solid var(--hairline);border-radius:12px;background:none;font:500 13px "IBM Plex Sans";padding:12px;cursor:pointer;margin-top:8px;color:var(--ink-soft)}
+.headbtn{border:1.5px solid var(--hairline);background:var(--paper);border-radius:9px;padding:7px 11px;font:500 11.5px/1 "IBM Plex Sans";color:var(--ink-soft);cursor:pointer}
+.headbtn:hover{border-color:var(--ink-soft);color:var(--ink)}
+
+.hist{display:flex;flex-direction:column;gap:2px}
+.hrow{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--hairline)}
+.hrow:first-child{border-top:0;padding-top:0}
+.hdot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex:none}
+.hbody{min-width:0}
+.hbody b{display:block;font:500 12px/1.3 "IBM Plex Mono";color:var(--ink)}
+.hbody span{display:block;font-size:12px;color:var(--ink-soft);margin-top:3px;line-height:1.45}
+.detailback{border:0;background:none;font:500 12.5px "IBM Plex Sans";color:var(--brand-lift);cursor:pointer;padding:0;display:flex;gap:6px;align-items:center}
+.hidden{display:none!important}
+#dBuilding:not(.hidden){display:flex}
+.note{max-width:1240px;margin:14px auto 0;font:400 12px/1.6 "IBM Plex Mono";color:#5A625E}
+</style>
+
+<div class="page-head">
+  <div>
+    <h1>Athar — écran terrain</h1>
+    <p>maquette statique · cliquable sur les filtres, le mode et les bâtiments</p>
+  </div>
+  <div class="switch" role="group">
+    <button id="btnD" aria-pressed="true">Desktop</button>
+    <button id="btnM" aria-pressed="false">Mobile</button>
+  </div>
+</div>
+
+<div class="stage" data-view="desktop" id="stage">
+
+  <!-- ============ DESKTOP ============ -->
+  <div class="frame-desktop" id="desktop" data-mode="terrain">
+    <div class="map" id="mapD"></div>
+
+    <div class="d-top">
+      <div class="d-brand">
+        <span class="wordmark"><span class="ar">أثر</span><span class="rule"></span><span class="la">Athar</span></span>
+      </div>
+
+      <button class="zonechip">
+        <span class="ring">
+          <svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#E2E7E2" stroke-width="4"/><circle cx="18" cy="18" r="15" fill="none" stroke="#16324F" stroke-width="4" stroke-linecap="round" stroke-dasharray="94.2" stroke-dashoffset="35.8" transform="rotate(-90 18 18)"/></svg>
+          <b>62</b>
+        </span>
+        <span class="txt"><strong>Borderouge</strong><span>148 bât. · 92 faits</span></span>
+        <span class="caret">▾</span>
+      </button>
+
+      <div class="d-spacer"></div>
+
+      <div class="modeswitch" id="modeD">
+        <button data-mode="terrain" aria-pressed="true">Terrain</button>
+        <button data-mode="edition" aria-pressed="false">Édition</button>
+      </div>
+      <div class="avatar">SM</div>
+    </div>
+
+    <div class="d-panel">
+      <div id="dList" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <div class="d-panel-head">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:11px">
+          <span class="microlabel">Sortie du jour</span>
+          <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--ink-soft)">14 marqués · 1 h 05</span>
+        </div>
+        <div class="trace" id="traceD" style="margin-bottom:13px"></div>
+        <div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9AA29E" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg><input placeholder="Chercher une adresse"></div>
+      </div>
+
+      <div class="d-panel-scroll">
+        <div class="filters" style="padding:13px 0 4px">
+          <button aria-pressed="true">Tous <b>148</b></button>
+          <button><span class="dot" style="background:var(--st-todo)"></span>À faire <b>56</b></button>
+          <button><span class="dot" style="background:var(--st-linked)"></span>À revoir <b>19</b></button>
+          <button><span class="dot flag"></span>Sœurs <b>11</b></button>
+          <button><span class="dot" style="background:var(--st-locked)"></span>Bloqués <b>7</b></button>
+        </div>
+        <div class="blist" id="blistD"></div>
+      </div>
+
+      <div class="d-panel-foot">
+        <div class="microlabel" style="margin-bottom:7px">Couverture de la zone</div>
+        <div class="progressbar">
+          <i style="background:var(--st-open);width:38%"></i>
+          <i style="background:var(--st-away);width:16%"></i>
+          <i style="background:var(--st-linked);width:8%"></i>
+        </div>
+      </div>
+      </div>
+
+      <div id="dBuilding" class="hidden" style="flex:1;flex-direction:column;min-height:0">
+        <div class="d-panel-head">
+          <button class="detailback" id="dBack">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 5l-7 7 7 7"/></svg> Borderouge
+          </button>
+          <div id="dAddr" style="font-family:'IBM Plex Mono';font-size:15px;font-weight:600;letter-spacing:-.02em;margin:11px 0 5px">78 chemin de l'Église de Lalande</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span id="dSub" style="font-size:12px;color:var(--ink-soft)">Bâtiment C · 4 niveaux</span>
+            <span style="display:flex;gap:6px"><button class="headbtn" id="editD">Modifier</button><button class="headbtn" id="structD">Structure</button></span>
+          </div>
+          <div id="dProg" style="display:flex;align-items:center;gap:10px;margin-top:12px">
+            <div class="progressbar" style="flex:1">
+              <i style="background:var(--st-open);width:33%"></i>
+              <i style="background:var(--st-away);width:17%"></i>
+              <i style="background:var(--st-linked);width:11%"></i>
+            </div>
+            <span style="font:500 11px/1 'IBM Plex Mono';color:var(--ink-soft)">11 / 18</span>
+          </div>
+        </div>
+        <div class="d-panel-scroll"><div class="bldg" id="bldgD"></div></div>
+        <div class="d-panel-foot" id="dFoot">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font:500 11.5px/1 'IBM Plex Mono';color:var(--st-away)">Dernier passage il y a 26 j</span>
+            <span class="microlabel">7 portes restantes</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-legend">
+      <div class="legend">
+        <div class="microlabel" style="margin-bottom:6px">Statut des bâtiments</div>
+        <div class="row"><i style="background:var(--st-open)"></i>Contact établi</div>
+        <div class="row"><i style="background:var(--st-away)"></i>Absent</div>
+        <div class="row"><i style="background:var(--st-linked)"></i>Attaché à l'effort</div>
+        <div class="row"><i style="background:var(--st-no)"></i>Refus</div>
+        <div class="row"><i style="background:var(--st-locked)"></i>Accès bloqué</div>
+        <div class="row"><i style="background:#CDD3CD;border:1px solid #B4BCB4"></i>Détecté, pas encore fait</div>
+        <div class="sub"><div class="row"><i class="flag"></i>À confier aux sœurs</div></div>
+      </div>
+    </div>
+
+    <div class="d-edit">
+      <button><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Nouvelle zone</button>
+      <button><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L20 8l-4-4L4 16z"/></svg>Redessiner</button>
+      <button data-newbldg="d"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/></svg>Ajouter un bâtiment</button>
+      <span class="sep"></span>
+      <button class="danger"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg>Supprimer</button>
+    </div>
+
+    <div class="d-fabs">
+      <button class="fab fab-ghost" title="Recentrer sur ma position">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16324F" stroke-width="2"><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="8"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg>
+      </button>
+      <button class="fab fab-primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+        Marquer une porte
+      </button>
+    </div>
+  </div>
+
+  <!-- ============ MOBILE ============ -->
+  <div id="mobile">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="phone-screen" id="screenM" data-sheet="peek">
+        <div class="map" id="mapM"></div>
+
+        <div class="m-top">
+          <button class="zonechip" style="flex:1;min-width:0">
+            <span class="ring">
+              <svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#E2E7E2" stroke-width="4"/><circle cx="18" cy="18" r="15" fill="none" stroke="#16324F" stroke-width="4" stroke-linecap="round" stroke-dasharray="94.2" stroke-dashoffset="35.8" transform="rotate(-90 18 18)"/></svg>
+              <b>62</b>
+            </span>
+            <span class="txt"><strong>Borderouge</strong><span>92 / 148 faits</span></span>
+            <span class="caret">▾</span>
+          </button>
+          <button class="m-icon" title="Chercher">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#16324F" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+          </button>
+          <button class="m-icon" title="Menu">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#16324F" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+        </div>
+
+        <div class="m-fabs">
+          <button class="fab fab-ghost" title="Ma position">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16324F" stroke-width="2"><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="8"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg>
+          </button>
+        </div>
+
+        <div class="sheet">
+          <div class="grip" id="gripM"><i></i></div>
+
+          <!-- vue liste -->
+          <div id="mList">
+            <div class="sheet-head">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px">
+                <span class="microlabel">Sortie du jour</span>
+                <span style="font-family:'IBM Plex Mono';font-size:11px;color:var(--ink-soft)">14 marqués · 1 h 05</span>
+              </div>
+              <div class="trace" id="traceM" style="margin-bottom:12px"></div>
+              <div class="filters">
+                <button aria-pressed="true">Près de moi</button>
+                <button><span class="dot" style="background:var(--st-todo)"></span>À faire <b>56</b></button>
+                <button><span class="dot" style="background:var(--st-linked)"></span>À revoir <b>19</b></button>
+                <button><span class="dot flag"></span>Sœurs <b>11</b></button>
+          <button><span class="dot" style="background:var(--st-locked)"></span>Bloqués <b>7</b></button>
+              </div>
+            </div>
+            <div class="sheet-scroll"><div class="blist" id="blistM"></div>
+              <button class="addbldg" data-newbldg="m"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Ajouter un bâtiment</button>
+            </div>
+          </div>
+
+          <!-- vue bâtiment : coupe verticale -->
+          <div id="mBuilding" class="hidden">
+            <div class="sheet-head">
+              <button class="detailback" id="mBackB">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 5l-7 7 7 7"/></svg> Borderouge
+              </button>
+              <div id="mAddr" style="font-family:'IBM Plex Mono';font-size:15px;font-weight:600;letter-spacing:-.02em;margin:11px 0 5px">78 chemin de l'Église de Lalande</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span id="mSub" style="font-size:12px;color:var(--ink-soft)">Bâtiment C · dernier passage il y a 26 j</span>
+                <span style="display:flex;gap:6px"><button class="headbtn" id="editM">Modifier</button><button class="headbtn" id="structM">Structure</button></span>
+              </div>
+              <div id="mProg" style="display:flex;align-items:center;gap:10px;margin-top:12px">
+                <div class="progressbar" style="flex:1">
+                  <i style="background:var(--st-open);width:33%"></i>
+                  <i style="background:var(--st-away);width:17%"></i>
+                  <i style="background:var(--st-linked);width:11%"></i>
+                </div>
+                <span style="font:500 11px/1 'IBM Plex Mono';color:var(--ink-soft)">11 / 18</span>
+              </div>
+            </div>
+            <div class="sheet-scroll"><div class="bldg" id="bldgM"></div></div>
+          </div>
+
+          <!-- vue détail porte -->
+          <div id="mDetail" class="hidden">
+            <div class="sheet-head">
+              <button class="detailback" id="mBack">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 5l-7 7 7 7"/></svg> 78 chemin de l'Église de Lalande
+              </button>
+              <div style="font-family:'IBM Plex Mono';font-size:17px;font-weight:600;letter-spacing:-.02em;margin:11px 0 4px" id="doorTitle">Porte 12 · R+1</div>
+              <div style="font-size:12.5px;color:var(--ink-soft)">Bâtiment C · porte gauche en sortant de l'ascenseur</div>
+              <div style="font:500 11.5px/1 'IBM Plex Mono';color:var(--st-away);margin-top:7px">Dernier passage il y a 26 jours</div>
+            </div>
+            <div class="sheet-scroll">
+              <div class="microlabel" style="margin:2px 0 9px">Résultat du passage</div>
+              <div class="statusgrid">
+                <button><i style="background:var(--st-open)"></i>Contact établi</button>
+                <button><i style="background:var(--st-away)"></i>Absent</button>
+                <button><i style="background:var(--st-no)"></i>Refus</button>
+                <button class="wide"><i style="background:var(--st-linked)"></i>Attaché à l'effort — plus à revisiter</button>
+                <button class="wide"><i style="background:var(--st-locked)"></i>Accès bloqué (interphone / code)</button>
+              </div>
+
+              <div class="microlabel" style="margin:20px 0 9px">Composition du foyer</div>
+              <div class="chips" id="foyerChips">
+                <button data-f="femme">Femme seule</button>
+                <button data-f="homme">Homme seul</button>
+                <button data-f="couple">Couple</button>
+                <button data-f="famille">Famille</button>
+                <button data-f="?" aria-pressed="true">Non renseigné</button>
+              </div>
+
+              <div style="margin-top:16px">
+                <button class="flagrow" id="sisFlag" aria-pressed="false">
+                  <span class="lbl">
+                    <strong>À confier aux sœurs</strong>
+                    <span id="sisHint">Le prochain passage sera fait par les sœurs.</span>
+                  </span>
+                  <span class="tgl"></span>
+                </button>
+              </div>
+
+              <div class="microlabel" style="margin:20px 0 9px">Historique des passages</div>
+              <div class="hist">
+                <div class="hrow"><span class="hdot" style="background:var(--st-open)"></span><span class="hbody"><b>12 juil. · il y a 26 j</b><span>Karim B. — « Interphone sans code, revenir en soirée. »</span></span></div>
+                <div class="hrow"><span class="hdot" style="background:var(--st-away)"></span><span class="hbody"><b>3 mai · il y a 3 mois</b><span>Yacine — personne n'a ouvert</span></span></div>
+                <div class="hrow"><span class="hdot" style="background:var(--st-away)"></span><span class="hbody"><b>18 fév. · il y a 6 mois</b><span>Karim B. — personne n'a ouvert</span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="note">Fond cartographique simulé — les tuiles réelles viendront de MapLibre / IGN.</p>
+
+<script>
+const ST={todo:'#8B948F',open:'#1F7A5A',away:'#C87A0A',linked:'#2456A6',no:'#A93B2E',locked:'#6B5AA8'};
+const LBL={todo:'Pas encore fait',open:'Contact établi',away:'Absent',linked:"Attaché à l'effort",no:'Refus',locked:'Accès bloqué'};
+
+function hexa(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`}
+
+/* ---- carte simulée : emprises de bâtiments ---- */
+const ZONE=[[300,180],[900,150],[960,560],[340,600]];
+function inZone(x,y){let n=false;for(let i=0,k=ZONE.length-1;i<ZONE.length;k=i++){
+  const [xi,yi]=ZONE[i],[xk,yk]=ZONE[k];
+  if((yi>y)!==(yk>y)&&x<(xk-xi)*(y-yi)/(yk-yi)+xi)n=!n}return n}
+let seed=7; const rnd=()=>(seed=(seed*1103515245+12345)&0x7fffffff)/0x7fffffff;
+
+function mapSVG(){
+  let roads='';
+  for(let c=0;c<14;c++) roads+=`<line x1="${c*96}" y1="0" x2="${c*96-40}" y2="820" stroke="#FBFCFA" stroke-width="${c%4===0?9:5}"/>`;
+  for(let r=0;r<10;r++) roads+=`<line x1="0" y1="${r*92}" x2="1240" y2="${r*92+18}" stroke="#FBFCFA" stroke-width="${r%3===0?10:5}"/>`;
+
+  seed=7;
+  const pool=['open','open','open','away','away','linked','no','locked','todo','todo','todo','todo'];
+  let foots='';
+  for(let r=0;r<10;r++)for(let c=0;c<14;c++){
+    const bx=c*96+12+((r%2)*9), by=r*92+10;
+    const cols=2+Math.floor(rnd()*2), rows=2;
+    for(let a=0;a<cols;a++)for(let b=0;b<rows;b++){
+      if(rnd()<.22) continue;
+      const w=24+rnd()*13, h=21+rnd()*11;
+      const x=bx+a*38+rnd()*4, y=by+b*36+rnd()*4;
+      const cx=x+w/2, cy=y+h/2;
+      if(!inZone(cx,cy)){
+        foots+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="#DEE3DB"/>`;
+        continue;
+      }
+      const st=pool[Math.floor(rnd()*pool.length)];
+      const flag=rnd()<.07;
+      const fill=st==='todo'?'#CDD3CD':hexa(ST[st],.55);
+      const stroke=st==='todo'?'#B4BCB4':ST[st];
+      foots+=`<g class="mfoot" style="cursor:pointer">
+        <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1.3"/>
+        ${flag?`<rect x="${(x-2.5).toFixed(1)}" y="${(y-2.5).toFixed(1)}" width="${(w+5).toFixed(1)}" height="${(h+5).toFixed(1)}" rx="4" fill="none" stroke="#C25B7C" stroke-width="1.6"/>`:''}
+      </g>`;
+    }
+  }
+
+  return `<svg viewBox="0 0 1240 820" preserveAspectRatio="xMidYMid slice">
+    <rect width="1240" height="820" fill="#E9ECE5"/>
+    ${roads}
+    <path d="M980 0 L1060 300 L1010 560 L1090 820 L1240 820 L1240 0Z" fill="#D6E2CE"/>
+    <path d="M0 640 Q220 596 430 662 T860 700 T1240 656 L1240 720 Q860 764 430 726 T0 704Z" fill="#C6D8E1"/>
+    <path d="M300 180 L900 150 L960 560 L340 600Z" fill="#16324F" fill-opacity=".04" stroke="#16324F" stroke-width="2.5" stroke-dasharray="10 7" stroke-opacity=".5"/>
+    ${foots}
+    <circle cx="560" cy="330" r="20" fill="#E0A106" fill-opacity=".2"/>
+    <circle cx="560" cy="330" r="9" fill="#E0A106" stroke="#fff" stroke-width="3.5"/>
+    <text x="620" y="188" font-family="IBM Plex Sans" font-size="14" fill="#78827D" letter-spacing="1.5">BORDEROUGE</text>
+    <text x="380" y="562" font-family="IBM Plex Sans" font-size="13" fill="#8A938E" letter-spacing="1.2">LAPUJADE</text>
+    <text x="1012" y="430" font-family="IBM Plex Sans" font-size="12" fill="#7F8C79" letter-spacing="1.2">PARC DE LA MAOURINE</text>
+  </svg>`;
+}
+mapD.innerHTML=mapSVG(); mapM.innerHTML=mapSVG();
+mapD.querySelectorAll('.mfoot').forEach((g,i)=>g.addEventListener('click',()=>openBuilding(items[i%items.length],false)));
+mapM.querySelectorAll('.mfoot').forEach((g,i)=>g.addEventListener('click',()=>openBuilding(items[i%items.length],true)));
+
+/* ---- trace bar (signature) ---- */
+const seq=['open','open','away','linked','open','open','locked','open','away','open','open','no','open','linked'];
+function trace(el){
+  el.innerHTML=seq.map((s,i)=>{
+    const h=s==='linked'?26:s==='open'?21:s==='away'?13:s==='no'?10:11;
+    return (i===7?'<i class="gap"></i>':'')+`<i style="height:${h}px;background:${ST[s]}"></i>`;
+  }).join('');
+}
+trace(traceD); trace(traceM);
+
+/* ---- pose d'un bâtiment par appui sur la carte ---- */
+desktop.insertAdjacentHTML('beforeend','<div class="hint" id="hintD">Clique la carte à l\'emplacement exact du bâtiment<button data-cancel>Annuler</button></div>');
+screenM.insertAdjacentHTML('beforeend','<div class="hint" id="hintM" style="top:104px">Touche la carte sur le bâtiment<button data-cancel>Annuler</button></div>');
+
+function startPlacing(mobile){
+  const map=mobile?mapM:mapD, hint=mobile?hintM:hintD;
+  if(mobile){screenM.dataset.sheet='peek';mBuilding.classList.add('hidden');mDetail.classList.add('hidden');mList.classList.remove('hidden')}
+  else{dBuilding.classList.add('hidden');dList.classList.remove('hidden')}
+  map.classList.add('placing'); hint.classList.add('on');
+  const cancel=()=>{map.classList.remove('placing');hint.classList.remove('on');map.removeEventListener('click',place)};
+  function place(e){
+    const r=map.getBoundingClientRect(), svg=map.querySelector('svg');
+    const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY;
+    const p=pt.matrixTransform(svg.getScreenCTM().inverse());
+    svg.insertAdjacentHTML('beforeend',
+      `<rect x="${p.x-15}" y="${p.y-13}" width="30" height="26" rx="2" fill="#CDD3CD" stroke="#16324F" stroke-width="2"/>`);
+    cancel(); openBuilding(NEW,mobile);
+  }
+  map.addEventListener('click',place);
+  hint.querySelector('[data-cancel]').onclick=cancel;
+}
+
+/* ---- liste ---- */
+const items=[
+  {a:"78 chemin de l'Église de Lalande",m:"Bât. C · 18 portes",s:'away',d:'40 m',n:'Interphone sans code',f:0,j:26},
+  {a:"12 rue Ernest Renan",m:"structure non décrite",s:'todo',d:'85 m',n:'',f:0,j:null,cfg:0},
+  {a:"5 impasse des Tilleuls",m:"Pavillon",s:'open',d:'110 m',n:'',f:1,j:9},
+  {a:"31 avenue des Mazades",m:"Bât. A · 24 portes",s:'away',d:'160 m',n:'',f:0,j:118},
+  {a:"9 rue du Faubourg Bonnefoy",m:"2 étages · 6 portes",s:'locked',d:'210 m',n:'Digicode',f:0,j:64},
+  {a:"144 route d'Albi",m:"Bât. B · 30 portes",s:'linked',d:'240 m',n:'',f:0,j:4},
+  {a:"22 rue de Périole",m:"Pavillon",s:'no',d:'290 m',n:'',f:0,j:203},
+  {a:"3 allée de Barcelone",m:"structure non décrite",s:'todo',d:'340 m',n:'',f:0,j:null,cfg:0}
+];
+function age(j){
+  if(j===null) return 'jamais vu';
+  if(j===0) return "aujourd'hui";
+  if(j===1) return 'hier';
+  if(j<30) return 'il y a '+j+' j';
+  const m=Math.round(j/30.4);
+  return 'il y a '+m+' mois';
+}
+function fill(el,onclick){
+  el.innerHTML=items.map((it,i)=>`
+    <button class="bitem" data-i="${i}">
+      <span class="pin${it.f?' flag':''}" style="background:${ST[it.s]}"></span>
+      <span class="body">
+        <span class="addr">${it.a}</span>
+        <span class="meta">${it.m}<s>·</s>${LBL[it.s]}${it.f?`<s>·</s><span style="color:var(--st-sisters);font-weight:500">Sœurs</span>`:''}${it.n?`<s>·</s>${it.n}`:''}</span>
+      </span>
+      <span class="right">
+        <span class="dist">${it.d}</span>
+        <span class="last ${it.j===null?'never':it.j>90?'stale':''}">${age(it.j)}</span>
+      </span>
+    </button>`).join('');
+  el.querySelectorAll('.bitem').forEach(b=>b.addEventListener('click',()=>{
+    el.querySelectorAll('.bitem').forEach(x=>x.setAttribute('aria-selected','false'));
+    b.setAttribute('aria-selected','true'); onclick&&onclick(items[+b.dataset.i]);
+  }));
+}
+fill(blistD,it=>openBuilding(it,false));
+fill(blistM,it=>openBuilding(it,true));
+
+/* bouton « ajouter un bâtiment » — mène au même écran vierge */
+const NEW={a:'Nouveau bâtiment',m:'',s:'todo',d:'',n:'',f:0,j:null,cfg:0};
+document.querySelectorAll('[data-newbldg]').forEach(b=>b.addEventListener('click',()=>{
+  startPlacing(b.dataset.newbldg==='m');
+}));
+
+dBack.addEventListener('click',()=>{dBuilding.classList.add('hidden');dList.classList.remove('hidden');});
+mBackB.addEventListener('click',()=>{screenM.dataset.sheet='peek';mBuilding.classList.add('hidden');mList.classList.remove('hidden');});
+
+const sisFlag=document.getElementById('sisFlag');
+const sisHint=document.getElementById('sisHint');
+sisFlag.addEventListener('click',()=>{
+  const on=sisFlag.getAttribute('aria-pressed')==='true';
+  sisFlag.setAttribute('aria-pressed',String(!on));
+  if(on) sisHint.textContent='Le prochain passage sera fait par les sœurs.';
+});
+foyerChips.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  foyerChips.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true');
+  if(b.dataset.f==='femme'){
+    sisFlag.setAttribute('aria-pressed','true');
+    sisHint.textContent='Activé automatiquement — tu peux le désactiver.';
+  }
+});
+
+document.querySelectorAll('.statusgrid').forEach(g=>g.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  g.querySelectorAll('button').forEach(x=>{x.style.borderColor='';x.style.background=''});
+  const c=b.querySelector('i').style.background;
+  b.style.borderColor=c; b.style.background='rgba(20,24,26,.03)';
+}));
+
+mBack.addEventListener('click',()=>{screenM.dataset.sheet='building';mDetail.classList.add('hidden');mBuilding.classList.remove('hidden');});
+gripM.addEventListener('click',()=>{
+  if(!mDetail.classList.contains('hidden')||!mBuilding.classList.contains('hidden'))return;
+  screenM.dataset.sheet = screenM.dataset.sheet==='full'?'peek':'full';
+});
+
+/* ---- coupe verticale du bâtiment ---- */
+function fLabel(i){return i===0?'RDC':i===1?'1er':i+'ème'}
+
+/* index 0 = RDC, on affiche du haut vers le bas */
+let building=[
+ {doors:[['01','linked'],['02','open'],['03','todo'],['04','locked']]},
+ {doors:[['11','open'],['12','away'],['13','no'],['14','open',1]]},
+ {doors:[['21','open'],['22','open'],['23','away',1],['24','todo'],['25','todo']]},
+ {doors:[['31','open'],['32','away'],['33','linked'],['34','todo'],['35','todo']]}
+];
+
+function genDoors(nFloors,perFloor,scheme){
+  const out=[];let run=1;
+  for(let i=0;i<nFloors;i++){
+    const d=[];
+    for(let k=0;k<perFloor;k++){
+      let num;
+      if(scheme==='floor')      num=String(i*10+k+1).padStart(2,'0');
+      else if(scheme==='hundred')num=String((i+1)*100+k+1);
+      else                       num=String(run++);
+      d.push([num,'todo']);
+    }
+    out.push({doors:d});
+  }
+  return out;
+}
+
+const EMPTY=`<div class="empty">
+  <span class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#9AA29E" stroke-width="1.7"><path d="M4 21V6l7-3 7 3v15"/><path d="M2 21h20"/><path d="M9 21v-4h6v4"/><path d="M8.5 9h2M13.5 9h2M8.5 13h2M13.5 13h2" stroke-linecap="round"/></svg></span>
+  <h4>Bâtiment non décrit</h4>
+  <p>Aucun étage ni porte enregistré. Décris la structure une fois — tout le suivi viendra s'y accrocher.</p>
+  <button class="btn-primary" data-describe>Décrire le bâtiment</button>
+  <button class="btn-ghost" data-house>C'est un pavillon — une seule porte</button>
+</div>`;
+
+let editing=false;
+
+function renderBldg(el,onDoor,onAdd,onDescribe){
+  if(!building.length){
+    el.classList.remove('editing');
+    el.innerHTML=EMPTY;
+    el.querySelector('[data-describe]').addEventListener('click',()=>onDescribe&&onDescribe());
+    el.querySelector('[data-house]').addEventListener('click',()=>{building=[{doors:[['1','todo']]}];onDescribe&&onDescribe(true)});
+    return;
+  }
+  const repaint=()=>renderBldg(el,onDoor,onAdd,onDescribe);
+  el.classList.toggle('editing',editing);
+
+  const stack=building.map((f,i)=>i).reverse().map(i=>{
+    const f=building[i];
+    const done=f.doors.filter(d=>d[1]!=='todo').length;
+    const cells=f.doors.map(([num,st,flag],k)=>`
+      <button class="door${flag?' flag':''}" data-num="${num}" data-fl="${i}" data-k="${k}"
+        style="border-color:${hexa(ST[st],.45)};background:${hexa(ST[st],.10)}">
+        <span class="num">${num}</span>
+        <span class="bar" style="background:${ST[st]}"></span>
+        ${editing?`<span class="del" data-del="${i}:${k}">×</span>
+        <span class="ask"><b>Supprimer<br>l'historique ?</b><span><i class="y" data-yes="${i}:${k}">✓</i><i class="n" data-no>×</i></span></span>`:''}
+      </button>`).join('');
+
+    const head = editing
+      ? `<span class="n">${f.doors.length} porte${f.doors.length>1?'s':''}</span>
+         <span class="p"><button class="floorbtn" data-addd="${i}">+ porte</button> · <button class="floorbtn del" data-delf="${i}">supprimer l'étage</button></span>`
+      : `<span class="n">${f.doors.length} porte${f.doors.length>1?'s':''}</span>
+         <span class="p">${done}/${f.doors.length} ${done<f.doors.length?'· <button class="floorbtn">tout marquer absent</button>':'· terminé'}</span>`;
+
+    return `<div class="floor">
+      <span class="floor-tag">${fLabel(i)}</span>
+      <div class="floor-head">${head}</div>
+      <div class="doors">${cells}${editing?'':`<button class="door new" data-add="${i}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>`}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML=(editing?'<button class="addfloor" data-addf>+ Ajouter un étage au-dessus</button>':'')
+    +stack+'<div class="ground"></div><div class="ground-lbl">Rue · entrée principale</div>'
+    +(editing?`<div class="editbar"><span class="txt">Ajoute ou retire des portes étage par étage. Les portes déjà visitées demandent confirmation.</span><button data-endedit>Terminé</button></div>`:'');
+
+  el.querySelectorAll('.door:not(.new)').forEach(b=>b.addEventListener('click',e=>{
+    if(editing) return;
+    onDoor&&onDoor(b.dataset.num,fLabel(+b.dataset.fl));
+  }));
+  el.querySelectorAll('.door.new').forEach(b=>b.addEventListener('click',()=>onAdd&&onAdd(+b.dataset.add)));
+
+  /* suppression d'une porte */
+  el.querySelectorAll('[data-del]').forEach(x=>x.addEventListener('click',e=>{
+    e.stopPropagation();
+    const [i,k]=x.dataset.del.split(':').map(Number);
+    if(building[i].doors[k][1]==='todo'){building[i].doors.splice(k,1);if(!building[i].doors.length)building.splice(i,1);repaint();setHead()}
+    else{el.querySelectorAll('.door.confirm').forEach(d=>d.classList.remove('confirm'));x.closest('.door').classList.add('confirm')}
+  }));
+  el.querySelectorAll('[data-yes]').forEach(x=>x.addEventListener('click',e=>{
+    e.stopPropagation();
+    const [i,k]=x.dataset.yes.split(':').map(Number);
+    building[i].doors.splice(k,1); if(!building[i].doors.length)building.splice(i,1);
+    repaint(); setHead();
+  }));
+  el.querySelectorAll('[data-no]').forEach(x=>x.addEventListener('click',e=>{e.stopPropagation();x.closest('.door').classList.remove('confirm')}));
+
+  /* ajout / suppression d'étage et de porte */
+  el.querySelectorAll('[data-addd]').forEach(x=>x.addEventListener('click',()=>{
+    const i=+x.dataset.addd, f=building[i];
+    const last=f.doors[f.doors.length-1]?.[0]||'0';
+    const next=String(Number(last)+1).padStart(last.length,'0');
+    f.doors.push([next,'todo']); repaint(); setHead();
+  }));
+  el.querySelectorAll('[data-delf]').forEach(x=>x.addEventListener('click',()=>{
+    building.splice(+x.dataset.delf,1); repaint(); setHead();
+  }));
+  const af=el.querySelector('[data-addf]');
+  if(af) af.addEventListener('click',()=>{
+    const i=building.length, per=building[building.length-1]?.doors.length||4;
+    building.push({doors:Array.from({length:per},(_,k)=>[String(i*10+k+1).padStart(2,'0'),'todo'])});
+    repaint(); setHead();
+  });
+  const ee=el.querySelector('[data-endedit]');
+  if(ee) ee.addEventListener('click',()=>{editing=false;repaint();syncEditBtns()});
+}
+
+function syncEditBtns(){
+  ['editD','editM'].forEach(id=>{const b=document.getElementById(id);if(b)b.textContent=editing?'Terminer':'Modifier'});
+}
+
+/* ---- dialogue : structure du bâtiment ---- */
+function dlgHTML(id,centered){
+  return `<div class="ovl ${centered?'center':''}" id="${id}">
+    <div class="dlg">
+      <span class="microlabel dlg-addr">78 chemin de l'Église de Lalande</span>
+      <h3>Structure du bâtiment</h3>
+      <p class="sub">Décris les niveaux une seule fois. Toutes les portes seront créées en « pas encore fait ».</p>
+
+      <div class="field">
+        <span class="microlabel">Étages au-dessus du rez-de-chaussée</span>
+        <div class="stepper" data-k="fl">
+          <button data-s="-1">−</button>
+          <span class="v"><b>3</b><em>étages · RDC compris = 4 niveaux</em></span>
+          <button data-s="1">+</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="microlabel">Portes par étage</span>
+        <div class="stepper" data-k="pd">
+          <button data-s="-1">−</button>
+          <span class="v"><b>4</b><em>modifiable étage par étage</em></span>
+          <button data-s="1">+</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="microlabel">Numérotation</span>
+        <div class="chips" data-k="sc">
+          <button data-v="floor" aria-pressed="true">01, 02 · 11, 12</button>
+          <button data-v="hundred">101, 102 · 201</button>
+          <button data-v="run">1 à 16, en suite</button>
+        </div>
+      </div>
+
+      <span class="microlabel" style="display:block;margin-bottom:8px">Aperçu</span>
+      <div class="prev"></div>
+
+      <button class="btn-primary">Créer 16 portes</button>
+      <button class="btn-ghost" data-close>Annuler</button>
+    </div>
+  </div>`;
+}
+
+function wireDlg(root,onDone){
+  const st={fl:3,pd:4,sc:'floor'};
+  const prev=root.querySelector('.prev'), cta=root.querySelector('.btn-primary');
+  function draw(){
+    root.querySelector('.dlg-addr').textContent=cur.a;
+    const g=genDoors(st.fl+1,st.pd,st.sc);
+    prev.innerHTML=g.map((f,i)=>i).reverse().map(i=>
+      `<div class="pf"><span class="lb">${fLabel(i)}</span><span class="cells">${g[i].doors.map(d=>`<span class="c">${d[0]}</span>`).join('')}</span></div>`
+    ).join('')+'<div class="pf"><span class="grd"></span></div>';
+    const total=(st.fl+1)*st.pd;
+    cta.textContent=`Créer ${total} porte${total>1?'s':''}`;
+    root.querySelector('[data-k=fl] b').textContent=st.fl;
+    root.querySelector('[data-k=fl] em').textContent=`étages · RDC compris = ${st.fl+1} niveaux`;
+    root.querySelector('[data-k=pd] b').textContent=st.pd;
+  }
+  root.querySelectorAll('.stepper').forEach(sp=>sp.addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    const k=sp.dataset.k;
+    st[k]=Math.max(k==='fl'?0:1,Math.min(k==='fl'?30:12,st[k]+Number(b.dataset.s)));
+    draw();
+  }));
+  root.querySelector('[data-k=sc]').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    root.querySelectorAll('[data-k=sc] button').forEach(x=>x.setAttribute('aria-pressed','false'));
+    b.setAttribute('aria-pressed','true'); st.sc=b.dataset.v; draw();
+  });
+  cta.addEventListener('click',()=>{building=genDoors(st.fl+1,st.pd,st.sc);root.classList.remove('open');onDone&&onDone()});
+  root.querySelector('[data-close]').addEventListener('click',()=>root.classList.remove('open'));
+  root.addEventListener('click',e=>{if(e.target===root)root.classList.remove('open')});
+  draw();
+}
+
+const DEMO=JSON.parse(JSON.stringify(building));
+let cur={a:"78 chemin de l'Église de Lalande",sub:"Bâtiment C · 4 niveaux",cfg:1,j:26};
+
+function setHead(){
+  const on=building.length>0;
+  [['dAddr','dSub','dProg','dFoot'],['mAddr','mSub','mProg']].forEach(([A,S,P,F])=>{
+    document.getElementById(A).textContent=cur.a;
+    document.getElementById(S).textContent=on
+      ? `${building.length} niveau${building.length>1?'x':''} · ${building.reduce((n,f)=>n+f.doors.length,0)} portes`
+      : 'aucune porte enregistrée';
+    document.getElementById(P).style.visibility=on?'visible':'hidden';
+    if(F) document.getElementById(F).style.visibility=on?'visible':'hidden';
+  });
+}
+
+function openBuilding(it,mobile){
+  cur={a:it.a,cfg:it.cfg===0?0:1,j:it.j};
+  building = cur.cfg ? JSON.parse(JSON.stringify(DEMO)) : [];
+  setHead();
+  if(mobile){screenM.dataset.sheet='building';mList.classList.add('hidden');mDetail.classList.add('hidden');mBuilding.classList.remove('hidden');paintM();}
+  else{dList.classList.add('hidden');dBuilding.classList.remove('hidden');paintD();}
+}
+
+desktop.insertAdjacentHTML('beforeend',dlgHTML('dlgD',true));
+screenM.insertAdjacentHTML('beforeend',dlgHTML('dlgM',false));
+
+function paintD(){renderBldg(bldgD,null,()=>dlgD.classList.add('open'),done=>{if(done){setHead();paintD()}else dlgD.classList.add('open')});setHead()}
+function paintM(){renderBldg(bldgM,(num,fl)=>{
+  doorTitle.textContent=`Porte ${num} · ${fl}`;
+  screenM.dataset.sheet='detail'; mBuilding.classList.add('hidden'); mDetail.classList.remove('hidden');
+},()=>dlgM.classList.add('open'),done=>{if(done){setHead();paintM()}else dlgM.classList.add('open')});setHead()}
+
+wireDlg(dlgD,paintD); wireDlg(dlgM,paintM);
+paintD(); paintM();
+document.getElementById('structD').addEventListener('click',()=>dlgD.classList.add('open'));
+document.getElementById('structM').addEventListener('click',()=>dlgM.classList.add('open'));
+document.getElementById('editD').addEventListener('click',()=>{editing=!editing;syncEditBtns();paintD()});
+document.getElementById('editM').addEventListener('click',()=>{editing=!editing;syncEditBtns();paintM()});
+
+
+
+/* ---- filtres + modes ---- */
+document.querySelectorAll('.filters').forEach(g=>g.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  g.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true');
+}));
+modeD.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  modeD.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true');
+  desktop.dataset.mode=b.dataset.mode;
+});
+
+/* ---- bascule desktop / mobile ---- */
+btnD.addEventListener('click',()=>{stage.dataset.view='desktop';btnD.setAttribute('aria-pressed','true');btnM.setAttribute('aria-pressed','false')});
+btnM.addEventListener('click',()=>{stage.dataset.view='mobile';btnM.setAttribute('aria-pressed','true');btnD.setAttribute('aria-pressed','false')});
+</script>

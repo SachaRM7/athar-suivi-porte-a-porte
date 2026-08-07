@@ -2,6 +2,7 @@ export type DoorLayoutItem = {
   id: string;
   label: string;
   floor: number;
+  sortOrder?: number;
 };
 
 export type DoorLayoutPosition = DoorLayoutItem & {
@@ -14,7 +15,7 @@ export function layoutDoorsAtBuilding(
   spacing = 34
 ): DoorLayoutPosition[] {
   const sorted = [...doors].sort((a, b) =>
-    a.floor - b.floor || a.label.localeCompare(b.label) || a.id.localeCompare(b.id)
+    a.floor - b.floor || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.label.localeCompare(b.label) || a.id.localeCompare(b.id)
   );
   const columns = Math.max(1, Math.ceil(Math.sqrt(sorted.length)));
   const rows = Math.max(1, Math.ceil(sorted.length / columns));
@@ -29,4 +30,3 @@ export function layoutDoorsAtBuilding(
     };
   });
 }
-

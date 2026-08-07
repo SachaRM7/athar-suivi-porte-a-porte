@@ -38,6 +38,14 @@ service cloud.firestore {
         data.order is int && data.order >= 0 && data.active is bool;
     }
 
+    function defaultStatus(statusId) {
+      let data = request.resource.data;
+      return (statusId == 'unvisited' && data.label == 'Pas visite' && data.color == '#8C9494' && data.order == 0 && data.active == true) ||
+        (statusId == 'contacted' && data.label == 'Contact etabli' && data.color == '#16835F' && data.order == 1 && data.active == true) ||
+        (statusId == 'retry' && data.label == 'A revenir' && data.color == '#D8A200' && data.order == 2 && data.active == true) ||
+        (statusId == 'do-not-return' && data.label == 'Ne pas deranger' && data.color == '#B8403B' && data.order == 3 && data.active == true);
+    }
+
     function validZone() {
       let data = request.resource.data;
       return data.keys().hasAll(['name', 'geometry', 'bbox', 'color', 'coverageState', 'assigneeLabel']) &&
@@ -55,24 +63,31 @@ service cloud.firestore {
 
     function validBuilding() {
       let data = request.resource.data;
-      return data.keys().hasAll(['addressLabel', 'location', 'geohash', 'zoneId', 'createdBy']) &&
-        data.keys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'createdBy', 'updatedAt']) &&
+      return data.keys().hasAll(['addressLabel', 'location', 'geohash', 'zoneId', 'createdBy', 'structureRevision']) &&
+        data.keys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'createdBy', 'structureRevision', 'updatedAt']) &&
         data.addressLabel is string && data.addressLabel.size() >= 1 && data.addressLabel.size() <= 160 &&
         data.location is latlng && data.geohash is string && data.geohash.size() >= 4 && data.geohash.size() <= 12 &&
-        data.zoneId is string && data.createdBy is string && optionalTimestamp(data, 'updatedAt');
+        data.zoneId is string && data.createdBy is string &&
+        data.structureRevision is int && data.structureRevision >= 0 && optionalTimestamp(data, 'updatedAt');
     }
 
     function validDoor() {
       let data = request.resource.data;
-      return data.keys().hasAll(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'currentStatusId', 'revision', 'lastVisitId', 'createdBy']) &&
-        data.keys().hasOnly(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'currentStatusId', 'revision', 'lastVisitId', 'createdBy', 'updatedAt']) &&
+      return data.keys().hasAll(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'createdBy']) &&
+        data.keys().hasOnly(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'createdBy', 'updatedAt']) &&
         data.buildingId is string && data.zoneId is string && data.location is latlng &&
         data.geohash is string && data.geohash.size() >= 4 && data.geohash.size() <= 12 &&
         data.floor is int && data.floor >= -5 && data.floor <= 200 &&
         data.label is string && data.label.size() >= 1 && data.label.size() <= 32 &&
+        data.sortOrder is int && data.sortOrder >= 0 && data.active is bool &&
         data.currentStatusId is string && data.revision is int && data.revision >= 0 &&
         (data.lastVisitId == null || data.lastVisitId is string) && data.createdBy is string &&
         optionalTimestamp(data, 'updatedAt');
+    }
+
+    function structureRevisionAdvanced(workspaceId, buildingId) {
+      let building = /databases/$(database)/documents/workspaces/$(workspaceId)/buildings/$(buildingId);
+      return exists(building) && getAfter(building).data.structureRevision == get(building).data.structureRevision + 1;
     }
 
     function validVisit() {
@@ -94,7 +109,8 @@ service cloud.firestore {
 
     match /workspaces/{workspaceId}/statuses/{statusId} {
       allow read: if activeMember(workspaceId);
-      allow create, update: if admin(workspaceId) && validStatus();
+      allow create: if (admin(workspaceId) || activeMember(workspaceId) && defaultStatus(statusId)) && validStatus();
+      allow update: if admin(workspaceId) && validStatus();
       allow delete: if admin(workspaceId);
     }
 
@@ -108,9 +124,14 @@ service cloud.firestore {
       allow read: if activeMember(workspaceId);
       allow create: if activeMember(workspaceId) && validBuilding() &&
         request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.structureRevision == 0 &&
         exists(/databases/$(database)/documents/workspaces/$(workspaceId)/zones/$(request.resource.data.zoneId));
-      allow update: if activeMember(workspaceId) && validBuilding() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'updatedAt']);
+      allow update: if activeMember(workspaceId) && validBuilding() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'updatedAt']) &&
+          request.resource.data.structureRevision == resource.data.structureRevision) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['structureRevision', 'updatedAt']) &&
+          request.resource.data.structureRevision == resource.data.structureRevision + 1)
+      );
       allow delete: if admin(workspaceId);
     }
 
@@ -118,16 +139,22 @@ service cloud.firestore {
       allow read: if activeMember(workspaceId);
       allow create: if activeMember(workspaceId) && validDoor() &&
         request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.active == true && request.resource.data.currentStatusId == 'unvisited' &&
+        request.resource.data.revision == 0 && request.resource.data.lastVisitId == null &&
+        structureRevisionAdvanced(workspaceId, request.resource.data.buildingId) &&
         exists(/databases/$(database)/documents/workspaces/$(workspaceId)/buildings/$(request.resource.data.buildingId)) &&
         request.resource.data.zoneId == get(/databases/$(database)/documents/workspaces/$(workspaceId)/buildings/$(request.resource.data.buildingId)).data.zoneId &&
         request.resource.data.location == get(/databases/$(database)/documents/workspaces/$(workspaceId)/buildings/$(request.resource.data.buildingId)).data.location &&
         request.resource.data.geohash == get(/databases/$(database)/documents/workspaces/$(workspaceId)/buildings/$(request.resource.data.buildingId)).data.geohash;
-      allow update: if activeMember(workspaceId) && validDoor() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentStatusId', 'revision', 'lastVisitId', 'updatedAt']) &&
-        request.resource.data.revision == resource.data.revision + 1 && request.resource.data.lastVisitId is string &&
-        getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.doorId == doorId &&
-        getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.statusId == request.resource.data.currentStatusId &&
-        getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.doorRevision == request.resource.data.revision;
+      allow update: if activeMember(workspaceId) && validDoor() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentStatusId', 'revision', 'lastVisitId', 'updatedAt']) &&
+          request.resource.data.revision == resource.data.revision + 1 && request.resource.data.lastVisitId is string &&
+          getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.doorId == doorId &&
+          getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.statusId == request.resource.data.currentStatusId &&
+          getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.doorRevision == request.resource.data.revision) ||
+        (activeMember(workspaceId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['floor', 'label', 'sortOrder', 'active', 'updatedAt']) &&
+          structureRevisionAdvanced(workspaceId, resource.data.buildingId))
+      );
       allow delete: if admin(workspaceId);
     }
 
@@ -143,6 +170,10 @@ service cloud.firestore {
     match /workspaces/{workspaceId}/zoneStats/{zoneId} {
       allow read: if activeMember(workspaceId);
       allow write: if false;
+    }
+
+    match /workspaces/{workspaceId}/setup/{setupId} {
+      allow read, write: if false;
     }
   }
 }

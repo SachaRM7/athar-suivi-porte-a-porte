@@ -63,6 +63,7 @@ export type Building = {
   geohash: string;
   zoneId: EntityId;
   createdBy: UserId;
+  structureRevision: number;
 };
 
 export type Door = {
@@ -73,6 +74,8 @@ export type Door = {
   geohash: string;
   floor: number;
   label: string;
+  sortOrder: number;
+  active: boolean;
   currentStatusId: StatusId;
   revision: number;
   lastVisitId: EntityId | null;

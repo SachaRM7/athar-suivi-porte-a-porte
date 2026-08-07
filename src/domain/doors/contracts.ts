@@ -1,4 +1,4 @@
-export type DoorStatusId = 'unvisited' | 'retry' | 'contacted' | 'do-not-return';
+export type DoorStatusId = string;
 
 export type DoorSnapshot = {
   id: string;

@@ -4,7 +4,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist/', 'node_modules/', 'functions/', 'playwright-report/', 'test-results/', 'tools/', 'public/sw.js', 'scripts/'] },
+  { ignores: ['.athar-local/', 'dist/', 'node_modules/', 'functions/', 'playwright-report/', 'test-results/', 'tools/', 'public/sw.js', 'scripts/'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -9,6 +9,7 @@ import {
 import {
   Timestamp,
   GeoPoint,
+  deleteDoc,
   doc,
   getDoc,
   setDoc,
@@ -16,7 +17,7 @@ import {
   writeBatch,
   serverTimestamp
 } from 'firebase/firestore';
-import { afterAll, afterEach, beforeAll, describe, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 const projectId = 'athar-local';
 const workspaceId = 'main';
@@ -67,7 +68,8 @@ async function seed() {
       location: new GeoPoint(43.61, 1.44),
       geohash: 'spc00',
       zoneId: 'zone-a',
-      createdBy: 'admin-a'
+      createdBy: 'admin-a',
+      structureRevision: 0
     });
     await setDoc(doc(db, `${workspace}/doors/door-a`), {
       buildingId: 'building-a',
@@ -76,6 +78,8 @@ async function seed() {
       geohash: 'spc00',
       floor: 0,
       label: '01',
+      sortOrder: 0,
+      active: true,
       createdBy: 'admin-a',
       currentStatusId: 'unvisited',
       revision: 0,
@@ -148,12 +152,40 @@ describe('Firestore security rules', () => {
     await assertSucceeds(setDoc(doc(member('admin-a'), `${workspace}/zones/zone-b`), zoneData({ name: 'Allowed' })));
   });
 
+  it('allows only an administrator to delete a zone', async () => {
+    await seed();
+    await assertFails(deleteDoc(doc(member('member-a'), `${workspace}/zones/zone-a`)));
+    await assertSucceeds(deleteDoc(doc(member('admin-a'), `${workspace}/zones/zone-a`)));
+    const deleted = await getDoc(doc(member('admin-a'), `${workspace}/zones/zone-a`));
+    expect(deleted.exists()).toBe(false);
+  });
+
   it('accepts only complete status and zone schemas from an administrator', async () => {
     await seed();
     const db = member('admin-a');
     await assertSucceeds(setDoc(doc(db, `${workspace}/statuses/retry`), statusData({ label: 'A revenir', order: 2 })));
     await assertFails(setDoc(doc(db, `${workspace}/statuses/bad-color`), statusData({ color: 'green' })));
     await assertFails(setDoc(doc(db, `${workspace}/zones/bad-zone`), zoneData({ geometry: { type: 'Polygon', vertices: [] } })));
+  });
+
+  it('lets an active member bootstrap only the fixed default statuses', async () => {
+    await seed();
+    const db = member('member-a');
+    await assertSucceeds(setDoc(doc(db, `${workspace}/statuses/retry`), {
+      label: 'A revenir', color: '#D8A200', order: 2, active: true
+    }));
+    await assertFails(setDoc(doc(db, `${workspace}/statuses/custom-member`), statusData({ label: 'Libre' })));
+  });
+
+  it('denies all client setup reads and writes, including direct initial administrator promotion', async () => {
+    await seed();
+    const first = member('member-a');
+    const bootstrap = writeBatch(first);
+    bootstrap.set(doc(first, `${workspace}/setup/initial-admin`), { uid: 'member-a', createdAt: serverTimestamp() });
+    bootstrap.update(doc(first, `${workspace}/members/member-a`), { role: 'admin' });
+    await assertFails(bootstrap.commit());
+    await assertFails(getDoc(doc(first, `${workspace}/setup/admin-bootstrap`)));
+    await assertFails(getDoc(doc(first, `${workspace}/setup/initial-admin`)));
   });
 
   it('forces member administration through privileged functions', async () => {
@@ -166,17 +198,20 @@ describe('Firestore security rules', () => {
 
   it('validates building and door references against the shared location', async () => {
     await seed();
-    const db = member('member-a');
-    await assertSucceeds(setDoc(doc(db, `${workspace}/buildings/building-member`), {
-      addressLabel: '20 rue de test', location: new GeoPoint(43.611, 1.441), geohash: 'spc01', zoneId: 'zone-a', createdBy: 'member-a'
+    const db = member('admin-a');
+    await assertSucceeds(setDoc(doc(member('member-a'), `${workspace}/buildings/building-member`), {
+      addressLabel: '20 rue de test', location: new GeoPoint(43.611, 1.441), geohash: 'spc01', zoneId: 'zone-a', createdBy: 'member-a', structureRevision: 0
     }));
-    await assertSucceeds(setDoc(doc(db, `${workspace}/doors/door-member`), {
+    const structure = writeBatch(db);
+    structure.update(doc(db, `${workspace}/buildings/building-member`), { structureRevision: 1, updatedAt: serverTimestamp() });
+    structure.set(doc(db, `${workspace}/doors/door-member`), {
       buildingId: 'building-member', zoneId: 'zone-a', location: new GeoPoint(43.611, 1.441), geohash: 'spc01',
-      floor: 0, label: '01', currentStatusId: 'unvisited', revision: 0, lastVisitId: null, createdBy: 'member-a'
-    }));
+      floor: 0, label: '01', sortOrder: 0, active: true, currentStatusId: 'unvisited', revision: 0, lastVisitId: null, createdBy: 'admin-a'
+    });
+    await assertSucceeds(structure.commit());
     await assertFails(setDoc(doc(db, `${workspace}/doors/door-fake-location`), {
       buildingId: 'building-member', zoneId: 'zone-a', location: new GeoPoint(43.7, 1.5), geohash: 'spc01',
-      floor: 0, label: '02', currentStatusId: 'unvisited', revision: 0, lastVisitId: null, createdBy: 'member-a'
+      floor: 0, label: '02', sortOrder: 1, active: true, currentStatusId: 'unvisited', revision: 0, lastVisitId: null, createdBy: 'admin-a'
     }));
   });
 

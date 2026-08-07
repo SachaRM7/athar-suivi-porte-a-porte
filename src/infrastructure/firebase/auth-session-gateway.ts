@@ -9,6 +9,7 @@ export type AuthSessionSnapshot =
   | { status: 'loading' }
   | { status: 'anonymous' }
   | { status: 'active'; session: AuthSession }
+  | { status: 'unregistered'; user: User }
   | { status: 'inactive'; user: User }
   | { status: 'error'; message: string };
 
@@ -30,7 +31,7 @@ export function observeAuthSession(
       doc(firestore, `workspaces/${workspaceId}/members/${user.uid}`),
       (snapshot) => {
         if (!snapshot.exists()) {
-          observer({ status: 'inactive', user });
+          observer({ status: 'unregistered', user });
           return;
         }
         try {

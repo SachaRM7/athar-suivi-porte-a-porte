@@ -10,6 +10,21 @@ const initialDoor: DoorSnapshot = {
 };
 
 describe('offline synchronization prototype', () => {
+  it('chains revisions correctly when timestamps and UUID ordering are ambiguous', async () => {
+    const gateway = new MemoryDoorGateway([initialDoor]);
+    const outbox = new MemoryOutbox();
+    const ids = ['visit-z', 'visit-a', 'visit-m'];
+    const lab = new SyncLab(gateway, outbox, 'member-a', () => new Date('2026-07-29T12:00:00Z'), () => ids.shift()!);
+
+    await lab.queueStatus(initialDoor, 'retry');
+    await lab.queueStatus(initialDoor, 'contacted');
+    await lab.queueStatus(initialDoor, 'do-not-return');
+
+    expect((await outbox.all()).map((entry) => entry.expectedRevision)).toEqual([4, 5, 6]);
+    await lab.flush();
+    expect(gateway.read('door-a')).toMatchObject({ revision: 7, currentStatusId: 'do-not-return' });
+  });
+
   it('keeps a write locally while offline then synchronizes it', async () => {
     const gateway = new MemoryDoorGateway([initialDoor]);
     const outbox = new MemoryOutbox();
@@ -97,5 +112,48 @@ describe('offline synchronization prototype', () => {
 
     expect(gateway.read('door-a')).toMatchObject({ currentStatusId: 'do-not-return', revision: 5 });
     expect((await outbox.all()).map((entry) => entry.state)).toEqual(['conflict', 'pending']);
+  });
+
+  it('rebases a conflicted chain onto the displayed server revision without changing UUIDs', async () => {
+    const gateway = new MemoryDoorGateway([initialDoor]);
+    const outbox = new MemoryOutbox();
+    const ids = ['visit-local-1', 'visit-local-2'];
+    const lab = new SyncLab(gateway, outbox, 'member-a', undefined, () => ids.shift()!);
+    await lab.queueStatus(initialDoor, 'retry');
+    await lab.queueStatus(initialDoor, 'contacted');
+    await gateway.commit({
+      commandId: 'visit-remote', authorId: 'member-b', doorId: 'door-a', statusId: 'do-not-return', note: '',
+      expectedRevision: 4, createdAt: '2026-07-29T12:01:00.000Z'
+    });
+    await lab.flush();
+
+    await lab.reapplyConflict('visit-local-1');
+    expect(await outbox.pending()).toMatchObject([
+      { commandId: 'visit-local-1', expectedRevision: 5 },
+      { commandId: 'visit-local-2', expectedRevision: 6 }
+    ]);
+    await lab.flush();
+    expect(gateway.read('door-a')).toMatchObject({ revision: 7, currentStatusId: 'contacted', lastVisitId: 'visit-local-2' });
+  });
+
+  it('abandons the conflicted command and every dependent command on that door', async () => {
+    const outbox = new MemoryOutbox();
+    await outbox.add({ commandId: 'visit-conflict', authorId: 'member-a', doorId: 'door-a', statusId: 'retry', note: '', expectedRevision: 4, createdAt: '2026-07-29T12:00:00.000Z' });
+    await outbox.add({ commandId: 'visit-dependent', authorId: 'member-a', doorId: 'door-a', statusId: 'contacted', note: '', expectedRevision: 5, createdAt: '2026-07-29T12:01:00.000Z' });
+    await outbox.markConflict('visit-conflict', { ...initialDoor, revision: 5, currentStatusId: 'do-not-return' });
+
+    await outbox.abandonConflict('visit-conflict');
+    await expect(outbox.all()).resolves.toEqual([]);
+  });
+
+  it('coalesces concurrent flush requests so one command is never sent twice', async () => {
+    const gateway = new MemoryDoorGateway([initialDoor]);
+    const outbox = new MemoryOutbox();
+    const lab = new SyncLab(gateway, outbox, 'member-a', undefined, () => 'visit-once');
+    await lab.queueStatus(initialDoor, 'retry');
+
+    await Promise.all([lab.flush(), lab.flush()]);
+    expect(gateway.read('door-a')).toMatchObject({ revision: 5, lastVisitId: 'visit-once' });
+    await expect(outbox.all()).resolves.toEqual([]);
   });
 });

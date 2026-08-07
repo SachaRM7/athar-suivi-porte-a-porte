@@ -4,9 +4,10 @@ import { Redirect } from '../../../app/routes/router';
 import { AccessState } from './AccessState';
 
 export function LoginPage(): ReactElement {
-  const { state, signIn } = useAuth();
+  const { state, signIn, registerMember, finalizeMemberRegistration } = useAuth();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [registering, setRegistering] = useState(false);
 
   if (state.status === 'active') return <Redirect to="/" />;
   if (state.status === 'unconfigured') return <AccessState title="Configuration requise" message="La configuration Firebase de cet environnement est absente. Renseignez les variables VITE_FIREBASE_* avant d'ouvrir une session." />;
@@ -27,6 +28,34 @@ export function LoginPage(): ReactElement {
     }
   }
 
+  async function submitRegistration(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setPending(true);
+    setError(null);
+    try {
+      await registerMember(String(data.get('username') ?? ''), String(data.get('displayName') ?? ''), String(data.get('password') ?? ''));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Creation du compte impossible.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function retryProfile(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setPending(true);
+    setError(null);
+    try {
+      await finalizeMemberRegistration(String(data.get('username') ?? ''), String(data.get('displayName') ?? ''));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Finalisation du profil impossible.');
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <main className="login-shell">
       <section className="login-intro" aria-labelledby="login-title">
@@ -38,22 +67,43 @@ export function LoginPage(): ReactElement {
         </div>
       </section>
       <section className="login-form-panel">
-        <form className="auth-form" onSubmit={(event) => void submit(event)}>
+        {state.status === 'unregistered' ? <form className="auth-form" onSubmit={(event) => void retryProfile(event)}>
           <div>
-            <p className="eyebrow">Acces membre</p>
-            <h2>Connexion</h2>
+            <p className="eyebrow">Compte a finaliser</p>
+            <h2>Finaliser l acces</h2>
           </div>
+          <p>Votre authentification a reussi, mais votre profil membre n a pas encore ete cree. Reessayez sans recreer de compte.</p>
           <label>
             Identifiant
-            <input autoComplete="username" name="username" pattern="[A-Za-z0-9._-]{3,32}" required />
+            <input autoComplete="username" defaultValue={state.user.email?.replace('@auth.athar.invalid', '') ?? ''} name="username" pattern={String.raw`[A-Za-z0-9._\-]{3,32}`} required />
+          </label>
+          <label>
+            Nom affiche
+            <input autoComplete="name" defaultValue={state.user.displayName ?? ''} maxLength={80} name="displayName" required />
+          </label>
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <button className="primary-action" disabled={pending} type="submit">{pending ? 'Finalisation...' : 'Reessayer la finalisation'}</button>
+        </form> : <form className="auth-form" onSubmit={(event) => void (registering ? submitRegistration(event) : submit(event))}>
+          <div>
+            <p className="eyebrow">Acces membre</p>
+            <h2>{registering ? 'Creer un compte' : 'Connexion'}</h2>
+          </div>
+          {registering && <label>
+            Nom affiche
+            <input autoComplete="name" maxLength={80} name="displayName" required />
+          </label>}
+          <label>
+            Identifiant
+            <input autoComplete="username" name="username" pattern={String.raw`[A-Za-z0-9._\-]{3,32}`} required />
           </label>
           <label>
             Mot de passe
-            <input autoComplete="current-password" minLength={6} name="password" required type="password" />
+            <input autoComplete={registering ? 'new-password' : 'current-password'} minLength={6} name="password" required type="password" />
           </label>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <button className="primary-action" disabled={pending} type="submit">{pending ? 'Connexion...' : 'Se connecter'}</button>
-        </form>
+          <button className="primary-action" disabled={pending} type="submit">{pending ? (registering ? 'Creation...' : 'Connexion...') : (registering ? 'Creer mon compte' : 'Se connecter')}</button>
+          <button className="text-button" onClick={() => { setRegistering((value) => !value); setError(null); }} type="button">{registering ? 'J ai deja un compte' : 'Creer un compte'}</button>
+        </form>}
       </section>
     </main>
   );

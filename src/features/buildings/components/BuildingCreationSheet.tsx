@@ -1,0 +1,68 @@
+import { useEffect, useState, type ReactElement } from 'react';
+import { geohashForLocation } from 'geofire-common';
+import type { Building, GeoPoint, Zone } from '../../../domain/workspace/models';
+import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
+
+type BuildingCreationSheetProps = {
+  location: GeoPoint | null;
+  authorId: string;
+  repositories: WorkspaceRepositories;
+  onCreated(building: Building): void;
+  onClose(): void;
+};
+
+export function BuildingCreationSheet({ location, authorId, repositories, onCreated, onClose }: BuildingCreationSheetProps): ReactElement | null {
+  const [zones, setZones] = useState<readonly Zone[]>([]);
+  const [zoneId, setZoneId] = useState('');
+  const [addressLabel, setAddressLabel] = useState('');
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (!location) return;
+    let live = true;
+    void repositories.zones.list().then((values) => {
+      if (!live) return;
+      setZones(values);
+      setZoneId((current) => current || values[0]?.id || '');
+    }).catch(() => { if (live) setMessage('Les zones ne sont pas disponibles.'); });
+    return () => { live = false; };
+  }, [location, repositories.zones]);
+
+  if (!location) return null;
+  const buildingLocation = location;
+
+  async function createBuilding(): Promise<void> {
+    const label = addressLabel.trim();
+    if (!label || !zoneId) {
+      setMessage(!zoneId ? 'Dessinez d abord une zone pour y rattacher ce batiment.' : 'Indiquez le nom ou l adresse du batiment.');
+      return;
+    }
+    const building: Building = {
+      id: `building-${crypto.randomUUID()}`,
+      addressLabel: label,
+      location: buildingLocation,
+      geohash: geohashForLocation([buildingLocation.latitude, buildingLocation.longitude]),
+      zoneId,
+      createdBy: authorId,
+      structureRevision: 0
+    };
+    try {
+      await repositories.buildings.create(building);
+      onCreated(building);
+      onClose();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Le batiment ne peut pas etre cree.');
+    }
+  }
+
+  return <div className="structure-sheet-layer">
+    <button aria-label="Annuler le nouveau batiment" className="structure-sheet-backdrop" onClick={onClose} type="button" />
+    <section aria-label="Nouveau batiment" className="structure-sheet" role="dialog">
+      <header><div><p className="eyebrow">Nouveau point</p><h3>Ajouter un batiment</h3></div><button aria-label="Annuler le nouveau batiment" className="icon-action" onClick={onClose} type="button">X</button></header>
+      <p className="structure-sheet-lead">Le point est pose sur la carte. Ajoutez ensuite les portes depuis la fiche du batiment.</p>
+      <div className="structure-fields"><label>Nom ou adresse<input aria-label="Nom ou adresse du batiment" autoFocus maxLength={160} onChange={(event) => setAddressLabel(event.target.value)} value={addressLabel} /></label><label>Zone<select aria-label="Zone du batiment" onChange={(event) => setZoneId(event.target.value)} value={zoneId}><option value="">Choisir une zone</option>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label></div>
+      <button className="primary-action" onClick={() => void createBuilding()} type="button">Creer le batiment</button>
+      {message && <p className="workspace-map-message" role="status">{message}</p>}
+    </section>
+  </div>;
+}

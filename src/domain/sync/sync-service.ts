@@ -29,6 +29,11 @@ export interface DoorWriteGateway {
   commit(intent: VisitIntent): Promise<DoorSnapshot>;
 }
 
+export type SyncEvent =
+  | { type: 'synced'; commandId: string; door: DoorSnapshot }
+  | { type: 'conflict'; commandId: string; door: DoorSnapshot }
+  | { type: 'rejected'; commandId: string; category: RejectionCategory };
+
 export class MemoryDoorGateway implements DoorWriteGateway {
   private readonly doors = new Map<string, DoorSnapshot>();
   private online = true;
@@ -72,6 +77,7 @@ export class MemoryOutbox implements Outbox {
   private readonly entries = new Map<string, OutboxEntry>();
 
   async add(intent: VisitIntent): Promise<void> {
+    if (this.entries.has(intent.commandId)) throw new Error(`Duplicate outbox command: ${intent.commandId}`);
     this.entries.set(intent.commandId, { ...intent, state: 'pending' });
   }
 
@@ -98,9 +104,44 @@ export class MemoryOutbox implements Outbox {
     if (!entry) throw new Error(`Unknown outbox entry: ${commandId}`);
     this.entries.set(commandId, { ...entry, state: 'rejected', rejection: category });
   }
+
+  async reapplyConflict(commandId: string): Promise<void> {
+    const conflict = this.entries.get(commandId);
+    if (!conflict || conflict.state !== 'conflict' || !conflict.conflict) {
+      throw new Error('Only a recorded conflict can be reapplied.');
+    }
+    const chain = [...this.entries.values()]
+      .filter((entry) => entry.doorId === conflict.doorId && entry.expectedRevision >= conflict.expectedRevision)
+      .sort((left, right) => left.expectedRevision - right.expectedRevision || left.createdAt.localeCompare(right.createdAt));
+    let revision = conflict.conflict.revision;
+    for (const entry of chain) {
+      if (entry.commandId !== commandId && entry.state !== 'pending') continue;
+      this.entries.set(entry.commandId, {
+        ...entry,
+        expectedRevision: revision++,
+        state: 'pending',
+        conflict: undefined,
+        rejection: undefined
+      });
+    }
+  }
+
+  async abandonConflict(commandId: string): Promise<void> {
+    const conflict = this.entries.get(commandId);
+    if (!conflict || conflict.state !== 'conflict') {
+      throw new Error('Only a recorded conflict can be abandoned.');
+    }
+    for (const entry of [...this.entries.values()]) {
+      if (entry.doorId === conflict.doorId && entry.expectedRevision >= conflict.expectedRevision) {
+        this.entries.delete(entry.commandId);
+      }
+    }
+  }
 }
 
 export class SyncLab {
+  private flushing: Promise<readonly SyncEvent[]> | null = null;
+
   constructor(
     private readonly gateway: DoorWriteGateway,
     private readonly outbox: Outbox,
@@ -119,7 +160,10 @@ export class SyncLab {
     }
 
     const pendingForDoor = (await this.outbox.pending()).filter((entry) => entry.doorId === door.id);
-    const lastPending = pendingForDoor.at(-1);
+    const lastPending = pendingForDoor.reduce<OutboxEntry | undefined>(
+      (latest, entry) => !latest || entry.expectedRevision > latest.expectedRevision ? entry : latest,
+      undefined
+    );
     const intent: VisitIntent = {
       commandId: this.createCommandId(),
       authorId: this.authorId,
@@ -133,7 +177,20 @@ export class SyncLab {
     return intent;
   }
 
-  async flush(): Promise<void> {
+  flush(): Promise<readonly SyncEvent[]> {
+    if (this.flushing) return this.flushing;
+    const pending = this.flushPending();
+    this.flushing = pending;
+    void pending.then(() => {
+      if (this.flushing === pending) this.flushing = null;
+    }, () => {
+      if (this.flushing === pending) this.flushing = null;
+    });
+    return pending;
+  }
+
+  private async flushPending(): Promise<readonly SyncEvent[]> {
+    const events: SyncEvent[] = [];
     const blockedDoors = new Set(
       (await this.outbox.all()).filter((entry) => entry.state !== 'pending').map((entry) => entry.doorId)
     );
@@ -142,22 +199,34 @@ export class SyncLab {
       if (blockedDoors.has(entry.doorId)) continue;
 
       try {
-        await this.gateway.commit(entry);
+        const door = await this.gateway.commit(entry);
         await this.outbox.markSynced(entry.commandId);
+        events.push({ type: 'synced', commandId: entry.commandId, door });
       } catch (error) {
-        if (error instanceof NetworkUnavailableError) return;
+        if (error instanceof NetworkUnavailableError) return events;
         if (error instanceof RevisionConflictError) {
           await this.outbox.markConflict(entry.commandId, error.serverDoor);
           blockedDoors.add(entry.doorId);
+          events.push({ type: 'conflict', commandId: entry.commandId, door: error.serverDoor });
           continue;
         }
         if (error instanceof SyncRejectedError) {
           await this.outbox.markRejected(entry.commandId, error.category);
           blockedDoors.add(entry.doorId);
+          events.push({ type: 'rejected', commandId: entry.commandId, category: error.category });
           continue;
         }
         throw error;
       }
     }
+    return events;
+  }
+
+  async reapplyConflict(commandId: string): Promise<void> {
+    await this.outbox.reapplyConflict(commandId);
+  }
+
+  async abandonConflict(commandId: string): Promise<void> {
+    await this.outbox.abandonConflict(commandId);
   }
 }

@@ -1,8 +1,18 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth';
-import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore';
+import {
+  clearIndexedDbPersistence,
+  connectFirestoreEmulator,
+  initializeFirestore,
+  memoryLocalCache,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  terminate,
+  type Firestore
+} from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, type Functions } from 'firebase/functions';
 import { environment } from '../../app/config/environment';
+import { isTrustedDevice } from '../offline/device-storage';
 
 export type FirebaseClient = { app: FirebaseApp; auth: Auth; firestore: Firestore; functions: Functions };
 
@@ -13,7 +23,11 @@ export function getFirebaseClient(): FirebaseClient {
   if (!environment.firebase) throw new Error('Firebase is not configured for this environment.');
   const app = getApps().length > 0 ? getApp() : initializeApp(environment.firebase);
   const auth = getAuth(app);
-  const firestore = getFirestore(app);
+  const firestore = initializeFirestore(app, {
+    localCache: isTrustedDevice()
+      ? persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+      : memoryLocalCache()
+  });
   const functions = getFunctions(app);
   if (environment.firebase.useEmulators) {
     connectAuthEmulator(auth, 'http://127.0.0.1:9199', { disableWarnings: true });
@@ -22,4 +36,17 @@ export function getFirebaseClient(): FirebaseClient {
   }
   client = { app, auth, firestore, functions };
   return client;
+}
+
+export async function clearFirebaseLocalCache(): Promise<boolean> {
+  if (!client) return true;
+  const firestore = client.firestore;
+  client = null;
+  try {
+    await terminate(firestore);
+    await clearIndexedDbPersistence(firestore);
+    return true;
+  } catch {
+    return false;
+  }
 }

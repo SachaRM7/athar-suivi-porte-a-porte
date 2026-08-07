@@ -3,18 +3,29 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "engines": {
+    "node": "22"
+  },
   "scripts": {
     "dev": "vite --port 5174",
+    "dev:local": "powershell -ExecutionPolicy Bypass -File scripts/run-local-dev.ps1",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "verify:build": "npm run build && node scripts/verify-build.mjs",
     "preview": "vite preview --port 5274",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --grep-invert @emulator",
     "test:emulator": "powershell -ExecutionPolicy Bypass -File scripts/run-emulator-tests.ps1",
     "test:emulator:run": "vitest run --config vitest.emulator.config.ts",
-    "prove:firebase-auth-real": "node scripts/prove-real-firebase-auth.mjs"
+    "test:load:emulator": "vitest run --config vitest.emulator.config.ts tests/emulator/read-pagination.integration.test.ts",
+    "test:e2e:emulator": "powershell -ExecutionPolicy Bypass -File scripts/run-emulator-playwright-tests.ps1",
+    "prove:firebase-auth-real": "node scripts/prove-real-firebase-auth.mjs",
+    "check:node22": "node scripts/assert-node22.mjs",
+    "test:commissioning": "node scripts/commissioning/phase-a.test.mjs",
+    "inventory:cloud:read": "node scripts/commissioning/inventory-cloud.mjs --project athar-dev31",
+    "backup:cloud:dry": "node scripts/commissioning/backup-logical.mjs --project athar-dev31",
+    "map:generate:toulouse": "powershell -ExecutionPolicy Bypass -File scripts/generate-toulouse-basemap.ps1"
   },
   "dependencies": {
     "@protomaps/basemaps": "^5.7.2",

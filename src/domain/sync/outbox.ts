@@ -7,4 +7,6 @@ export interface Outbox {
   markSynced(commandId: string): Promise<void>;
   markConflict(commandId: string, serverDoor: DoorSnapshot): Promise<void>;
   markRejected(commandId: string, category: RejectionCategory): Promise<void>;
+  reapplyConflict(commandId: string): Promise<void>;
+  abandonConflict(commandId: string): Promise<void>;
 }

@@ -28,14 +28,44 @@ export function AuthProvider({ children }: PropsWithChildren): ReactElement {
     await authModule.signInToFirebaseWithUsername(clientModule.getFirebaseClient().auth, username, password);
   }, []);
 
-  const signOut = useCallback(async () => {
-    const [clientModule, sessionModule] = await Promise.all([
+  const registerMember = useCallback(async (username: string, displayName: string, password: string) => {
+    const [clientModule, onboardingModule] = await Promise.all([
       import('../../infrastructure/firebase/client'),
-      import('../../infrastructure/firebase/auth-session-gateway')
+      import('../../infrastructure/firebase/onboarding-gateway')
     ]);
-    await sessionModule.closeFirebaseSession(clientModule.getFirebaseClient().auth);
+    const client = clientModule.getFirebaseClient();
+    await onboardingModule.registerMemberWithPassword(client.auth, client.functions, { username, displayName, password });
   }, []);
 
-  const value = useMemo(() => ({ state, signIn, signOut }), [state, signIn, signOut]);
+  const finalizeMemberRegistration = useCallback(async (username: string, displayName: string) => {
+    const [clientModule, onboardingModule] = await Promise.all([
+      import('../../infrastructure/firebase/client'),
+      import('../../infrastructure/firebase/onboarding-gateway')
+    ]);
+    await onboardingModule.finalizeMemberRegistration(clientModule.getFirebaseClient().functions, { username, displayName });
+  }, []);
+
+  const signOut = useCallback(async () => {
+    const [clientModule, sessionModule, deviceStorage] = await Promise.all([
+      import('../../infrastructure/firebase/client'),
+      import('../../infrastructure/firebase/auth-session-gateway'),
+      import('../../infrastructure/offline/device-storage')
+    ]);
+    const firebaseClient = clientModule.getFirebaseClient();
+    const authorId = state.status === 'active'
+      ? state.session.member.id
+      : state.status === 'inactive'
+        ? state.user.uid
+        : firebaseClient.auth.currentUser?.uid;
+    const purge = Boolean(authorId) && !deviceStorage.isTrustedDevice();
+    await sessionModule.closeFirebaseSession(firebaseClient.auth);
+    if (purge && authorId) {
+      await deviceStorage.purgeUntrustedDevice(authorId);
+      await clientModule.clearFirebaseLocalCache();
+      window.location.reload();
+    }
+  }, [state]);
+
+  const value = useMemo(() => ({ state, signIn, registerMember, finalizeMemberRegistration, signOut }), [state, signIn, registerMember, finalizeMemberRegistration, signOut]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,10 +1,12 @@
-const SHELL_CACHE = 'athar-shell-v6';
+const SHELL_CACHE = 'athar-shell-v9';
+const BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, '');
+const withBasePath = (path) => `${BASE_PATH}${path}` || '/';
 const SHELL_ASSETS = [
-  '/',
-  '/index.html',
-  '/assets/app.js',
-  '/assets/app.css',
-  '/manifest.webmanifest'
+  withBasePath('/'),
+  withBasePath('/index.html'),
+  withBasePath('/assets/app.js'),
+  withBasePath('/assets/app.css'),
+  withBasePath('/manifest.webmanifest')
 ];
 
 self.addEventListener('install', (event) => {
@@ -22,12 +24,32 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('message', (event) => {
+  if (event.data?.type === 'PURGE_ATHAR_DATA') {
+    event.waitUntil(caches.keys().then((keys) => Promise.all(
+      keys.filter((key) => key.startsWith('athar-')).map((key) => caches.delete(key))
+    )));
+    return;
+  }
   if (event.data?.type !== 'PREPARE_TOULOUSE_MAP') return;
   event.waitUntil(
-    Promise.all([caches.open(SHELL_CACHE), fetch('/fixtures/toulouse.pmtiles', { cache: 'no-store' })])
-      .then(([cache, response]) => {
+    Promise.all([
+      caches.open(SHELL_CACHE),
+      fetch(withBasePath('/fixtures/toulouse.pmtiles'), { cache: 'no-store' }),
+      fetch(withBasePath('/fonts/Noto%20Sans%20Regular/0-255.pbf'), { cache: 'no-store' }),
+      fetch(withBasePath('/fonts/Noto%20Sans%20Medium/0-255.pbf'), { cache: 'no-store' }),
+      fetch(withBasePath('/fonts/Noto%20Sans%20Italic/0-255.pbf'), { cache: 'no-store' })
+    ])
+      .then(async ([cache, response, regular, medium, italic]) => {
         if (!response.ok) throw new Error(`PMTiles download failed: ${response.status}`);
-        return cache.put('/fixtures/toulouse.pmtiles', response);
+        for (const font of [regular, medium, italic]) {
+          if (!font.ok) throw new Error(`Map font download failed: ${font.status}`);
+        }
+        await Promise.all([
+          cache.put(withBasePath('/fixtures/toulouse.pmtiles'), response),
+          cache.put(withBasePath('/fonts/Noto%20Sans%20Regular/0-255.pbf'), regular),
+          cache.put(withBasePath('/fonts/Noto%20Sans%20Medium/0-255.pbf'), medium),
+          cache.put(withBasePath('/fonts/Noto%20Sans%20Italic/0-255.pbf'), italic)
+        ]);
       })
       .then(() => event.ports[0]?.postMessage({ ok: true }))
       .catch((error) => event.ports[0]?.postMessage({ ok: false, error: String(error) }))
@@ -63,7 +85,7 @@ async function refreshShellResponse(request) {
 
 async function matchPmtilesRange(request) {
   const cache = await caches.open(SHELL_CACHE);
-  const cached = await cache.match('/fixtures/toulouse.pmtiles');
+  const cached = await cache.match(withBasePath('/fixtures/toulouse.pmtiles'));
   if (!cached) return fetch(request);
   const range = request.headers.get('range');
   if (!range) return cached;
@@ -85,17 +107,17 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  if (url.pathname === '/fixtures/toulouse.pmtiles') {
+  if (url.pathname === withBasePath('/fixtures/toulouse.pmtiles')) {
     event.respondWith(matchPmtilesRange(request));
     return;
   }
 
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => matchShell('/index.html')));
+    event.respondWith(fetch(request).catch(() => matchShell(withBasePath('/index.html'))));
     return;
   }
 
-  if (url.pathname === '/assets/app.js' || url.pathname === '/assets/app.css') {
+  if (url.pathname === withBasePath('/assets/app.js') || url.pathname === withBasePath('/assets/app.css')) {
     event.respondWith(refreshShellResponse(request));
     return;
   }

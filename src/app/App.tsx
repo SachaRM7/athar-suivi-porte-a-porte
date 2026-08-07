@@ -8,6 +8,7 @@ import { Redirect } from './routes/router';
 
 const MapPage = lazy(async () => ({ default: (await import('../features/map/components/MapPage')).MapPage }));
 const MapPreview = lazy(async () => ({ default: (await import('../features/map/components/MapPreview')).MapPreview }));
+const AdminDashboardPage = lazy(async () => ({ default: (await import('../features/admin/components/AdminDashboardPage')).AdminDashboardPage }));
 
 function RouteFallback(): ReactElement {
   return <div className="workspace-map-loading" aria-label="Chargement" />;
@@ -19,6 +20,7 @@ export function App(): ReactElement {
   if (pathname === '/technical-lab') return <TechnicalLab />;
   if (pathname === '/technical-map') return <Suspense fallback={<RouteFallback />}><MapPreview /></Suspense>;
   if (pathname === '/') return <ProtectedRoute><Suspense fallback={<RouteFallback />}><MapPage /></Suspense></ProtectedRoute>;
+  if (pathname === '/admin') return <ProtectedRoute role="admin"><Suspense fallback={<RouteFallback />}><AdminDashboardPage /></Suspense></ProtectedRoute>;
   if (pathname === '/admin/members') return <ProtectedRoute role="admin"><AdminMembersPage /></ProtectedRoute>;
   return <Redirect to="/" />;
 }

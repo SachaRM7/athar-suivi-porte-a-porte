@@ -46,6 +46,7 @@ export function assertBuilding(building: Building): void {
   assertEntityId(building.zoneId, 'building.zoneId');
   assertEntityId(building.createdBy, 'building.createdBy');
   if (!building.addressLabel.trim() || building.addressLabel.length > 160) throw new Error('Building address must contain 1 to 160 characters.');
+  if (!Number.isInteger(building.structureRevision) || building.structureRevision < 0) throw new Error('Building structure revision must be a non-negative integer.');
   assertGeoPoint(building.location, 'building.location');
   if (!GEOHASH.test(building.geohash)) throw new Error('Building geohash is invalid.');
 }
@@ -57,6 +58,8 @@ export function assertDoor(door: Door, building?: Building): void {
   assertEntityId(door.createdBy, 'door.createdBy');
   if (!Number.isInteger(door.floor) || door.floor < -5 || door.floor > 200) throw new Error('Door floor is outside the supported range.');
   if (!door.label.trim() || door.label.length > 32) throw new Error('Door label must contain 1 to 32 characters.');
+  if (!Number.isInteger(door.sortOrder) || door.sortOrder < 0) throw new Error('Door sort order must be a non-negative integer.');
+  if (typeof door.active !== 'boolean') throw new Error('Door active state must be boolean.');
   if (!Number.isInteger(door.revision) || door.revision < 0) throw new Error('Door revision must be a non-negative integer.');
   assertGeoPoint(door.location, 'door.location');
   if (!GEOHASH.test(door.geohash)) throw new Error('Door geohash is invalid.');

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useMemo, useState, type CSSProperties, type ReactElement } from 'react';
+import { AppLink } from '../../app/routes/router';
 import { layoutDoorsAtBuilding } from '../buildings/model/door-layout';
 import type { DoorStatusId } from '../../domain/doors/contracts';
 import { IndexedDbOutbox } from '../../infrastructure/outbox/indexeddb-outbox';
@@ -55,9 +56,12 @@ export function TechnicalLab(): ReactElement {
           <h1>Socle technique</h1>
           <p className="header-note">Route technique de regression. Aucun parcours terrain ou pilotage n'est expose ici.</p>
         </div>
-        <button className={online ? 'connection online' : 'connection offline'} onClick={() => setOnline((value) => !value)} type="button">
-          {online ? 'Reseau disponible' : 'Mode hors ligne'}
-        </button>
+        <div className="lab-header-actions">
+          <AppLink className="primary-action" href="/technical-map">Ouvrir le parcours carte</AppLink>
+          <button className={online ? 'connection online' : 'connection offline'} onClick={() => setOnline((value) => !value)} type="button">
+            {online ? 'Reseau disponible' : 'Mode hors ligne'}
+          </button>
+        </div>
       </header>
 
       <section className="lab-grid" aria-label="Fondations techniques">

@@ -1,15 +1,22 @@
 const { initializeApp, getApps } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
-const { getFirestore, FieldValue } = require('firebase-admin/firestore');
-const { HttpsError, onCall, onRequest } = require('firebase-functions/v2/https');
+const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
+const { HttpsError, onCall } = require('firebase-functions/v2/https');
+const crypto = require('node:crypto');
 
 if (getApps().length === 0) initializeApp();
 
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 const WORKSPACE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const MAIN_WORKSPACE_ID = 'main';
+const TECHNICAL_EMAIL_DOMAIN = '@auth.athar.invalid';
+const REGISTERED_MEMBER_FIELDS = ['active', 'createdAt', 'displayName', 'role', 'uid', 'username', 'workspaceId'];
 
 function normalizeUsername(value) {
-  const username = String(value || '').trim().toLowerCase();
+  if (typeof value !== 'string') {
+    throw new HttpsError('invalid-argument', 'Invalid username.');
+  }
+  const username = value.trim().toLowerCase();
   if (!USERNAME_PATTERN.test(username)) {
     throw new HttpsError('invalid-argument', 'Invalid username.');
   }
@@ -24,9 +31,58 @@ function normalizeWorkspaceId(value) {
   return workspaceId;
 }
 
-exports.emulatorHealth = onRequest((request, response) => {
-  response.status(200).json({ emulator: true, service: 'athar-functions' });
-});
+function normalizeDisplayName(value) {
+  if (typeof value !== 'string') {
+    throw new HttpsError('invalid-argument', 'A display name between 1 and 80 characters is required.');
+  }
+  const displayName = value.trim();
+  if (displayName.length < 1 || displayName.length > 80) {
+    throw new HttpsError('invalid-argument', 'A display name between 1 and 80 characters is required.');
+  }
+  return displayName;
+}
+
+function assertExactFields(data, fields) {
+  const received = Object.keys(data || {}).sort().join(',');
+  const expected = [...fields].sort().join(',');
+  if (received !== expected) throw new HttpsError('invalid-argument', 'Unexpected request fields.');
+}
+
+function technicalEmailFor(username) {
+  return `${username}${TECHNICAL_EMAIL_DOMAIN}`;
+}
+
+function isCanonicalRegisteredMember(data, expected) {
+  if (!data || typeof data !== 'object') return false;
+  const fields = Object.keys(data).sort();
+  if (fields.length !== REGISTERED_MEMBER_FIELDS.length || fields.some((field, index) => field !== REGISTERED_MEMBER_FIELDS[index])) {
+    return false;
+  }
+  return data.uid === expected.uid
+    && data.username === expected.username
+    && data.displayName === expected.displayName
+    && data.workspaceId === MAIN_WORKSPACE_ID
+    && data.role === 'member'
+    && data.active === true
+    && data.createdAt instanceof Timestamp;
+}
+
+function suppliedCodeHash(code) {
+  if (typeof code !== 'string' || code.length < 1 || code.length > 512) {
+    throw new HttpsError('invalid-argument', 'A bootstrap code is required.');
+  }
+  return crypto.createHash('sha256').update(code, 'utf8').digest();
+}
+
+function bootstrapHashBuffer(value) {
+  if (typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value)) return Buffer.from(value, 'hex');
+  if (Buffer.isBuffer(value) && value.length === 32) return value;
+  if (value?.toBuffer instanceof Function) {
+    const buffer = value.toBuffer();
+    if (buffer.length === 32) return buffer;
+  }
+  throw new HttpsError('failed-precondition', 'Initial administrator bootstrap is not provisioned correctly.');
+}
 
 exports.createMember = onCall(async (request) => {
   if (request.auth?.token.role !== 'admin') {
@@ -67,4 +123,90 @@ exports.createMember = onCall(async (request) => {
   }
 
   return { uid: user.uid, username };
+});
+
+exports.registerMember = onCall(async (request) => {
+  if (!request.auth?.uid || !request.auth.token.email) {
+    throw new HttpsError('unauthenticated', 'Authentication is required.');
+  }
+  assertExactFields(request.data, ['username', 'displayName']);
+  const username = normalizeUsername(request.data.username);
+  const displayName = normalizeDisplayName(request.data.displayName);
+  const expectedEmail = technicalEmailFor(username);
+  if (String(request.auth.token.email).toLowerCase() !== expectedEmail) {
+    throw new HttpsError('permission-denied', 'Authenticated email does not match the username.');
+  }
+
+  const db = getFirestore();
+  const memberRef = db.doc(`workspaces/${MAIN_WORKSPACE_ID}/members/${request.auth.uid}`);
+  await db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(memberRef);
+    if (existing.exists) {
+      const data = existing.data();
+      if (!isCanonicalRegisteredMember(data, { uid: request.auth.uid, username, displayName })) {
+        throw new HttpsError('already-exists', 'This account already has a different or malformed member profile.');
+      }
+      return;
+    }
+    transaction.create(memberRef, {
+      uid: request.auth.uid,
+      username,
+      displayName,
+      workspaceId: MAIN_WORKSPACE_ID,
+      role: 'member',
+      active: true,
+      createdAt: FieldValue.serverTimestamp()
+    });
+  });
+
+  const auth = getAuth();
+  const user = await auth.getUser(request.auth.uid);
+  if (user.displayName !== displayName) await auth.updateUser(request.auth.uid, { displayName });
+  return { uid: request.auth.uid, username, workspaceId: MAIN_WORKSPACE_ID };
+});
+
+exports.claimInitialAdmin = onCall(async (request) => {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
+  assertExactFields(request.data, ['code']);
+  const codeHash = suppliedCodeHash(request.data.code);
+  const db = getFirestore();
+  const memberRef = db.doc(`workspaces/${MAIN_WORKSPACE_ID}/members/${request.auth.uid}`);
+  const bootstrapRef = db.doc(`workspaces/${MAIN_WORKSPACE_ID}/setup/admin-bootstrap`);
+  const markerRef = db.doc(`workspaces/${MAIN_WORKSPACE_ID}/setup/initial-admin`);
+
+  await db.runTransaction(async (transaction) => {
+    const [member, bootstrap, marker] = await Promise.all([
+      transaction.get(memberRef), transaction.get(bootstrapRef), transaction.get(markerRef)
+    ]);
+    if (!member.exists || member.data().active !== true) {
+      throw new HttpsError('permission-denied', 'An active workspace member is required.');
+    }
+    if (!bootstrap.exists) throw new HttpsError('failed-precondition', 'Initial administrator bootstrap is not provisioned.');
+    const bootstrapData = bootstrap.data();
+    const storedHash = bootstrapHashBuffer(bootstrapData.codeHash);
+    if (!crypto.timingSafeEqual(codeHash, storedHash)) {
+      throw new HttpsError('permission-denied', 'Invalid bootstrap code.');
+    }
+    if (marker.exists) {
+      if (marker.data().uid !== request.auth.uid || member.data().role !== 'admin') {
+        throw new HttpsError('already-exists', 'An initial administrator already exists.');
+      }
+      return;
+    }
+    if (bootstrapData.consumedAt || bootstrapData.consumedBy) {
+      throw new HttpsError('failed-precondition', 'Initial administrator bootstrap was already consumed.');
+    }
+    transaction.update(bootstrapRef, { consumedAt: FieldValue.serverTimestamp(), consumedBy: request.auth.uid });
+    transaction.create(markerRef, { uid: request.auth.uid, createdAt: FieldValue.serverTimestamp() });
+    transaction.update(memberRef, { role: 'admin' });
+  });
+
+  try {
+    const auth = getAuth();
+    const user = await auth.getUser(request.auth.uid);
+    await auth.setCustomUserClaims(request.auth.uid, { ...(user.customClaims || {}), role: 'admin' });
+  } catch {
+    throw new HttpsError('internal', 'Administrator promotion is recorded; retry activation to repair the authentication claim.');
+  }
+  return { role: 'admin', workspaceId: MAIN_WORKSPACE_ID };
 });

@@ -1,4 +1,5 @@
 import { useEffect, type AnchorHTMLAttributes, type MouseEvent, type ReactElement } from 'react';
+import { withBasePath } from '../config/public-paths';
 import { navigate } from './navigation';
 
 export function AppLink({ href, onClick, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }): ReactElement {
@@ -8,7 +9,8 @@ export function AppLink({ href, onClick, ...props }: AnchorHTMLAttributes<HTMLAn
     event.preventDefault();
     navigate(href);
   }
-  return <a href={href} onClick={follow} {...props} />;
+  const browserHref = href.startsWith('/') ? withBasePath(href as `/${string}`) : href;
+  return <a href={browserHref} onClick={follow} {...props} />;
 }
 
 export function Redirect({ to }: { to: string }): null {

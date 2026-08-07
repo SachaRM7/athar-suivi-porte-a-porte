@@ -38,7 +38,7 @@ cadastre, gestion de plusieurs organisations et deploiement national.
 | Dessin de zones | Terra Draw ou plugin MapLibre equivalent, valide par prototype | Edition GeoJSON et integration MapLibre |
 | Geometrie | GeoJSON + Turf pour point-dans-polygone et simplification | Formats et operations standards |
 | Donnees | Cloud Firestore | Cache web persistant, ecritures hors ligne et resynchronisation |
-| Authentification | Firebase Authentication, comptes crees par une fonction privilegiee | Pas d'inscription publique et mot de passe gere par Firebase |
+| Authentification | Firebase Authentication + callable Functions | Inscription publique decidee, finalisation membre et promotion admin controlees cote serveur |
 | Backend cible | Firebase Cloud Functions | Creation de comptes, compteurs et operations d'administration |
 | Validation | Zod aux frontieres de l'application | Eviter que des documents mal formes entrent dans le domaine |
 | Tests | Vitest, Testing Library, Playwright et Firebase Emulator Suite | Tests unitaires, parcours et regles de securite |
@@ -59,6 +59,52 @@ ouvre une feuille mobile ou un panneau desktop contenant les logements, chacun
 avec sa couleur et son action en un geste. Cette representation evite
 l'empilement illisible de plusieurs marqueurs au meme endroit tout en conservant
 le logement comme unite de suivi.
+
+### Structure du batiment et revisions independantes
+
+La structure et le suivi terrain sont deux axes de concurrence strictement
+independants :
+
+- `buildings.structureRevision` protege uniquement les operations de structure :
+  ajout, archivage, reactivation, etage, libelle et ordre d'affichage des portes ;
+- `doors.revision` protege uniquement la projection du statut et la chaine des
+  passages ;
+- une operation de structure ne modifie jamais `doors.revision`,
+  `currentStatusId`, `lastVisitId`, les informations du dernier passage ni
+  l'historique ;
+- un passage ne modifie jamais `buildings.structureRevision` ni les champs de
+  structure d'une porte ;
+- les ecritures utilisent des mises a jour de champs ciblees. Une regeneration
+  ne remplace jamais un document porte complet.
+
+Une regeneration calcule un diff non destructif. Elle preserve l'identifiant et
+tous les champs de suivi de chaque porte existante qui correspond au plan cible,
+ajoute seulement les portes manquantes avec le statut initial `unvisited` et la
+revision `0`, puis passe les portes disparues a `active: false` sans supprimer
+leur historique. Une porte archivee qui reapparait peut etre reactivee avec le
+meme identifiant et le meme historique ; creer une nouvelle porte physique a la
+meme place reste une action explicite.
+
+L'identite primaire d'une porte est son identifiant opaque, jamais `sortOrder`.
+Lorsque le generateur ne dispose pas encore d'identifiants, il peut proposer une
+correspondance par etage et libelle normalise. `sortOrder` reste librement
+modifiable. Un changement de libelle ambigu est presente comme un renommage ou
+un ajout/archivage a confirmer ; il n'est jamais devine silencieusement.
+
+La vue terrain affiche les portes actives d'un seul etage a la fois et derive sa
+progression du statut `unvisited`, sans projection supplementaire. Un geste de
+masse est une succession de passages individuels: il conserve donc un UUID, une
+revision et une intention de synchronisation par porte. Il n'est pas une
+transaction multi-portes et peut etre partiellement applique si une porte est
+refusee. L'entree d'edition de structure reste separee et masquee aux membres
+dans l'interface. Depuis l'etape 11, les regles serveur appliquent la meme
+politique : seul un administrateur actif cree ou modifie la structure d'un
+batiment ou d'une porte. Les passages des membres actifs restent inchanges.
+
+Un passage place dans l'outbox avant l'archivage de sa porte reste recevable
+apres cet archivage. Le lot modifie uniquement le statut, la revision et le
+dernier passage ; il ne reactive jamais la porte. Le client refuse en revanche
+de creer une nouvelle intention des qu'il a observe `active: false`.
 
 ### Historique et propriete
 
@@ -101,8 +147,8 @@ Champs principaux :
 | `statuses` | `label`, `color`, `order`, `active` |
 | `zones` | `name`, `geometry`, `bbox`, `color`, `coverageState`, `assigneeLabel` |
 | `zoneStats` | `doorCount`, `countsByStatus`, `updatedAt` |
-| `buildings` | `addressLabel`, `location`, `geohash`, `zoneId`, `createdBy` |
-| `doors` | `buildingId`, `zoneId`, `location`, `geohash`, `floor`, `label`, `currentStatusId`, `revision`, `lastVisitId` |
+| `buildings` | `addressLabel`, `location`, `geohash`, `zoneId`, `createdBy`, `structureRevision` |
+| `doors` | `buildingId`, `zoneId`, `location`, `geohash`, `floor`, `label`, `sortOrder`, `active`, `currentStatusId`, `revision`, `lastVisitId` |
 | `visits` | `doorId`, `statusId`, `note`, `authorId`, `occurredAt`, `syncedAt`, `doorRevision`, `replacesVisitId`, `voidedAt` |
 
 Les identifiants sont opaques. Les noms de collection restent en anglais pour
@@ -214,18 +260,15 @@ reindexation asynchrone des batiments concernes.
 
 ## 6. Autorisations
 
-La creation et la suppression de comptes par les utilisateurs finaux doivent
-etre impossibles au niveau serveur. Masquer un formulaire d'inscription ne
-suffit pas. La preuve reelle du 29 juillet 2026 sur `athar-dev31` montre que
-Firebase Auth Email/Password standard laisse passer `accounts:signUp` et
-`accounts:delete` avec la cle Web lorsque le provider est actif. L'architecture
-doit donc confirmer une fermeture Firebase/Identity Platform prouvee, ou
-remplacer ce flux par une emission privilegiee de jetons avant le socle
-applicatif.
+Depuis l'etape 12, l'inscription identifiant/mot de passe est deliberement ouverte : le navigateur cree l'utilisateur Auth avec l'adresse technique `{username}@auth.athar.invalid`, puis appelle `registerMember`. Cette callable authentifiee epingle `workspaceId = main`, valide l'identite email/identifiant et cree transactionnellement le membre actif `role: member`. Un utilisateur Auth sans document membre est un etat distinct, recuperable par une nouvelle finalisation du meme profil ; ce n'est pas un membre inactif.
 
-L'administrateur cree le compte par une fonction privilegiee utilisant Firebase
-Admin SDK, puis remet un mot de passe temporaire par un canal separe si le flux
-mot de passe Firebase est conserve.
+Le premier administrateur est cree exclusivement par `claimInitialAdmin`. Le code fourni est hache SHA-256 et compare a taille constante au hash provisionne hors bande dans `workspaces/main/setup/admin-bootstrap`. La transaction lit, consomme cet etat, cree le marqueur immutable `initial-admin` et promeut le seul membre selectionne. Les clients ne peuvent jamais lire ni ecrire `setup` ou `members`. Le hash de production est provisionne hors depot; le code clair ne figure ni dans Firestore, ni dans le bundle, ni dans les journaux. Le code doit contenir au minimum 128 bits aleatoires.
+
+Apres la transaction, la Function fusionne le claim Auth `role: admin` aux claims existants. Si cette ecriture Auth echoue, le marqueur et Firestore restent la source de verite : le meme UID peut relancer la callable pour reparer le claim, tandis que tout autre UID est refuse.
+
+Le risque residuel majeur avant ouverture publique est l'inscription ouverte : sans App Check, CAPTCHA, verification email ou invitation, un tiers peut creer des comptes et acceder aux donnees lues par un membre actif. Ces contre-mesures ne font pas partie de cette etape et doivent etre decidees avant une ouverture publique.
+
+L'administrateur peut toujours creer un compte par `createMember`, qui conserve son double verrou : claim Auth `admin` et document membre actif `admin`.
 Les fonctions d'administration verifient a la fois le claim Auth `admin` et un
 document membre actif avec le role `admin` dans le workspace. Les clients ne
 peuvent jamais ecrire directement dans `members`.
@@ -242,7 +285,7 @@ Matrice cible :
 | Creer un passage | Oui, pour soi | Oui |
 | Corriger/annuler un passage | Le sien | Tous |
 | Changer le statut courant d'un logement | Oui, avec passage associe | Oui |
-| Creer ou modifier un batiment/logement | Oui, champs autorises | Oui |
+| Creer ou modifier la structure d'un batiment/logement | Non | Oui |
 | Creer/modifier zones et statuts | Non | Oui |
 | Gerer les acces | Non | Oui |
 
@@ -280,12 +323,21 @@ dans les tests. Les regles metier de statut, revision et conflit restent dans
 
 - environnement local avec Firebase Emulator Suite ;
 - projets Firebase distincts pour developpement et production ;
+- alias Firebase local conserve par defaut et projet cloud toujours nomme par
+  `--project` dans les commandes de lecture ou de deploiement ;
+- runtime local et Functions aligne sur Node 22, version effectivement prise
+  en charge par Cloud Functions, avant le premier deploiement ;
 - variables publiques de configuration separees, aucun secret dans le client ;
 - App Check avant ouverture a un groupe elargi ;
 - journal d'erreurs sans contenu des notes ;
 - budget cloud et alertes actives ;
 - sauvegarde/export administratif periodique avant le changement d'echelle ;
 - tests en mode avion sur un vrai telephone Android, en plus de Playwright.
+
+La mise en service suit des autorisations separees pour la configuration du
+projet, les regles et donnees, le Hosting preview puis la promotion live. Un GO
+d'architecture ou de test ne vaut jamais autorisation implicite d'ecriture dans
+le projet Firebase.
 
 ## 9. Risques a lever avant le socle applicatif
 

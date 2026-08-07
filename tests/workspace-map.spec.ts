@@ -8,8 +8,54 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await expect.poll(() => page.getByText('2 batiment(s) visibles').isVisible(), { timeout: 15_000 }).toBe(true);
 
   await page.getByRole('button', { name: 'Modifier la zone' }).click();
-  await expect(page.getByText('Edition de Carmes. Deplacez les sommets puis enregistrez.')).toBeVisible();
-  await page.getByRole('button', { name: 'Enregistrer' }).click();
-  await expect(page.getByText(/Zone enregistree localement\. 2 batiment\(s\) rattache\(s\) par point-dans-polygone\./)).toBeVisible();
+  await expect(page.getByText('Edition de Carmes. Ajustez le contour, le nom ou la couleur.')).toBeVisible();
+  await page.getByRole('textbox', { name: 'Nom de la zone' }).fill('Carmes centre');
+  await page.getByLabel('Couleur de la zone').fill('#D8A200');
+  await page.getByRole('button', { name: 'Enregistrer la zone' }).click();
+  await expect(page.getByText(/Zone enregistree\. 2 batiment\(s\) rattache\(s\) par point-dans-polygone\./)).toBeVisible();
   await expect(page.getByText('2 rattache(s)')).toBeVisible();
+
+  await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
+  await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '18 rue du Languedoc, Toulouse' })).toBeVisible();
+  await page.getByRole('button', { name: /1e 1\/2/ }).click();
+  await page.getByRole('button', { name: 'Porte 11, Contact' }).click();
+  await expect(page.getByRole('dialog', { name: 'Statut pour porte 11' })).toBeVisible();
+  await page.getByRole('button', { name: 'Marquer porte 11: A revenir' }).click();
+  await expect(page.getByText(/Porte 11: passage .* cree, revision 2\./)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Porte 11, A revenir' })).toBeVisible();
+
+  await page.getByRole('button', { name: /RDC 1\/2/ }).click();
+  await page.getByRole('button', { name: 'Actions groupees et note' }).click();
+  await page.getByRole('button', { name: 'A revenir', exact: true }).click();
+  await page.getByRole('button', { name: 'Tout l\'etage' }).click();
+  await expect(page.getByText('2 porte(s) mises a jour localement sur 2.')).toBeVisible();
+  await expect(page.getByText('3 attente(s)')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Configurer le batiment' }).click();
+  await page.getByRole('button', { name: 'Ajustement manuel' }).click();
+  const plan = page.getByRole('textbox', { name: 'Plan manuel de portes' });
+  const originalPlan = await plan.inputValue();
+  await plan.fill(originalPlan.replace('0 | 01 | door-dalbad-01', '0 | 01A | door-dalbad-01'));
+  await page.getByRole('button', { name: 'Appliquer le plan manuel' }).click();
+  await expect(page.getByText('Structure bloquee: synchronisez ou resolvez les passages locaux des portes concernees.')).toBeVisible();
+
+  await plan.fill(`${originalPlan}\n2 | 21`);
+  await page.getByRole('button', { name: 'Appliquer le plan manuel' }).click();
+  await expect(page.getByText('Structure enregistree: 1 ajoutee(s), 0 ajustee(s), 0 archivee(s).')).toBeVisible();
+  await expect(page.getByText('5 portes')).toBeVisible();
+});
+
+test('opens the building detail as a constrained desktop dialog', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.goto('/technical-map');
+  await expect.poll(() => page.getByText('2 batiment(s) visibles').isVisible(), { timeout: 15_000 }).toBe(true);
+  const mapBounds = await page.getByLabel('Carte MapLibre des zones').boundingBox();
+  expect(mapBounds?.y).toBeLessThan(350);
+  expect(mapBounds?.height).toBeGreaterThan(400);
+  await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Detail du batiment' });
+  await expect(dialog).toBeVisible();
+  expect((await dialog.boundingBox())?.width).toBeLessThanOrEqual(820);
+  await page.close();
 });
