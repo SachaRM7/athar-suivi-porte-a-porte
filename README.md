@@ -41,7 +41,8 @@ Toulouse puis pour une montee en charge geographique progressive.
 
 ## Documents de reference
 
-- [Architecture V1](docs/architecture-v1.md)
+- [Architecture V0 (obsolete)](docs/architecture-v0-obsolete.md)
+- [Brief d'implementation Athar](docs/athar/00-BRIEF.md)
 - [Feuille de route et modeles Codex](docs/feuille-de-route.md)
 - [Etat de passation](docs/etat-projet.md)
 - [Resultats de l'etape 2](docs/resultats-etape-2.md)
