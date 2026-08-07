@@ -61,6 +61,7 @@ export type WorkspaceRepositories = {
   doors: DoorRepository;
   visits: VisitRepository;
   commitVisitAndDoor(visit: Visit, door: Door): Promise<void>;
+  commitVisitsAndDoors(entries: readonly { visit: Visit; door: Door }[]): Promise<void>;
   reconcileDoorSnapshot(snapshot: DoorSnapshot): Promise<void>;
   refreshDoor(doorId: string): Promise<Door | null>;
   applyBuildingStructure(input: {

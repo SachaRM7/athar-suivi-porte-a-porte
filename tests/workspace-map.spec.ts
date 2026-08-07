@@ -18,25 +18,21 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
   await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '18 rue du Languedoc, Toulouse' })).toBeVisible();
-  await page.getByRole('button', { name: /1e 1\/2/ }).click();
   await page.getByRole('button', { name: 'Porte 11, Contact' }).click();
   await expect(page.getByRole('dialog', { name: 'Statut pour porte 11' })).toBeVisible();
   await page.getByRole('button', { name: 'Marquer porte 11: A revenir' }).click();
   await expect(page.getByText(/Porte 11: passage .* cree, revision 2\./)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Porte 11, A revenir' })).toBeVisible();
 
-  await page.getByRole('button', { name: /RDC 1\/2/ }).click();
-  await page.getByRole('button', { name: 'Actions groupees et note' }).click();
-  await page.getByRole('button', { name: 'A revenir', exact: true }).click();
-  await page.getByRole('button', { name: 'Tout l\'etage' }).click();
-  await expect(page.getByText('2 porte(s) mises a jour localement sur 2.')).toBeVisible();
-  await expect(page.getByText('3 attente(s)')).toBeVisible();
+  await page.getByRole('button', { name: 'tout marquer absent' }).first().click();
+  await expect(page.getByText('1 passage(s) « Absent » enregistres pour cet etage.')).toBeVisible();
+  await expect(page.getByText('2 attente(s)')).toBeVisible();
 
   await page.getByRole('button', { name: 'Configurer le batiment' }).click();
   await page.getByRole('button', { name: 'Ajustement manuel' }).click();
   const plan = page.getByRole('textbox', { name: 'Plan manuel de portes' });
   const originalPlan = await plan.inputValue();
-  await plan.fill(originalPlan.replace('0 | 01 | door-dalbad-01', '0 | 01A | door-dalbad-01'));
+  await plan.fill(originalPlan.replace('1 | 12 | door-dalbad-12', '1 | 12A | door-dalbad-12'));
   await page.getByRole('button', { name: 'Appliquer le plan manuel' }).click();
   await expect(page.getByText('Structure bloquee: synchronisez ou resolvez les passages locaux des portes concernees.')).toBeVisible();
 

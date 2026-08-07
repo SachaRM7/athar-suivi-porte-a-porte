@@ -105,6 +105,17 @@ export function createMemoryWorkspaceRepositories(snapshot: WorkspaceSnapshot): 
       visits.push(copy(visit));
       doors.set(door.id, copy(door));
     },
+    async commitVisitsAndDoors(entries) {
+      const nextVisits = entries.map(({ visit }) => copy(visit));
+      const nextDoors = entries.map(({ door }) => copy(door));
+      for (const { visit, door } of entries) {
+        if (visit.doorId !== door.id || visit.doorRevision !== door.revision || door.lastVisitId !== visit.id) {
+          throw new Error('Local visit and door projection do not form one coherent revision.');
+        }
+      }
+      for (const visit of nextVisits) visits.push(visit);
+      for (const door of nextDoors) doors.set(door.id, door);
+    },
     async reconcileDoorSnapshot(snapshot) {
       const existing = doors.get(snapshot.id);
       if (!existing) throw new Error(`Cannot reconcile an unknown door: ${snapshot.id}`);

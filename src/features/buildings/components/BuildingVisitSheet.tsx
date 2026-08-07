@@ -5,7 +5,7 @@ import type { DoorStructureTarget } from '../../../domain/workspace/building-str
 import { buildBuildingStructureDiff, generateUniformDoorTargets, normalizeDoorLabel, type StructureAmbiguity } from '../../../domain/workspace/building-structure';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
 import { floorLabel, floorProgress, overallProgress, compareDoorsForFloor } from '../model/building-detail';
-import { recordLocalVisit } from '../../visits/model/record-local-visit';
+import { recordLocalVisit, recordLocalVisits } from '../../visits/model/record-local-visit';
 import type { FieldVisitSync } from '../../visits/model/use-field-visit-sync';
 import { isTrustedDevice, setTrustedDevice } from '../../../infrastructure/offline/device-storage';
 
@@ -25,8 +25,6 @@ type ManualTarget = DoorStructureTarget;
 function byId(statuses: readonly Status[]): ReadonlyMap<string, Status> {
   return new Map(statuses.map((status) => [status.id, status]));
 }
-
-function percent(ratio: number): string { return `${Math.round(ratio * 100)} %`; }
 
 function statusForeground(color: string): string {
   const match = /^#([0-9a-f]{6})$/i.exec(color);
@@ -70,9 +68,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
   const [pendingCount, setPendingCount] = useState(0);
   const [message, setMessage] = useState('A jour localement.');
   const [trustedDevice, setTrustedDeviceState] = useState(isTrustedDevice);
-  const [bulkStatusId, setBulkStatusId] = useState('');
   const [structureMode, setStructureMode] = useState<'quick-floor' | 'manage' | null>(null);
-  const [showBulkActions, setShowBulkActions] = useState(false);
   const [quickDoorCount, setQuickDoorCount] = useState('4');
   const [quickFirstLabel, setQuickFirstLabel] = useState('101');
   const [floorCount, setFloorCount] = useState('2');
@@ -96,7 +92,6 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
     setStatuses(nextStatuses.filter((status) => status.active));
     setPendingCount(entries.filter((entry) => entry.state === 'pending').length);
     setFloor((current) => sorted.some((door) => door.floor === current) ? current : (floorProgress(sorted)[0]?.floor ?? 0));
-    setBulkStatusId((current) => current || nextStatuses.find((status) => status.active)?.id || '');
   }, [building, canEditStructure, outbox, repositories]);
 
   useEffect(() => {
@@ -134,7 +129,6 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
   }, [statuses]);
   const floors = useMemo(() => floorProgress(doors), [doors]);
   const total = useMemo(() => overallProgress(doors), [doors]);
-  const floorDoors = useMemo(() => doors.filter((door) => door.floor === floor).sort(compareDoorsForFloor), [doors, floor]);
   const paletteDoor = doors.find((door) => door.id === openPaletteDoorId) ?? null;
   const selectedEntry = sync?.entries.find((entry) => entry.doorId === selectedDoorId && entry.state !== 'pending')
     ?? sync?.entries.find((entry) => entry.state !== 'pending')
@@ -171,17 +165,23 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
     }
   }
 
-  async function applyBulk(scope: readonly Door[]): Promise<void> {
-    if (!bulkStatusId) return;
-    const targets = scope.filter((door) => door.currentStatusId !== bulkStatusId);
-    let applied = 0;
-    for (const door of targets) {
-      if (!(await record(door, bulkStatusId))) break;
-      applied += 1;
+  async function markFloorAway(scope: readonly Door[]): Promise<void> {
+    const awayStatus = statuses.find((status) => status.id === 'retry' && status.active);
+    const targets = scope.filter((door) => door.currentStatusId === 'unvisited');
+    if (!awayStatus || targets.length === 0) return;
+    try {
+      const results = await recordLocalVisits(repositories, outbox, {
+        authorId,
+        doorIds: targets.map((door) => door.id),
+        statusId: awayStatus.id,
+        note: ''
+      });
+      await refresh();
+      await sync?.synchronize();
+      setMessage(`${results.length} passage(s) « Absent » enregistres pour cet etage.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Les passages groupes ont echoue.');
     }
-    await refresh();
-    await sync?.synchronize();
-    setMessage(`${applied} porte(s) mises a jour localement sur ${targets.length}.`);
   }
 
   async function applyStructure(targets: readonly DoorStructureTarget[]): Promise<void> {
@@ -274,24 +274,28 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
         </header>
 
         <section className="building-identity">
-          <p className="eyebrow">Athar / tournee locale</p>
+          <button className="building-zone-back" onClick={onClose} type="button">‹ Retour à la zone</button>
           <h2>{building.addressLabel}</h2>
+          {doors.length > 0 && <p className="building-structure-summary">{floors.length} niveau{floors.length > 1 ? 'x' : ''} · {total.doorCount} portes</p>}
+          {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => setStructureMode('manage')} type="button">Modifier</button><button className="secondary-action" onClick={() => setStructureMode('manage')} type="button">Structure</button></div>}
+          {doors.length > 0 && <>
           <div className="building-progress-row">
-            <span className="metric-pill">{total.doorCount} portes</span>
             <span aria-hidden="true" className="building-progress-track"><i style={{ width: `${total.ratio * 100}%` }} /></span>
-            <span className="metric-pill">{percent(total.ratio)} traite</span>
+            <span className="building-progress-count">{total.treatedCount} / {total.doorCount}</span>
           </div>
           <p aria-live="polite" className="building-sync-state">{syncLabel}</p>
+          </>}
         </section>
 
-        <section className="floor-explorer" aria-label="Navigation par etage">
-          <nav className="floor-rail" aria-label="Etages">
-            {floors.map((item) => <button aria-current={item.floor === floor ? 'page' : undefined} aria-label={`${floorLabel(item.floor)} ${item.treatedCount}/${item.doorCount}`} className="floor-tab" key={item.floor} onClick={() => { setFloor(item.floor); setSelectedDoorId(null); setOpenPaletteDoorId(null); }} style={{ '--progress': `${item.ratio * 100}%` } as CSSProperties} type="button"><b>{floorLabel(item.floor)}</b><span aria-hidden="true" /></button>)}
-          </nav>
-          <div className="floor-content">
-            <div className="floor-heading"><h3>{floorLabel(floor)}</h3><span>{floorDoors.length} porte{floorDoors.length > 1 ? 's' : ''} / {floorProgress(floorDoors)[0] ? percent(floorProgress(floorDoors)[0].ratio) : '0 %'}</span></div>
-            <div className="door-grid" aria-label={`Portes ${floorLabel(floor)}`}>
-              {floorDoors.map((door) => {
+        {doors.length === 0 ? <section className="building-empty-state" aria-label="Bâtiment non décrit"><span aria-hidden="true">⌂</span><h3>Bâtiment non décrit</h3><p>Aucun étage ni porte enregistré. Décris la structure une fois — tout le suivi viendra s'y accrocher.</p>{canEditStructure && <div><button className="primary-action" onClick={() => setStructureMode('manage')} type="button">Décrire le bâtiment</button><button className="text-button" onClick={() => void runStructure(() => [{ floor: 0, label: '01', sortOrder: 0, newDoorId: `door-${crypto.randomUUID()}` }])} type="button">C'est un pavillon — une seule porte</button></div>}</section> : <section className="building-cut" aria-label="Coupe verticale du bâtiment">
+          {floors.slice().reverse().map((item) => {
+            const levelDoors = doors.filter((door) => door.floor === item.floor).sort(compareDoorsForFloor);
+            return <section className="building-floor" key={item.floor}>
+              <div className="building-floor-label"><span>{floorLabel(item.floor)}</span></div>
+              <div className="building-floor-content">
+                <header className="building-floor-heading"><span>{item.doorCount} porte{item.doorCount > 1 ? 's' : ''}</span><span>{item.treatedCount}/{item.doorCount} · {item.treatedCount === item.doorCount ? 'terminé' : <button onClick={() => void markFloorAway(levelDoors)} type="button">tout marquer absent</button>}</span></header>
+                <div className="door-grid" aria-label={`Portes ${floorLabel(item.floor)}`}>
+              {levelDoors.map((door) => {
                 const status = statusesById.get(door.currentStatusId);
                 const open = openPaletteDoorId === door.id;
                 const statusColor = status?.color ?? '#8C9494';
@@ -299,21 +303,13 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
                   <button aria-expanded={open} aria-label={`Porte ${door.label}, ${status?.label ?? door.currentStatusId}`} className="door-row" onClick={() => { setSelectedDoorId(door.id); setShowPassageNote(false); setOpenPaletteDoorId(open ? null : door.id); setMessage(`Porte ${door.label} selectionnee.`); }} style={{ '--status-color': statusColor, '--status-foreground': statusForeground(statusColor) } as CSSProperties} type="button"><span className="door-row-label">{door.label}</span><span aria-hidden="true" className="door-state-dot" /><span className="door-row-status">{status?.label ?? door.currentStatusId}</span></button>
                 </div>;
               })}
-              {canEditStructure && <button aria-label={`Ajouter des portes au ${floorLabel(floor)}`} className="door-add" onClick={() => { setQuickFirstLabel(String((Math.max(0, ...floorDoors.map((door) => Number(door.label) || 0))) + 1)); setStructureMode('quick-floor'); }} type="button"><b aria-hidden="true">+</b><span>Ajouter</span></button>}
-            </div>
-          </div>
-        </section>
-
-        <section className="building-secondary-actions" aria-label="Actions secondaires">
-          <button aria-expanded={showBulkActions} className="text-button" onClick={() => setShowBulkActions((current) => !current)} type="button">Actions groupees et note</button>
-          {showBulkActions && <div className="bulk-actions">
-            <p className="eyebrow">Statut a appliquer</p>
-            <div className="bulk-statuses">{statuses.map((status) => <button aria-pressed={bulkStatusId === status.id} className="bulk-status" key={status.id} onClick={() => setBulkStatusId(status.id)} style={{ '--status-color': status.color } as CSSProperties} type="button">{status.label}</button>)}</div>
-            <div className="bulk-commands"><button className="secondary-action" disabled={!bulkStatusId} onClick={() => void applyBulk(floorDoors)} type="button">Tout l'etage</button><button className="primary-action" disabled={!bulkStatusId} onClick={() => void applyBulk(doors)} type="button">Tout le batiment</button></div>
-            <label className="note-control">Note du prochain passage<textarea aria-label="Note courte" maxLength={280} onChange={(event) => setNote(event.target.value)} rows={2} value={note} /></label>
-            <p className="privacy-note">Ne pas saisir de donnees sensibles sur les occupants.</p>
-          </div>}
-        </section>
+              {canEditStructure && <button aria-label={`Ajouter des portes au ${floorLabel(item.floor)}`} className="door-add" onClick={() => { setFloor(item.floor); setQuickFirstLabel(String((Math.max(0, ...levelDoors.map((door) => Number(door.label) || 0))) + 1)); setStructureMode('quick-floor'); }} type="button"><b aria-hidden="true">+</b><span>Ajouter</span></button>}
+                </div>
+              </div>
+            </section>;
+          })}
+          <div className="building-ground"><span>Rue · entrée principale</span></div>
+        </section>}
 
         {sync && selectedEntry?.state === 'conflict' && selectedEntry.conflict && <section className="sync-resolution" aria-label="Resolution du conflit"><p className="eyebrow">Conflit a resoudre</p><p>Serveur : statut {selectedEntry.conflict.currentStatusId}, revision {selectedEntry.conflict.revision}.</p><div className="sync-resolution-actions"><button className="primary-action" disabled={sync.syncing} onClick={() => void sync.reapplyConflict(selectedEntry.commandId)} type="button">Reappliquer</button><button className="secondary-action" disabled={sync.syncing} onClick={() => void sync.abandonConflict(selectedEntry.commandId)} type="button">Abandonner la chaine</button></div></section>}
         {sync && selectedEntry?.state === 'rejected' && <p className="sync-rejection" role="status">Ecriture rejetee : {selectedEntry.rejection}. Elle ne peut pas etre reappliquee comme un conflit.</p>}

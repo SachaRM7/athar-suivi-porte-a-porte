@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MemoryOutbox } from '../../../domain/sync/sync-service';
 import { demoWorkspace } from '../../../infrastructure/demo/demo-workspace';
 import { createMemoryWorkspaceRepositories } from '../../../infrastructure/memory/workspace-repositories';
-import { recordLocalVisit } from './record-local-visit';
+import { recordLocalVisit, recordLocalVisits } from './record-local-visit';
 
 describe('local field visit recording', () => {
   it('creates one local visit, advances the door revision and keeps the outbox intent', async () => {
@@ -87,5 +87,24 @@ describe('local field visit recording', () => {
       note: ''
     })).rejects.toThrow('Cannot record a visit for an archived door.');
     await expect(outbox.all()).resolves.toEqual([]);
+  });
+
+  it('records every unfinished door of a floor through one grouped repository write', async () => {
+    const base = createMemoryWorkspaceRepositories(demoWorkspace);
+    const commitVisitsAndDoors = vi.spyOn(base, 'commitVisitsAndDoors');
+    const outbox = new MemoryOutbox();
+
+    const results = await recordLocalVisits(base, outbox, {
+      authorId: 'member-1',
+      doorIds: ['door-dalbad-02', 'door-dalbad-12'],
+      statusId: 'retry', note: '',
+      now: new Date('2026-08-08T09:30:00.000Z'),
+      createId: (() => { let index = 0; return () => `visit-away-${++index}`; })()
+    });
+
+    expect(commitVisitsAndDoors).toHaveBeenCalledTimes(1);
+    expect(results.map((result) => result.visit.doorId)).toEqual(['door-dalbad-02', 'door-dalbad-12']);
+    await expect(base.visits.listByDoor('door-dalbad-02')).resolves.toMatchObject([{ statusId: 'retry' }]);
+    await expect(outbox.all()).resolves.toHaveLength(2);
   });
 });

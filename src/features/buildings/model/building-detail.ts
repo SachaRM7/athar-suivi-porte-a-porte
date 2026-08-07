@@ -32,6 +32,6 @@ export function overallProgress(doors: readonly Door[]): FloorProgress {
 
 export function floorLabel(floor: number): string {
   if (floor === 0) return 'RDC';
-  if (floor < 0) return `S${Math.abs(floor)}`;
-  return `${floor}e`;
+  if (floor < 0) return `Sous-sol ${Math.abs(floor)}`;
+  return floor === 1 ? '1er' : `${floor}ème`;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { floorProgress, overallProgress } from './building-detail';
+import { floorLabel, floorProgress, overallProgress } from './building-detail';
 import type { Door } from '../../../domain/workspace/models';
 
 const door = (id: string, floor: number, status: string, active = true): Door => ({
@@ -16,5 +16,10 @@ describe('building detail progress', () => {
       { floor: 1, doorCount: 1, treatedCount: 1, ratio: 1 }
     ]);
     expect(overallProgress(doors)).toMatchObject({ doorCount: 3, treatedCount: 2, ratio: 2 / 3 });
+  });
+
+  it('uses human floor labels and can be rendered from the highest level down', () => {
+    const progress = floorProgress([door('01', 0, 'unvisited'), door('11', 1, 'unvisited'), door('21', 2, 'unvisited')]);
+    expect(progress.slice().reverse().map((item) => floorLabel(item.floor))).toEqual(['2ème', '1er', 'RDC']);
   });
 });

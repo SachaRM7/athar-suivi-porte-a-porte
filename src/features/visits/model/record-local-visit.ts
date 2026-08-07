@@ -17,6 +17,11 @@ export type RecordLocalVisitResult = {
   visit: Visit;
 };
 
+export type RecordLocalVisitsInput = Omit<RecordLocalVisitInput, 'doorId' | 'createId'> & {
+  doorIds: readonly string[];
+  createId?: () => string;
+};
+
 function normalizeNote(note: string): string {
   return note.trim().replace(/\s+/g, ' ');
 }
@@ -85,4 +90,47 @@ export async function recordLocalVisit(
   });
   await repositories.commitVisitAndDoor(visit, nextDoor);
   return { door: nextDoor, visit };
+}
+
+/** Builds every passage before committing their local projection as one group. */
+export async function recordLocalVisits(
+  repositories: WorkspaceRepositories,
+  outbox: Outbox,
+  input: RecordLocalVisitsInput
+): Promise<readonly RecordLocalVisitResult[]> {
+  const doorIds = [...new Set(input.doorIds)];
+  if (doorIds.length === 0) return [];
+  const [doors, statuses, member, entries] = await Promise.all([
+    Promise.all(doorIds.map((doorId) => repositories.doors.get(doorId))),
+    repositories.statuses.list(),
+    repositories.members.get(input.authorId),
+    outbox.all()
+  ]);
+  if (!member?.active) throw new Error('Visit author must be an active member.');
+  requireActiveStatus(statuses, input.statusId);
+  if (doors.some((door) => !door)) throw new Error('Door not found.');
+  const resolvedDoors = doors as Door[];
+  if (resolvedDoors.some((door) => !door.active)) throw new Error('Cannot record a visit for an archived door.');
+  if (entries.some((entry) => doorIds.includes(entry.doorId))) {
+    throw new Error('Resolve the existing door conflict before adding another visit.');
+  }
+
+  const occurredAt = (input.now ?? new Date()).toISOString();
+  const results = resolvedDoors.map((door): RecordLocalVisitResult => {
+    const visit: Visit = {
+      id: input.createId?.() ?? crypto.randomUUID(), doorId: door.id, statusId: input.statusId,
+      note: normalizeNote(input.note), authorId: input.authorId, occurredAt, syncedAt: null,
+      doorRevision: door.revision + 1, replacesVisitId: null, voidedAt: null
+    };
+    const nextDoor: Door = { ...door, currentStatusId: input.statusId, revision: door.revision + 1, lastVisitId: visit.id };
+    assertDoor(nextDoor);
+    assertVisit(visit);
+    return { door: nextDoor, visit };
+  });
+
+  await repositories.commitVisitsAndDoors(results.map(({ visit, door }) => ({ visit, door })));
+  for (const { visit, door } of results) {
+    await outbox.add({ commandId: visit.id, authorId: input.authorId, doorId: door.id, statusId: input.statusId, note: visit.note, expectedRevision: door.revision - 1, createdAt: occurredAt });
+  }
+  return results;
 }

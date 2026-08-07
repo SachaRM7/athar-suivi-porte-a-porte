@@ -238,6 +238,44 @@ h2 { font-size: 22px; }
 .building-sheet > .workspace-map-message { background: #e8e1d2; border-top: 1px solid #c7c0b1; margin-top: auto; padding-left: 124px; }
 .building-chip:focus-visible, .door-row:focus-visible, .door-add:focus-visible, .building-toolbar-action:focus-visible, .icon-action:focus-visible, .status-swatch:focus-visible, .floor-tab:focus-visible, .bulk-status:focus-visible, .structure-fields input:focus-visible, .quick-door-fields input:focus-visible, .note-control textarea:focus-visible, .manual-plan-label textarea:focus-visible { outline: 3px solid #d8a200; outline-offset: 2px; }
 
+/* WP3 — bâtiment en coupe : la pile reflète la montée réelle dans l'immeuble. */
+.building-sheet { background: var(--paper); border-color: var(--hairline); box-shadow: var(--shadow-lg); font-family: var(--font-ui); width: min(410px, 100vw); }
+.building-sheet-toolbar { background: var(--paper); border-bottom: 1px solid var(--hairline); color: var(--ink); grid-template-columns: 44px 1fr 44px; min-height: 56px; padding: 6px 12px; }
+.building-toolbar-action, .icon-action { background: var(--sunk); border-color: var(--hairline); color: var(--ink); font-family: var(--font-data); height: var(--touch); width: var(--touch); }
+.building-identity { border-bottom: 0; padding: 12px 20px 16px; }
+.building-zone-back { background: transparent; border: 0; color: var(--brand-lift); cursor: pointer; font: var(--t-115) var(--font-ui); min-height: var(--touch); padding: 0; }
+.building-identity h2 { font-family: var(--font-data); font-size: var(--t-17); line-height: 1.35; margin-top: 4px; }
+.building-structure-summary, .building-sync-state { color: var(--ink-soft); font: var(--t-115) var(--font-ui); margin: 3px 0 0; text-align: left; }
+.building-header-actions { display: flex; gap: 7px; margin-top: 10px; }
+.building-header-actions .secondary-action { border-color: var(--hairline); color: var(--brand); font-size: var(--t-125); min-height: var(--touch); padding: 7px 10px; }
+.building-progress-row { gap: 9px; grid-template-columns: minmax(0, 1fr) auto; margin-top: 12px; }
+.building-progress-track { background: var(--sunk); border: 0; border-radius: var(--r-pill); height: 4px; }
+.building-progress-track i { background: var(--st-open); }
+.building-progress-count { color: var(--ink-soft); font: var(--t-115) var(--font-data); }
+.building-cut { padding: 0 20px 20px; }
+.building-floor { display: grid; grid-template-columns: 43px minmax(0, 1fr); }
+.building-floor-label { border-right: 1px solid var(--hairline); color: var(--ink-soft); font: var(--t-115) var(--font-data); padding: 17px 8px 0 0; text-align: right; }
+.building-floor-label span { background: var(--paper); position: relative; }
+.building-floor-content { border-bottom: 1px solid var(--hairline); min-width: 0; padding: 13px 0 16px 12px; }
+.building-floor-heading { align-items: baseline; color: var(--ink-soft); display: flex; font: var(--t-115) var(--font-data); justify-content: space-between; margin-bottom: 10px; }
+.building-floor-heading > span:last-child { white-space: nowrap; }
+.building-floor-heading button { background: transparent; border: 0; color: var(--brand-lift); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+.door-grid { gap: 7px; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); padding-top: 0; }
+.door-row, .door-add { aspect-ratio: 1; border-radius: var(--r-door); min-height: 52px; }
+.door-row { background: var(--paper); border: 1px solid var(--status-color); box-shadow: inset 0 -3px 0 var(--status-color); color: var(--ink); display: grid; padding: 8px; place-items: start; }
+.door-row-label { font-family: var(--font-data); font-size: var(--t-15); }
+.door-row-status, .door-state-dot { display: none; }
+.door-add { border-color: var(--hairline); color: var(--ink-soft); min-height: 52px; }
+.door-add span { display: none; }
+.building-ground { background: repeating-linear-gradient(135deg, var(--sunk) 0 5px, var(--paper) 5px 10px); border-top: 1px solid var(--hairline); color: var(--ink-soft); font: var(--t-115) var(--font-data); margin-left: 43px; padding: 11px 12px; }
+.building-empty-state { align-items: start; display: grid; gap: 10px; padding: 42px 28px; text-align: left; }
+.building-empty-state > span { color: var(--brand); font: 32px var(--font-data); }
+.building-empty-state h3 { font: var(--t-19) var(--font-title); margin: 0; }
+.building-empty-state p { color: var(--ink-soft); font-size: var(--t-15); line-height: 1.45; margin: 0; }
+.building-empty-state div { display: grid; gap: 7px; margin-top: 8px; width: 100%; }
+.building-empty-state .primary-action { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.building-empty-state .text-button { color: var(--brand-lift); text-align: left; }
+
 @media (max-width: 760px) {
   .login-shell { grid-template-columns: 1fr; }
   .login-intro { border-bottom: 1px solid #a9a397; border-right: 0; min-height: 42vh; }
