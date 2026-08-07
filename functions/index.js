@@ -2,6 +2,7 @@ const { initializeApp, getApps } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { HttpsError, onCall } = require('firebase-functions/v2/https');
+const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore');
 const crypto = require('node:crypto');
 
 if (getApps().length === 0) initializeApp();
@@ -209,4 +210,75 @@ exports.claimInitialAdmin = onCall(async (request) => {
     throw new HttpsError('internal', 'Administrator promotion is recorded; retry activation to repair the authentication claim.');
   }
   return { role: 'admin', workspaceId: MAIN_WORKSPACE_ID };
+});
+
+const ATHAR_STATUS_PRIORITY = Object.freeze({ linked: 5, open: 4, away: 3, locked: 2, dnd: 1, todo: 0 });
+
+function latestTimestamp(left, right) {
+  if (!(left instanceof Timestamp)) return right instanceof Timestamp ? right : null;
+  if (!(right instanceof Timestamp)) return left;
+  return left.toMillis() >= right.toMillis() ? left : right;
+}
+
+function dominantAtharStatus(statuses) {
+  return statuses.reduce((dominant, status) => (
+    (ATHAR_STATUS_PRIORITY[status] ?? 0) > (ATHAR_STATUS_PRIORITY[dominant] ?? 0) ? status : dominant
+  ), 'todo');
+}
+
+async function recomputeAtharBuilding(buildingId) {
+  const db = getFirestore();
+  const buildingRef = db.doc(`buildings/${buildingId}`);
+  const [building, doors] = await Promise.all([buildingRef.get(), buildingRef.collection('doors').get()]);
+  if (!building.exists) return;
+
+  let latest = null;
+  let sisters = false;
+  const statuses = [];
+  let completed = 0;
+  for (const door of doors.docs) {
+    const data = door.data();
+    const status = data.derived?.statut || 'todo';
+    statuses.push(status);
+    if (status !== 'todo') completed += 1;
+    latest = latestTimestamp(latest, data.derived?.dernierPassageAt);
+    sisters ||= data.aConfierAuxSoeurs === true;
+  }
+
+  await buildingRef.set({
+    derived: {
+      statut: dominantAtharStatus(statuses),
+      dernierPassageAt: latest,
+      portesTotal: doors.size,
+      portesFaites: completed,
+      aConfierAuxSoeurs: sisters
+    }
+  }, { merge: true });
+}
+
+exports.deriveAtharPassage = onDocumentCreated('buildings/{buildingId}/doors/{doorId}/passages/{passageId}', async (event) => {
+  const passage = event.data?.data();
+  if (!passage || !(passage.at instanceof Timestamp)) return;
+  const db = getFirestore();
+  const doorRef = db.doc(`buildings/${event.params.buildingId}/doors/${event.params.doorId}`);
+
+  await db.runTransaction(async (transaction) => {
+    const door = await transaction.get(doorRef);
+    if (!door.exists) return;
+    const existing = door.data().derived?.dernierPassageAt;
+    if (!(existing instanceof Timestamp) || passage.at.toMillis() >= existing.toMillis()) {
+      transaction.set(doorRef, {
+        derived: { statut: passage.statut, dernierPassageAt: passage.at }
+      }, { merge: true });
+    }
+  });
+  await recomputeAtharBuilding(event.params.buildingId);
+});
+
+exports.deriveAtharSistersMarker = onDocumentWritten('buildings/{buildingId}/doors/{doorId}', async (event) => {
+  const before = event.data?.before;
+  const after = event.data?.after;
+  if (!after?.exists) return;
+  if (before?.exists && before.data().aConfierAuxSoeurs === after.data().aConfierAuxSoeurs) return;
+  await recomputeAtharBuilding(event.params.buildingId);
 });

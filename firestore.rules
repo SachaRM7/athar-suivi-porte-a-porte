@@ -1,6 +1,71 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // HYPOTHÈSE: la spécification WP2 ne décrit pas encore le stockage des
+    // affectations de zone. Les claims Auth portent donc `zoneIds` et `role`
+    // jusqu'au lot qui introduira l'administration de ces affectations.
+    function atharSignedIn() {
+      return request.auth != null;
+    }
+
+    function atharMemberOfZone(zoneId) {
+      return atharSignedIn() && request.auth.token.keys().hasAll(['zoneIds']) &&
+        request.auth.token.zoneIds is list && request.auth.token.zoneIds.hasAny([zoneId]);
+    }
+
+    function atharCoordinator() {
+      return atharSignedIn() && request.auth.token.keys().hasAll(['role']) &&
+        request.auth.token.role == 'coordinator';
+    }
+
+    function atharValidZone() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['nom', 'couleur', 'polygon', 'createdBy', 'createdAt', 'stats']) &&
+        data.keys().hasOnly(['nom', 'couleur', 'polygon', 'createdBy', 'createdAt', 'stats']) &&
+        data.nom is string && data.nom.size() >= 1 && data.nom.size() <= 80 &&
+        data.couleur is string && data.couleur.matches('^#[0-9A-Fa-f]{6}$') &&
+        data.polygon is map && data.createdBy is string && data.createdAt is timestamp && data.stats is map;
+    }
+
+    function atharValidBuilding() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['zoneId', 'rnbId', 'adresse', 'complement', 'point', 'source', 'niveaux', 'createdBy', 'createdAt']) &&
+        data.keys().hasOnly(['zoneId', 'rnbId', 'adresse', 'complement', 'point', 'source', 'niveaux', 'createdBy', 'createdAt', 'derived']) &&
+        data.zoneId is string && data.rnbId is string && data.adresse is string &&
+        (data.complement == null || data.complement is string) && data.point is latlng &&
+        data.source in ['rnb', 'local'] && data.niveaux is int && data.niveaux >= 1 &&
+        data.createdBy is string && data.createdAt is timestamp;
+    }
+
+    function atharValidDoor() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['etage', 'numero', 'ordre', 'foyer', 'aConfierAuxSoeurs']) &&
+        data.keys().hasOnly(['etage', 'numero', 'ordre', 'foyer', 'aConfierAuxSoeurs', 'derived']) &&
+        data.etage is int && data.etage >= 0 && data.numero is string && data.numero.size() >= 1 &&
+        data.numero.size() <= 32 && data.ordre is int && data.ordre >= 0 &&
+        (data.foyer == null || data.foyer in ['femme', 'homme', 'couple', 'famille']) &&
+        data.aConfierAuxSoeurs is bool;
+    }
+
+    function atharValidPassage() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['statut', 'note', 'auteurUid', 'auteurNom', 'at']) &&
+        data.keys().hasOnly(['statut', 'note', 'auteurUid', 'auteurNom', 'at']) &&
+        data.statut in ['open', 'away', 'linked', 'dnd', 'locked'] &&
+        (data.note == null || data.note is string && data.note.size() <= 280) &&
+        data.auteurUid is string && data.auteurNom is string && data.auteurNom.size() >= 1 &&
+        data.auteurNom.size() <= 80 && data.at is timestamp;
+    }
+
+    function atharBuildingZone(buildingId) {
+      return get(/databases/$(database)/documents/buildings/$(buildingId)).data.zoneId;
+    }
+
+    function atharUnchangedDerived() {
+      return !request.resource.data.keys().hasAny(['derived']) ||
+        (resource.data.keys().hasAny(['derived']) && request.resource.data.derived == resource.data.derived);
+    }
+
     function memberPath(workspaceId, uid) {
       return /databases/$(database)/documents/workspaces/$(workspaceId)/members/$(uid);
     }
@@ -174,6 +239,40 @@ service cloud.firestore {
 
     match /workspaces/{workspaceId}/setup/{setupId} {
       allow read, write: if false;
+    }
+
+    // WP2 — modèle Athar append-only. Ces collections racines coexistent
+    // temporairement avec /workspaces, qui appartient au socle antérieur.
+    match /zones/{zoneId} {
+      allow read: if atharMemberOfZone(zoneId);
+      allow create, update: if atharCoordinator() && atharValidZone();
+      allow delete: if atharCoordinator();
+    }
+
+    match /buildings/{buildingId} {
+      allow read: if atharMemberOfZone(resource.data.zoneId);
+      allow create: if atharMemberOfZone(request.resource.data.zoneId) &&
+        request.resource.data.createdBy == request.auth.uid && atharValidBuilding() &&
+        !request.resource.data.keys().hasAny(['derived']);
+      allow update: if atharMemberOfZone(resource.data.zoneId) && atharValidBuilding() &&
+        atharUnchangedDerived();
+      allow delete: if atharCoordinator();
+
+      match /doors/{doorId} {
+        allow read: if atharMemberOfZone(atharBuildingZone(buildingId));
+        allow create: if atharMemberOfZone(atharBuildingZone(buildingId)) && atharValidDoor() &&
+          !request.resource.data.keys().hasAny(['derived']);
+        allow update: if atharMemberOfZone(atharBuildingZone(buildingId)) && atharValidDoor() &&
+          atharUnchangedDerived();
+        allow delete: if atharCoordinator();
+
+        match /passages/{passageId} {
+          allow read: if atharMemberOfZone(atharBuildingZone(buildingId));
+          allow create: if atharMemberOfZone(atharBuildingZone(buildingId)) && atharValidPassage() &&
+            request.resource.data.auteurUid == request.auth.uid;
+          allow update, delete: if false;
+        }
+      }
     }
   }
 }

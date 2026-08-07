@@ -11,6 +11,13 @@ _(aucune)_
 
 ## Tranchées
 
+### 2026-08-08 — HYPOTHÈSE WP2 · Affectation aux zones par claims Auth
+
+Le modèle WP2 décrit `membreDeZone(zoneId)` sans préciser où vivent les affectations. Les règles racines
+utilisent provisoirement les claims Auth `zoneIds: string[]` et `role: 'coordinator'`. Cette hypothèse ne
+matérialise aucune donnée métier supplémentaire ; elle devra être remplacée par le modèle d’affectation
+explicite lorsqu’il sera spécifié.
+
 ### 2026-08-08 — Clôture de WP0 · Les quatre décisions sont appliquées
 
 Q1 — aucun jeton sombre, aucun `prefers-color-scheme` : `tokens.css` ne définit que le thème clair.

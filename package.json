@@ -20,6 +20,7 @@
     "test:emulator:run": "vitest run --config vitest.emulator.config.ts",
     "test:load:emulator": "vitest run --config vitest.emulator.config.ts tests/emulator/read-pagination.integration.test.ts",
     "test:e2e:emulator": "powershell -ExecutionPolicy Bypass -File scripts/run-emulator-playwright-tests.ps1",
+    "seed:wp2": "node --experimental-strip-types scripts/seed.ts",
     "prove:firebase-auth-real": "node scripts/prove-real-firebase-auth.mjs",
     "check:node22": "node scripts/assert-node22.mjs",
     "test:commissioning": "node scripts/commissioning/phase-a.test.mjs",

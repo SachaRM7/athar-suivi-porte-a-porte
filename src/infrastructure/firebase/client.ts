@@ -4,7 +4,6 @@ import {
   clearIndexedDbPersistence,
   connectFirestoreEmulator,
   initializeFirestore,
-  memoryLocalCache,
   persistentLocalCache,
   persistentMultipleTabManager,
   terminate,
@@ -12,7 +11,6 @@ import {
 } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, type Functions } from 'firebase/functions';
 import { environment } from '../../app/config/environment';
-import { isTrustedDevice } from '../offline/device-storage';
 
 export type FirebaseClient = { app: FirebaseApp; auth: Auth; firestore: Firestore; functions: Functions };
 
@@ -24,9 +22,9 @@ export function getFirebaseClient(): FirebaseClient {
   const app = getApps().length > 0 ? getApp() : initializeApp(environment.firebase);
   const auth = getAuth(app);
   const firestore = initializeFirestore(app, {
-    localCache: isTrustedDevice()
-      ? persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-      : memoryLocalCache()
+    // WP2: Firestore remains the source of truth while its IndexedDB cache keeps
+    // a prepared zone usable in a stairwell or a basement without connectivity.
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
   });
   const functions = getFunctions(app);
   if (environment.firebase.useEmulators) {
