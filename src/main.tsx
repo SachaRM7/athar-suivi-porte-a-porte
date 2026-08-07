@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { AppProviders } from './app/providers/AppProviders';
 import { withBasePath } from './app/config/public-paths';
+import './design/tokens.css';
+import './design/primitives.css';
 import './styles.css';
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

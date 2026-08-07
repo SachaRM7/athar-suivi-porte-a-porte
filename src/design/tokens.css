@@ -1,0 +1,119 @@
+/*
+ * Jetons Athar — source de vérité : docs/athar/01-DESIGN-SYSTEM.md
+ *
+ * Aucune couleur, taille de police ou rayon ne doit exister ailleurs dans le code.
+ * Si une valeur manque ici, elle se décide dans la spec, pas dans un composant.
+ */
+
+:root {
+  /* ---- surfaces ---- */
+  --paper: #FCFCFB;      /* cartes flottantes, panneaux, sheets */
+  --sunk: #EEF1ED;       /* champs, pieds de panneau, aplats internes */
+  --hairline: #DCE1DC;   /* filets, bordures */
+
+  /* ---- texte ---- */
+  --ink: #14181A;
+  --ink-soft: #5C6663;
+  --ink-faint: #9AA29E;
+
+  /* ---- marque ---- */
+  --brand: #16324F;      /* bleu d'encre — chrome, boutons primaires sombres */
+  --brand-lift: #23517D; /* liens, retours */
+  --accent: #E0A106;     /* safran — UNIQUEMENT l'action primaire et la position GPS */
+
+  /* ---- statuts ---- */
+  --st-todo: #8B948F;
+  --st-open: #1F7A5A;
+  --st-away: #C87A0A;
+  --st-linked: #2456A6;
+  --st-dnd: #A93B2E;
+  --st-locked: #6B5AA8;
+
+  /* ---- marqueur « à confier aux sœurs » (jamais un septième statut) ---- */
+  --st-sisters: #C25B7C;
+
+  /* ---- carte ---- */
+  --map-bg: #E9ECE5;
+  --map-road: #FBFCFA;
+  --map-park: #D6E2CE;
+  --map-water: #C6D8E1;
+  --foot-out: #DEE3DB;      /* bâtiment hors zone, inerte */
+  --foot-todo: #CDD3CD;     /* détecté dans la zone, aucun passage */
+  --foot-todo-line: #B4BCB4;
+
+  --shadow: 0 1px 2px rgba(20, 24, 26, .06), 0 8px 24px -8px rgba(20, 24, 26, .18);
+  --shadow-lg: 0 2px 4px rgba(20, 24, 26, .06), 0 20px 48px -12px rgba(20, 24, 26, .28);
+  --r: 14px;
+
+  /*
+   * Valeurs ci-dessous : également fixées par 01-DESIGN-SYSTEM.md, mais dans la prose
+   * des sections « Typographie » et « Composants » plutôt que dans le bloc :root.
+   * Elles sont nommées ici pour qu'aucun composant n'ait à les écrire en dur.
+   */
+
+  /* texte sur aplat — « FAB primaire en --accent avec texte #20180A » */
+  --on-accent: #20180A;
+  /* voile de dialogue — « Fond rgba(10,14,16,.42) + backdrop-filter: blur(2px) » */
+  --scrim: rgba(10, 14, 16, .42);
+
+  /* ---- familles ---- */
+  --font-title: "Space Grotesk", system-ui, sans-serif;   /* wordmark, titres, noms de zone */
+  --font-ui: "IBM Plex Sans", system-ui, sans-serif;      /* corps, boutons, libellés */
+  --font-data: "IBM Plex Mono", ui-monospace, monospace;  /* adresses, numéros, compteurs, dates */
+  --font-ar: "Noto Kufi Arabic", serif;                   /* أثر du wordmark */
+
+  /* ---- échelle typographique — 10 / 11.5 / 12.5 / 13.5 / 15 / 17 / 19. Pas d'autres tailles. ---- */
+  --t-10: 10px;
+  --t-115: 11.5px;
+  --t-125: 12.5px;
+  --t-135: 13.5px;
+  --t-15: 15px;
+  --t-17: 17px;
+  --t-19: 19px;
+
+  /* ---- rayons des composants ---- */
+  --r-door: 10px;     /* case de porte */
+  --r-field: 12px;    /* stepper, champs, boutons de dialogue */
+  --r-dialog: 16px;   /* dialogue centré desktop */
+  --r-sheet-m: 20px;  /* dialogue en sheet sur mobile */
+  --r-sheet: 22px;    /* bottom sheet */
+  --r-pill: 999px;
+
+  /* ---- hauteurs de bottom sheet ---- */
+  --h-peek: 306px;
+  --h-detail: 392px;
+  --h-full: 620px;
+
+  /* ---- barre de trace ---- */
+  --trace-stroke: 4px;
+  --trace-gutter: 2px;
+  --trace-radius: 1px;
+  --trace-pause: 9px;
+
+  /* ---- cible tactile minimale (zone du pouce) ---- */
+  --touch: 44px;
+
+  /* ---- transition commune : bottom sheet, dialogue ---- */
+  --ease-sheet: .3s cubic-bezier(.2, .8, .2, 1);
+}
+
+/*
+ * Le safran est réservé à l'action primaire et à la position GPS.
+ * Le focus prend donc --brand-lift, qui contraste sans marcher sur cette règle.
+ */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand-lift);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

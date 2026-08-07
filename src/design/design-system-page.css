@@ -1,0 +1,211 @@
+/*
+ * Page de démonstration /_ds — WP0.
+ * Tout est porté par .ds-page pour que la feuille héritée (src/styles.css) ne déteigne pas.
+ */
+
+.ds-page {
+  min-height: 100vh;
+  padding: 26px 20px 80px;
+  background: var(--map-bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--t-135);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ds-page__inner {
+  max-width: 940px;
+  margin: 0 auto;
+}
+
+.ds-page__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 26px;
+}
+
+.ds-page__head p {
+  margin: 6px 0 0;
+  font-family: var(--font-data);
+  font-size: var(--t-115);
+  color: var(--ink-soft);
+}
+
+/* ---- wordmark : preuve que les trois familles sont chargées ---- */
+
+.ds-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.ds-wordmark__ar {
+  font-family: var(--font-ar);
+  font-weight: 600;
+  font-size: var(--t-19);
+  line-height: 1;
+  color: var(--brand);
+}
+
+.ds-wordmark__rule {
+  width: 1px;
+  height: 22px;
+  background: var(--hairline);
+}
+
+.ds-wordmark__la {
+  font-family: var(--font-title);
+  font-weight: 600;
+  font-size: var(--t-15);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* ---- sections ---- */
+
+.ds-section {
+  margin-top: 22px;
+  padding: 18px 18px 20px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.ds-section > h2 {
+  margin: 8px 0 4px;
+  font: 600 var(--t-17)/1.2 var(--font-title);
+  letter-spacing: -.015em;
+}
+
+.ds-section > p {
+  margin: 0 0 16px;
+  font-size: var(--t-125);
+  line-height: 1.5;
+  color: var(--ink-soft);
+  max-width: 62ch;
+}
+
+.ds-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.ds-row + .ds-row { margin-top: 12px; }
+
+.ds-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.ds-case {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ds-case__note {
+  font-family: var(--font-data);
+  font-size: var(--t-10);
+  letter-spacing: .06em;
+  color: var(--ink-faint);
+}
+
+/* ---- table de jetons ---- */
+
+.ds-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+}
+
+.ds-swatch {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-door);
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.ds-swatch__patch { height: 44px; }
+
+.ds-swatch__name {
+  display: block;
+  padding: 7px 9px 8px;
+  font-family: var(--font-data);
+  font-size: var(--t-10);
+  letter-spacing: .04em;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--hairline);
+}
+
+/* ---- échelle typographique ---- */
+
+.ds-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds-scale__line {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.ds-scale__size {
+  flex: none;
+  width: 62px;
+  font-family: var(--font-data);
+  font-size: var(--t-10);
+  color: var(--ink-faint);
+}
+
+/* ---- scène pour la bottom sheet ---- */
+
+.ds-stage {
+  position: relative;
+  width: 100%;
+  max-width: 390px;
+  height: 680px;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+  background: var(--map-bg);
+}
+
+.ds-stage__caption {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  font-family: var(--font-data);
+  font-size: var(--t-10);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ---- légende : deux registres séparés par un filet ---- */
+
+.ds-legend__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 0;
+  font-size: var(--t-115);
+  color: var(--ink-soft);
+}
+
+.ds-legend__sub {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
