@@ -23,7 +23,8 @@ la maquette illustre.
 ## Principes non négociables
 
 1. **La carte est le produit.** Plein écran, le reste flotte au-dessus. Aucun bandeau fixe ne mange la hauteur.
-2. **Fond de carte clair par défaut.** Le sombre est illisible dehors en journée. Option nuit seulement.
+2. **Fond de carte clair uniquement pour WP0 → WP8.** Le sombre est illisible dehors en journée. Un éventuel
+   mode nuit sera rouvert dans un lot dédié, avec un réglage manuel — jamais imposé par le thème système.
 3. **Terrain et Édition sont deux modes.** Créer / modifier / supprimer une zone n'existent pas en mode Terrain.
 4. **Une seule action primaire par écran.** Sur Terrain : marquer une porte.
 5. **La couleur porte le statut**, jamais la décoration.

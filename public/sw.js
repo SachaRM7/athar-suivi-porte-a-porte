@@ -1,12 +1,29 @@
-const SHELL_CACHE = 'athar-shell-v9';
+const SHELL_CACHE = 'athar-shell-v10';
 const BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 const withBasePath = (path) => `${BASE_PATH}${path}` || '/';
+
+/*
+ * Les polices d'interface font partie du shell, pas des embellissements : sans elles,
+ * la lecture mono des adresses — ce qui les rend scannables — disparait hors ligne.
+ * Seules les graisses prescrites par 01-DESIGN-SYSTEM.md sont precachees (158 Ko).
+ */
+const UI_FONTS = [
+  '/fonts/ui/space-grotesk-600.woff2',
+  '/fonts/ui/ibm-plex-sans-400.woff2',
+  '/fonts/ui/ibm-plex-sans-500.woff2',
+  '/fonts/ui/ibm-plex-sans-600.woff2',
+  '/fonts/ui/ibm-plex-mono-500.woff2',
+  '/fonts/ui/ibm-plex-mono-600.woff2',
+  '/fonts/ui/noto-kufi-arabic-600.woff2'
+].map(withBasePath);
+
 const SHELL_ASSETS = [
   withBasePath('/'),
   withBasePath('/index.html'),
   withBasePath('/assets/app.js'),
   withBasePath('/assets/app.css'),
-  withBasePath('/manifest.webmanifest')
+  withBasePath('/manifest.webmanifest'),
+  ...UI_FONTS
 ];
 
 self.addEventListener('install', (event) => {

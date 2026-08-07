@@ -112,18 +112,23 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
   const [visibleBuildingCount, setVisibleBuildingCount] = useState(0);
   const [attachedBuildingCount, setAttachedBuildingCount] = useState<number | null>(null);
   const [editing, setEditing] = useState<'drawing' | 'editing' | null>(null);
-  const [draftZoneName, setDraftZoneName] = useState('Nouvelle zone');
-  const [draftZoneColor, setDraftZoneColor] = useState(DEFAULT_ZONE_COLOR);
+  /**
+   * `null` signifie « pas encore touché » : les champs reflètent alors la zone sélectionnée.
+   * Les brouillons sont dérivés au rendu plutôt que recopiés par un effet, sinon chaque
+   * changement de sélection déclencherait un rendu en cascade.
+   */
+  const [zoneDraft, setZoneDraft] = useState<{ name: string; color: string } | null>(null);
   const [savingZone, setSavingZone] = useState(false);
   const [message, setMessage] = useState('Fond Toulouse local pret.');
 
   const selectedZone = zoneList.find((zone) => zone.id === selectedZoneId) ?? null;
+  const draftZoneName = zoneDraft?.name ?? selectedZone?.name ?? '';
+  const draftZoneColor = zoneDraft?.color ?? selectedZone?.color ?? DEFAULT_ZONE_COLOR;
 
-  useEffect(() => {
-    if (editing !== null) return;
-    setDraftZoneName(selectedZone?.name ?? '');
-    setDraftZoneColor(selectedZone?.color ?? DEFAULT_ZONE_COLOR);
-  }, [editing, selectedZone?.color, selectedZone?.name, selectedZoneId]);
+  const selectZone = (zoneId: string | null) => {
+    setSelectedZoneId(zoneId);
+    setZoneDraft(null);
+  };
 
   const refreshViewport = useCallback(async () => {
     const instance = map.current;
@@ -265,8 +270,7 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
     next.setMode('polygon');
     draw.current = next;
     setSelectedZoneId(null);
-    setDraftZoneName('Nouvelle zone');
-    setDraftZoneColor(DEFAULT_ZONE_COLOR);
+    setZoneDraft({ name: 'Nouvelle zone', color: DEFAULT_ZONE_COLOR });
     setEditing('drawing');
     setAttachedBuildingCount(null);
     setMessage('Tracez le contour, puis renseignez le nom et la couleur.');
@@ -293,8 +297,7 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
     next.setMode('select');
     next.selectFeature(featureId);
     draw.current = next;
-    setDraftZoneName(zone.name);
-    setDraftZoneColor(zone.color);
+    setZoneDraft({ name: zone.name, color: zone.color });
     setEditing('editing');
     setAttachedBuildingCount(null);
     setMessage(`Edition de ${zone.name}. Ajustez le contour, le nom ou la couleur.`);
@@ -319,7 +322,7 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
       const buildings = await repositories.buildings.listByViewport(zone.bbox);
       const attachedCount = buildingsAttachedToZone(zone, buildings).length;
       setAttachedBuildingCount(attachedCount);
-      setSelectedZoneId(zone.id);
+      selectZone(zone.id);
       draw.current?.stop();
       draw.current = null;
       setEditing(null);
@@ -359,7 +362,7 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
         return;
       }
       await repositories.zones.delete(selectedZone.id);
-      setSelectedZoneId(null);
+      selectZone(null);
       setAttachedBuildingCount(null);
       setMessage(`Zone « ${selectedZone.name} » supprimee.`);
       await refreshViewport();
@@ -377,7 +380,7 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
         <div className="workspace-map-metrics"><span>{visibleBuildingCount} batiment(s) visibles</span>{attachedBuildingCount !== null && <span>{attachedBuildingCount} rattache(s)</span>}</div>
       </header>
       <div className="workspace-map-tools" aria-label="Outils de zone">
-        <select aria-label="Zone a modifier" value={selectedZoneId ?? ''} onChange={(event) => setSelectedZoneId(event.target.value || null)}>
+        <select aria-label="Zone a modifier" value={selectedZoneId ?? ''} onChange={(event) => selectZone(event.target.value || null)}>
           {!selectedZoneId && <option value="">Choisir une zone</option>}
           {zoneList.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
         </select>
@@ -390,8 +393,8 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
       </div>
       {canEditZones && (selectedZone || editing) && (
         <div className="zone-properties" aria-label="Proprietes de la zone">
-          <label>Nom de la zone<input aria-label="Nom de la zone" maxLength={80} onChange={(event) => setDraftZoneName(event.target.value)} value={draftZoneName} /></label>
-          <label className="zone-color-field">Couleur<input aria-label="Couleur de la zone" onChange={(event) => setDraftZoneColor(event.target.value)} type="color" value={draftZoneColor} /></label>
+          <label>Nom de la zone<input aria-label="Nom de la zone" maxLength={80} onChange={(event) => setZoneDraft({ name: event.target.value, color: draftZoneColor })} value={draftZoneName} /></label>
+          <label className="zone-color-field">Couleur<input aria-label="Couleur de la zone" onChange={(event) => setZoneDraft({ name: draftZoneName, color: event.target.value })} type="color" value={draftZoneColor} /></label>
           {!editing && <button className="secondary-action map-tool" disabled={savingZone} onClick={() => void saveZoneProperties()} type="button">Enregistrer les propriétés</button>}
         </div>
       )}

@@ -5,86 +5,52 @@ Une question résolue est déplacée dans « Tranchées » avec la décision.
 
 ---
 
-## Q4 — Erreur de lint préexistante dans `WorkspaceMap.tsx`
-
-_Relevée pendant WP0, hors périmètre — non corrigée._
-
-`npm run lint` échoue sur une seule erreur, antérieure à WP0 :
-
-```
-src/features/map/components/WorkspaceMap.tsx:124:5
-react-hooks/set-state-in-effect — Avoid calling setState() directly within an effect
-```
-
-L'effet des lignes 122-126 recopie le nom et la couleur de la zone sélectionnée dans deux états
-de brouillon. Le correctif habituel est de dériver ces valeurs au rendu, ou de les remettre à zéro
-via une clé de composant plutôt que par un effet.
-
-**Question** — on le corrige dans un lot dédié, ou au moment où WP7 réécrit cette couche carte ?
-En attendant, `npm run lint` reste rouge pour cette seule raison, ce qui masquerait une régression
-introduite par un lot suivant.
-
----
-
-## Q3 — Polices servies par Google Fonts
-
-**Contexte** — WP0 charge Space Grotesk, IBM Plex Sans, IBM Plex Mono et Noto Kufi Arabic depuis
-`fonts.googleapis.com`, comme `docs/athar/mockup.html`. C'est l'hypothèse la plus simple, signalée
-par un commentaire `HYPOTHÈSE:` dans `index.html`.
-
-**Problème** — `00-BRIEF.md` exige que l'application reste utilisable avec une connexion instable :
-« le porte-à-porte se fait souvent en sous-sol ou en cage d'escalier ». Une police non chargée
-retombe sur la pile système, donc rien ne casse, mais l'interface change d'allure hors ligne — et
-le mono, qui est ce qui rend une adresse scannable, n'est plus garanti.
-
-**Question** — auto-héberger les quatre familles dans `public/fonts/` et les déclarer en
-`@font-face`, avec mise en cache par le service worker ? Cela ajoute des fichiers binaires au
-dépôt mais supprime la dépendance réseau et l'appel à un tiers.
-
----
-
-## Q2 — La glose du stepper est en 12 px, taille absente de l'échelle
-
-**Contexte** — `01-DESIGN-SYSTEM.md` dit deux choses incompatibles :
-
-- section « Typographie » : « Échelle : 10 / 11.5 / 12.5 / 13.5 / 15 / 17 / 19 px. **Pas d'autres
-  tailles.** »
-- section « Composants », stepper : « une glose en **12px** `--ink-soft` ».
-
-`docs/athar/mockup.html` utilise bien 12 px.
-
-**Décision provisoire** — WP0 prend `--t-125` (12.5 px), la valeur d'échelle la plus proche, pour ne
-pas introduire de taille hors jeton. Marqué `HYPOTHÈSE:` dans `src/design/primitives.css`.
-
-**Question** — on ajoute 12 px à l'échelle, ou on corrige la section « Composants » à 12.5 px ?
-
----
-
-## Q1 — Jetons du fond de carte sombre
-
-**Contexte** — `00-BRIEF.md:26` autorise une option nuit, et le fond clair reste le défaut.
-Mais `01-DESIGN-SYSTEM.md` ne définit **que** la palette claire : `--map-bg`, `--map-road`,
-`--map-park`, `--map-water`, `--foot-out`, `--foot-todo`, `--foot-todo-line`.
-
-Aucun équivalent sombre n'existe dans les jetons, alors que `AGENTS.md` interdit d'introduire
-une couleur hors des jetons du système de design.
-
-**Question** — quelle palette pour le mode nuit ?
-
-Piste la plus simple : ajouter un bloc `[data-theme="nuit"]` à `01-DESIGN-SYSTEM.md` avec les
-sept jetons carte sombres, plus les surfaces et le texte. C'est la spec qui fait foi, donc c'est
-là que ça se décide.
-
-**Point d'attention** — les six statuts (`--st-todo` → `--st-locked`) et le safran `--accent`
-sont calibrés pour un fond clair. Ils devront être revalidés en contraste sur fond sombre, sinon
-le mode nuit casse la règle « la couleur porte le statut ».
-
-**Sous-question** — le mode nuit suit-il `prefers-color-scheme`, ou reste-t-il un réglage
-explicite ? Le brief dit « option », ce qui suggère un réglage manuel : un frère qui sort à 14 h
-avec son téléphone en thème sombre système ne veut pas une carte illisible.
+_(aucune)_
 
 ---
 
 ## Tranchées
 
-_(vide)_
+### 2026-08-08 — Clôture de WP0 · Les quatre décisions sont appliquées
+
+Q1 — aucun jeton sombre, aucun `prefers-color-scheme` : `tokens.css` ne définit que le thème clair.
+Q2 — la glose du stepper reste sur `--t-125` ; aucun jeton 12 px n'a été ajouté.
+Q3 — les 7 fichiers WOFF2 sont dans `public/fonts/ui/` (158 Ko), déclarés par `src/design/fonts.css`,
+précachés par le service worker (`athar-shell-v10`), et plus aucun appel à Google Fonts n'existe.
+Q4 — `WorkspaceMap.tsx` dérive les brouillons de zone au rendu ; `npm run lint` est vert.
+Cohérence — la maquette applique « Ne pas déranger », `1er`, les filtres de `04-SCREENS.md` et le
+safran sur `.btn-primary`. Ses parcours n'ont pas bougé.
+
+### 2026-08-08 — Cohérence · La spécification prévaut sur les écarts de la maquette
+
+L'inspection visuelle de `mockup.html` montre encore « Refus », `R+1`, les filtres « À faire » / « À revoir »
+et des boutons `.btn-primary` bleu d'encre. Ces écarts ne rouvrent pas les décisions : appliquer le vocabulaire
+figé (`dnd` / « Ne pas déranger », `1er`), les filtres de `04-SCREENS.md` et le safran pour l'unique action
+primaire. La maquette illustre la composition ; `00-BRIEF.md` et `01-DESIGN-SYSTEM.md` font foi. Corriger la
+maquette dans le mini-correctif de clôture avant WP1, sans modifier ses parcours.
+
+### 2026-08-08 — Q4 · Corriger le lint avant WP1
+
+Ne pas attendre WP7. Un lint rouge pendant plusieurs lots masquerait les régressions nouvelles. Corriger
+`WorkspaceMap.tsx` dans un mini-correctif de clôture avant WP1, en initialisant les brouillons de zone lors de
+la sélection ou de l'entrée en édition plutôt qu'avec un `setState` synchrone dans un effet. Le comportement
+fonctionnel doit rester identique, puis `lint`, `test:run` et `build` doivent repasser au vert.
+
+### 2026-08-08 — Q3 · Auto-héberger les polices
+
+Oui. L'identité typographique et la lecture mono des adresses font partie du fonctionnement hors ligne, pas
+d'un embellissement facultatif. Héberger uniquement les graisses prescrites en WOFF2 dans `public/fonts/`,
+les déclarer en `@font-face`, les intégrer au shell du service worker et supprimer les appels Google Fonts.
+Cette clôture de WP0 doit être faite avant WP1.
+
+### 2026-08-08 — Q2 · Conserver la glose à 12.5 px
+
+La règle d'échelle prévaut sur l'écart de 0.5 px de la maquette. La glose utilise `--t-125`; la section
+« Composants » de `01-DESIGN-SYSTEM.md` est corrigée à 12.5 px. Ne pas ajouter de jeton 12 px.
+
+### 2026-08-08 — Q1 · Pas de mode nuit dans WP0 → WP8
+
+Ne pas inventer une palette sombre avant de la valider sur le terrain : elle toucherait la carte, les surfaces,
+les textes et les six statuts. Le thème clair reste l'unique thème des lots actuels. Le mode nuit passe hors
+périmètre et, s'il est rouvert dans un lot dédié, sera un réglage manuel — jamais `prefers-color-scheme` — avec
+validation de contraste et d'usage en conditions nocturnes.

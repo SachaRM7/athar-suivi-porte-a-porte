@@ -6,17 +6,13 @@
     <meta name="theme-color" content="#143d36" />
     <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
     <!--
-      HYPOTHÈSE: les trois familles sont servies par Google Fonts, comme dans
-      docs/athar/mockup.html. L'application doit rester utilisable hors ligne :
-      l'auto-hébergement des fichiers de police est consigné dans docs/athar/QUESTIONS.md.
-      La chaîne de repli de --font-* couvre la coupure réseau.
+      Polices auto-hebergees dans public/fonts/ui/, declarees en @font-face par
+      src/design/fonts.css et precachees par le service worker. Aucun appel a un
+      fournisseur tiers. Les deux faces ci-dessous portent le premier ecran :
+      le corps de l'interface et la lecture mono des adresses.
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Kufi+Arabic:wght@600&display=swap"
-      rel="stylesheet"
-    />
+    <link rel="preload" href="%BASE_URL%fonts/ui/ibm-plex-sans-400.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="%BASE_URL%fonts/ui/ibm-plex-mono-500.woff2" as="font" type="font/woff2" crossorigin />
     <title>Athar - socle technique</title>
   </head>
   <body>

@@ -57,7 +57,8 @@ Commits atomiques, message en français, préfixé du lot : `WP3: coupe vertical
 ## Principes non négociables
 
 1. La carte est le produit — plein écran, le chrome flotte au-dessus, aucun bandeau fixe.
-2. Fond de carte clair par défaut. Le sombre est illisible dehors ; option nuit seulement.
+2. Fond de carte clair uniquement pour WP0 → WP8. Le sombre est illisible dehors. Un éventuel mode nuit sera
+   un réglage manuel traité dans un lot dédié, jamais une conséquence automatique du thème système.
 3. Terrain et Édition sont deux modes. Créer / modifier / supprimer une zone n'existent pas en mode Terrain.
 4. Une seule action primaire par écran.
 5. La couleur porte le statut, jamais la décoration. Le safran `#E0A106` n'est utilisé que pour l'action

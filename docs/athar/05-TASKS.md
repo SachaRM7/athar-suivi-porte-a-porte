@@ -98,4 +98,5 @@ ambre ; le pré-remplissage n'est jamais appliqué sans validation humaine.
 ## Hors périmètre pour l'instant
 
 Calque de parcours d'une sortie (relecture coordinateur), niveaux en sous-sol, export CSV,
-notifications de relance. À rouvrir seulement avec des données de sorties réelles.
+notifications de relance, mode nuit. À rouvrir seulement avec des données de sorties réelles ou, pour le mode
+nuit, après une validation dédiée des contrastes et de la lisibilité en conditions de terrain.

@@ -1,0 +1,77 @@
+/*
+ * Polices d'interface — auto-hébergées, aucun appel à un fournisseur tiers au runtime.
+ *
+ * Les fichiers vivent dans public/fonts/ui/ et sont recopiés depuis @fontsource par
+ * `node scripts/sync-webfonts.mjs`. Ils font partie du shell précaché du service worker :
+ * une adresse doit rester lisible en mono en cage d'escalier, sans réseau.
+ *
+ * Les chemins sont absolus depuis la racine du site. Le déploiement Firebase Hosting sert
+ * l'application à la racine ; une base non-racine demanderait de régénérer ces URL.
+ *
+ * Les quatre familles sont sous SIL Open Font License 1.1 — voir les fichiers LICENSE-*.txt
+ * déposés à côté des polices.
+ */
+
+/* ---- Space Grotesk 600 : wordmark, titres, noms de zone ---- */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ui/space-grotesk-600.woff2') format('woff2');
+}
+
+/* ---- IBM Plex Sans 400/500/600 : corps, boutons, libellés ---- */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ui/ibm-plex-sans-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ui/ibm-plex-sans-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ui/ibm-plex-sans-600.woff2') format('woff2');
+}
+
+/* ---- IBM Plex Mono 500/600 : adresses, numéros de porte, compteurs, dates ---- */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ui/ibm-plex-mono-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ui/ibm-plex-mono-600.woff2') format('woff2');
+}
+
+/*
+ * Noto Kufi Arabic 600 : uniquement le أثر du wordmark.
+ * La plage Unicode l'empêche de servir au texte latin.
+ */
+@font-face {
+  font-family: 'Noto Kufi Arabic';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ui/noto-kufi-arabic-600.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
