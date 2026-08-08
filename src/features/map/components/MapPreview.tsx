@@ -39,6 +39,7 @@ export function MapPreview(): ReactElement {
       <BuildingVisitSheet
         authorId="member-1"
         building={opened.building}
+        canDeleteVisitedDoors
         canEditStructure
         ensureBuildingExists={opened.ensureExists}
         markers={markers}

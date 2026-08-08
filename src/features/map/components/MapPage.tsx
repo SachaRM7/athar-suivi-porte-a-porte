@@ -71,6 +71,7 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
       <BuildingVisitSheet
         authorId={member.id}
         building={opened.building}
+        canDeleteVisitedDoors={member.role === 'admin'}
         canEditStructure
         ensureBuildingExists={opened.ensureExists}
         markers={markers}

@@ -139,6 +139,16 @@ describe('building structure against emulator rules', () => {
     await assertFails(setDoc(doc(db, `${workspace}/doors/door-0`), { sortOrder: 99 }, { merge: true }));
   });
 
+  it('reserves archiving a visited door for the coordinator', async () => {
+    await seed();
+    const db = testEnv.authenticatedContext('member-a').firestore();
+    const structure = writeBatch(db);
+    structure.update(doc(db, `${workspace}/buildings/building-a`), { structureRevision: 5, updatedAt: serverTimestamp() });
+    structure.update(doc(db, `${workspace}/doors/door-0`), { active: false, updatedAt: serverTimestamp() });
+
+    await assertFails(structure.commit());
+  });
+
   it('replaces a physical door with an explicit new ID without reusing the archived history', async () => {
     await seed();
     const db = testEnv.authenticatedContext('admin-a').firestore();

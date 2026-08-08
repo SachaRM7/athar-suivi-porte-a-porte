@@ -328,12 +328,36 @@ test('suggests the cadastral structure without ever creating a door on its own',
   await expect(page.getByRole('button', { name: 'Créer 1 portes' })).toBeVisible();
 
   // La mention s'efface dès qu'un frère ajuste un réglage : ce n'est plus le cadastre.
-  await page.getByLabel('Étages au-dessus du rez-de-chaussée').fill('2');
+  await page.getByRole('button', { name: 'Augmenter — Étages au-dessus du rez-de-chaussée' }).click();
+  await page.getByRole('button', { name: 'Augmenter — Étages au-dessus du rez-de-chaussée' }).click();
   await expect(notice).toBeHidden();
   await expect(page.getByRole('button', { name: 'Créer 3 portes' })).toBeVisible();
 
   // La suggestion n'écrit rien : tant que personne ne valide, aucune porte n'existe.
-  await page.getByRole('button', { name: 'Fermer la configuration' }).first().click();
+  await page.getByRole('dialog', { name: 'Configurer le batiment' }).getByRole('button', { name: 'Fermer la configuration' }).click();
   await expect(page.getByRole('heading', { name: 'Bâtiment non décrit' })).toBeVisible();
+  await page.close();
+});
+
+test('updates the structure preview live and protects a visited door from one-click deletion', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await openFieldMap(page);
+  await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
+
+  await page.getByRole('button', { name: 'Configurer le batiment' }).click();
+  await expect(page.getByRole('heading', { name: 'Structure du bâtiment' })).toBeVisible();
+  await page.getByRole('button', { name: 'Augmenter — Étages au-dessus du rez-de-chaussée' }).click();
+  await expect(page.getByRole('region', { name: 'Aperçu vivant' }).getByText('2ème')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Créer 6 portes' })).toBeVisible();
+  await page.getByRole('dialog', { name: 'Configurer le batiment' }).getByRole('button', { name: 'Fermer la configuration' }).click();
+
+  await page.getByRole('button', { name: 'Modifier' }).click();
+  await expect(page.getByRole('button', { name: '+ Ajouter un étage au-dessus' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '+ porte' })).toHaveCount(2);
+  await page.getByRole('button', { name: 'Supprimer la porte 11' }).click();
+  await expect(page.getByText('Supprimer l’historique ?')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeHidden();
+  await page.getByRole('button', { name: 'Annuler la suppression de la porte 11' }).click();
+  await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeVisible();
   await page.close();
 });
