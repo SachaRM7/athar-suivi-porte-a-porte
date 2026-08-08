@@ -15,3 +15,6 @@ firestore-debug.log
 firebase-debug.log
 .firebase/
 towncenter/
+data/
+public/tiles/
+__pycache__/
