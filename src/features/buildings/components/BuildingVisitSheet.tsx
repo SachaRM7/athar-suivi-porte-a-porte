@@ -64,6 +64,10 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
   const [selectedDoorId, setSelectedDoorId] = useState<string | null>(null);
   const [openPaletteDoorId, setOpenPaletteDoorId] = useState<string | null>(null);
   const [showPassageNote, setShowPassageNote] = useState(false);
+  const [foyer, setFoyer] = useState<'femme' | 'homme' | 'couple' | 'famille' | null>(null);
+  const [sisters, setSisters] = useState(false);
+  const [autoSisters, setAutoSisters] = useState(false);
+  const [doorVisits, setDoorVisits] = useState<readonly { id: string; statusId: string; authorId: string; occurredAt: string; note: string }[]>([]);
   const [note, setNote] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
   const [message, setMessage] = useState('A jour localement.');
@@ -123,10 +127,6 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
   }, [sync?.reconciledDoors]);
 
   const statusesById = useMemo(() => byId(statuses), [statuses]);
-  const paletteStatuses = useMemo(() => {
-    const priority = new Map([['contacted', 0], ['retry', 1], ['do-not-return', 2], ['unvisited', 3]]);
-    return [...statuses].sort((left, right) => (priority.get(left.id) ?? 10) - (priority.get(right.id) ?? 10) || left.order - right.order);
-  }, [statuses]);
   const floors = useMemo(() => floorProgress(doors), [doors]);
   const total = useMemo(() => overallProgress(doors), [doors]);
   const paletteDoor = doors.find((door) => door.id === openPaletteDoorId) ?? null;
@@ -162,6 +162,28 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
       setOpenPaletteDoorId(null);
       await refresh();
       await sync?.synchronize();
+    }
+  }
+
+  async function openDoor(door: Door): Promise<void> {
+    setSelectedDoorId(door.id);
+    setOpenPaletteDoorId(door.id);
+    setShowPassageNote(false);
+    setDoorVisits(await repositories.visits.listByDoor(door.id));
+  }
+
+  async function savePassage(door: Door, statusId: string): Promise<void> {
+    await applyStatus(door, statusId);
+    setDoorVisits(await repositories.visits.listByDoor(door.id));
+  }
+
+  function chooseFoyer(value: typeof foyer): void {
+    setFoyer(value);
+    if (value === 'femme') {
+      setSisters(true);
+      setAutoSisters(true);
+    } else {
+      setAutoSisters(false);
     }
   }
 
@@ -300,7 +322,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
                 const open = openPaletteDoorId === door.id;
                 const statusColor = status?.color ?? '#8C9494';
                 return <div className="door-card" key={door.id}>
-                  <button aria-expanded={open} aria-label={`Porte ${door.label}, ${status?.label ?? door.currentStatusId}`} className="door-row" onClick={() => { setSelectedDoorId(door.id); setShowPassageNote(false); setOpenPaletteDoorId(open ? null : door.id); setMessage(`Porte ${door.label} selectionnee.`); }} style={{ '--status-color': statusColor, '--status-foreground': statusForeground(statusColor) } as CSSProperties} type="button"><span className="door-row-label">{door.label}</span><span aria-hidden="true" className="door-state-dot" /><span className="door-row-status">{status?.label ?? door.currentStatusId}</span></button>
+                  <button aria-expanded={open} aria-label={`Porte ${door.label}, ${status?.label ?? door.currentStatusId}`} className="door-row" onClick={() => void openDoor(door)} style={{ '--status-color': statusColor, '--status-foreground': statusForeground(statusColor) } as CSSProperties} type="button"><span className="door-row-label">{door.label}</span><span aria-hidden="true" className="door-state-dot" /><span className="door-row-status">{status?.label ?? door.currentStatusId}</span></button>
                 </div>;
               })}
               {canEditStructure && <button aria-label={`Ajouter des portes au ${floorLabel(item.floor)}`} className="door-add" onClick={() => { setFloor(item.floor); setQuickFirstLabel(String((Math.max(0, ...levelDoors.map((door) => Number(door.label) || 0))) + 1)); setStructureMode('quick-floor'); }} type="button"><b aria-hidden="true">+</b><span>Ajouter</span></button>}
@@ -318,13 +340,21 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
 
         {paletteDoor && <div className="door-status-layer">
           <button aria-label="Fermer le choix de statut" className="door-status-backdrop" onClick={() => setOpenPaletteDoorId(null)} type="button" />
-          <section aria-label={`Statut pour porte ${paletteDoor.label}`} className="door-status-sheet" role="dialog">
-            <h3>Porte {paletteDoor.label}</h3>
-            <p>Choisissez le resultat du passage.</p>
-            <div className="status-palette">{paletteStatuses.map((candidate) => <button aria-label={`Marquer porte ${paletteDoor.label}: ${candidate.label}`} className="status-swatch" key={candidate.id} onClick={() => void applyStatus(paletteDoor, candidate.id)} style={{ '--status-color': candidate.color } as CSSProperties} type="button"><span aria-hidden="true" /><b>{candidate.label}</b></button>)}</div>
-            <button aria-expanded={showPassageNote} className="passage-note-toggle" onClick={() => setShowPassageNote((current) => !current)} type="button">+ note courte et detail</button>
+          <section aria-label={`Fiche de la porte ${paletteDoor.label}`} className="door-status-sheet door-detail-sheet" role="dialog">
+            <button className="door-detail-back" onClick={() => setOpenPaletteDoorId(null)} type="button">‹ {building.addressLabel}</button>
+            <h3>Porte {paletteDoor.label} · {floorLabel(paletteDoor.floor)}</h3>
+            <p className="door-detail-subline">Dernier passage {doorVisits[0] ? new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' }).format(new Date(doorVisits[0].occurredAt)) : 'jamais'}</p>
+            <p className="eyebrow">Résultat du passage</p>
+            <div className="status-palette"><button className="status-swatch" onClick={() => void savePassage(paletteDoor, 'contacted')} type="button"><span aria-hidden="true" /><b>Contact établi</b></button><button className="status-swatch" onClick={() => void savePassage(paletteDoor, 'retry')} type="button"><span aria-hidden="true" /><b>Absent</b></button><button className="status-swatch" onClick={() => void savePassage(paletteDoor, 'do-not-return')} type="button"><span aria-hidden="true" /><b>Ne pas déranger</b></button><button className="status-swatch linked-result" onClick={() => void savePassage(paletteDoor, 'contacted')} type="button"><span aria-hidden="true" /><b>Attaché à l'effort — plus à revisiter</b></button><button className="status-swatch locked-result" onClick={() => void savePassage(paletteDoor, 'retry')} type="button"><span aria-hidden="true" /><b>Accès bloqué (interphone / code)</b></button></div>
+            <p className="eyebrow">Composition du foyer</p>
+            <div className="foyer-chips">{([{ value: 'femme', label: 'Femme seule' }, { value: 'homme', label: 'Homme seul' }, { value: 'couple', label: 'Couple' }, { value: 'famille', label: 'Famille' }, { value: null, label: 'Non renseigné' }] as const).map((choice) => <button aria-pressed={foyer === choice.value} key={choice.label} onClick={() => chooseFoyer(choice.value)} type="button">{choice.label}</button>)}</div>
+            <button aria-pressed={sisters} className="sisters-toggle" onClick={() => { setSisters((current) => !current); setAutoSisters(false); }} type="button"><strong>À confier aux sœurs</strong><span>Le prochain passage sera fait par les sœurs.</span></button>
+            {autoSisters && <p className="sisters-auto">Activé automatiquement — tu peux le désactiver.</p>}
+            <p className="eyebrow">Historique des passages</p>
+            <ol className="door-history">{doorVisits.length === 0 ? <li>Aucun passage enregistré.</li> : doorVisits.map((visit) => <li key={visit.id}><strong>{new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(visit.occurredAt))}</strong><span>{visit.authorId}{visit.note ? ` — ${visit.note}` : ''}</span></li>)}</ol>
+            <button aria-expanded={showPassageNote} className="passage-note-toggle" onClick={() => setShowPassageNote((current) => !current)} type="button">+ note courte</button>
             {showPassageNote && <label className="passage-note-field">Note du passage<textarea aria-label={`Note pour porte ${paletteDoor.label}`} maxLength={280} onChange={(event) => setNote(event.target.value)} rows={2} value={note} /></label>}
-            <p className="privacy-note">Ne rien noter sur les occupants.</p>
+            <p className="privacy-note">La composition et ce marqueur ne sont visibles que dans cette fiche.</p>
           </section>
         </div>}
 

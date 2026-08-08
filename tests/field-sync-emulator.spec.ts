@@ -13,7 +13,7 @@ async function openDoor(page: import('@playwright/test').Page): Promise<void> {
   await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Porte 02, Pas visite' })).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Porte 02, Pas visite' }).click();
-  await page.getByRole('button', { name: 'Marquer porte 02: A revenir' }).click();
+  await page.getByRole('button', { name: 'Absent', exact: true }).click();
 }
 
 async function prepareBuildingCache(page: import('@playwright/test').Page): Promise<void> {

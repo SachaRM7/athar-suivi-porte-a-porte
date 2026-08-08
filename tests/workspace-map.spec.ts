@@ -19,8 +19,8 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '18 rue du Languedoc, Toulouse' })).toBeVisible();
   await page.getByRole('button', { name: 'Porte 11, Contact' }).click();
-  await expect(page.getByRole('dialog', { name: 'Statut pour porte 11' })).toBeVisible();
-  await page.getByRole('button', { name: 'Marquer porte 11: A revenir' }).click();
+  await expect(page.getByRole('dialog', { name: 'Fiche de la porte 11' })).toBeVisible();
+  await page.getByRole('button', { name: 'Absent', exact: true }).click();
   await expect(page.getByText(/Porte 11: passage .* cree, revision 2\./)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Porte 11, A revenir' })).toBeVisible();
 

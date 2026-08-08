@@ -276,6 +276,34 @@ h2 { font-size: 22px; }
 .building-empty-state .primary-action { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .building-empty-state .text-button { color: var(--brand-lift); text-align: left; }
 
+/* WP4 — fiche porte : les données sensibles restent confinées à cette sheet. */
+.door-detail-sheet { display: grid; gap: 12px; max-height: min(760px, calc(100vh - 18px)); overflow-y: auto; }
+.door-detail-back { background: transparent; border: 0; color: var(--brand-lift); cursor: pointer; font: var(--t-115) var(--font-ui); min-height: var(--touch); padding: 0; text-align: left; }
+.door-detail-sheet h3 { font: var(--t-17) var(--font-data); margin: 0; }
+.door-detail-subline { color: var(--ink-soft); font: var(--t-125) var(--font-ui); margin: -8px 0 2px; }
+.door-detail-sheet .eyebrow { margin: 8px 0 -4px; }
+.door-detail-sheet .status-palette { gap: 7px; grid-template-columns: 1fr 1fr; }
+.door-detail-sheet .status-swatch { align-items: center; background: var(--paper); border-color: var(--hairline); color: var(--ink); display: flex; min-height: var(--touch); padding: 9px 10px; }
+.door-detail-sheet .status-swatch span { background: var(--st-open); flex-basis: 8px; height: 8px; }
+.door-detail-sheet .status-swatch:nth-child(2) span { background: var(--st-away); }
+.door-detail-sheet .status-swatch:nth-child(3) span { background: var(--st-dnd); }
+.door-detail-sheet .linked-result { border-color: var(--st-linked); grid-column: 1 / -1; }
+.door-detail-sheet .linked-result span { background: var(--st-linked); }
+.door-detail-sheet .locked-result { grid-column: 1 / -1; }
+.door-detail-sheet .locked-result span { background: var(--st-locked); }
+.foyer-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.foyer-chips button { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-pill); color: var(--ink); cursor: pointer; font: var(--t-125) var(--font-ui); min-height: var(--touch); padding: 7px 11px; }
+.foyer-chips button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.sisters-toggle { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); cursor: pointer; display: grid; gap: 3px; min-height: 62px; padding: 10px 12px; text-align: left; width: 100%; }
+.sisters-toggle strong { font: var(--t-15) var(--font-ui); }
+.sisters-toggle span, .sisters-auto { color: var(--ink-soft); font: var(--t-115) var(--font-ui); margin: 0; }
+.sisters-toggle[aria-pressed="true"] { border: 2px solid var(--st-sisters); }
+.sisters-auto { color: var(--st-sisters); }
+.door-history { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.door-history li { border-left: 2px solid var(--hairline); display: grid; gap: 2px; padding: 3px 0 3px 9px; }
+.door-history strong { font: var(--t-115) var(--font-data); }
+.door-history span, .door-history li { color: var(--ink-soft); font: var(--t-125) var(--font-ui); }
+
 @media (max-width: 760px) {
   .login-shell { grid-template-columns: 1fr; }
   .login-intro { border-bottom: 1px solid #a9a397; border-right: 0; min-height: 42vh; }
