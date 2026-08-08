@@ -9,12 +9,18 @@ let testEnv: RulesTestEnvironment;
 const zoneId = 'zone-wp2';
 const buildingId = 'RNB_WP2_RULES';
 
-function brother(uid: string, zones = [zoneId]) {
-  return testEnv.authenticatedContext(uid, { zoneIds: zones }).firestore();
+/** Le claim `role` vaut 'admin' ou 'member' : il n'existe aucune affectation de zone. */
+function brother(uid: string) {
+  return testEnv.authenticatedContext(uid, { role: 'member' }).firestore();
 }
 
 function coordinator(uid: string) {
-  return testEnv.authenticatedContext(uid, { role: 'coordinator', zoneIds: [zoneId] }).firestore();
+  return testEnv.authenticatedContext(uid, { role: 'admin' }).firestore();
+}
+
+/** Compte authentifié sans claim `role` : inscrit, pas encore membre de l'effort. */
+function stranger(uid: string) {
+  return testEnv.authenticatedContext(uid, {}).firestore();
 }
 
 async function seed() {
@@ -50,7 +56,7 @@ afterEach(async () => { await testEnv.clearFirestore(); });
 afterAll(async () => { await testEnv.cleanup(); });
 
 describe('WP2 — règles append-only Athar', () => {
-  it('autorise un passage de son auteur dans sa zone puis interdit sa mutation et sa suppression', async () => {
+  it('autorise un passage de son auteur puis interdit sa mutation et sa suppression', async () => {
     await seed();
     const db = brother('brother-a');
     const passageRef = doc(db, `buildings/${buildingId}/doors/rdc-01/passages/passage-a`);
@@ -59,13 +65,37 @@ describe('WP2 — règles append-only Athar', () => {
     await assertFails(deleteDoc(passageRef));
   });
 
-  it('refuse un passage usurpant un autre auteur ou une zone non affectée', async () => {
+  it('refuse un passage usurpant un autre auteur', async () => {
     await seed();
     await assertFails(setDoc(
       doc(brother('brother-a'), `buildings/${buildingId}/doors/rdc-01/passages/foreign-author`),
       passage({ auteurUid: 'brother-b' })
     ));
-    await assertFails(getDoc(doc(brother('brother-b', []), `buildings/${buildingId}`)));
+  });
+
+  /*
+   * Il n'y a pas de restriction territoriale : un frère agit partout. Ce qui protège
+   * l'historique est l'immutabilité de `passages`, vérifiée ci-dessus, pas un périmètre.
+   */
+  it('laisse tout membre agir sur un bâtiment quelconque, sans affectation de zone', async () => {
+    await seed();
+    const db = brother('brother-b');
+    await assertSucceeds(getDoc(doc(db, `buildings/${buildingId}`)));
+    await assertSucceeds(getDoc(doc(db, `zones/${zoneId}`)));
+    await assertSucceeds(setDoc(
+      doc(db, `buildings/${buildingId}/doors/rdc-01/passages/passage-b`),
+      passage({ auteurUid: 'brother-b', auteurNom: 'Frère B' })
+    ));
+  });
+
+  it('ferme la porte à un compte authentifié sans claim de rôle', async () => {
+    await seed();
+    const db = stranger('inconnu-a');
+    await assertFails(getDoc(doc(db, `buildings/${buildingId}`)));
+    await assertFails(setDoc(
+      doc(db, `buildings/${buildingId}/doors/rdc-01/passages/passage-inconnu`),
+      passage({ auteurUid: 'inconnu-a', auteurNom: 'Inconnu' })
+    ));
   });
 
   it('réserve la création d’une zone au coordinateur', async () => {

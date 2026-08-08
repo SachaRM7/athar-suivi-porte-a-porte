@@ -310,8 +310,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
     const [longitude, latitude] = centerOfRing(ring);
     onBuildingSelect?.({
       id: identifier,
-      // HYPOTHÈSE: le tuileset ne porte aucune adresse — `03-CARTO.md` écarte le géocodage.
-      // L'ID-RNB tient lieu d'étiquette tant que personne n'a saisi l'adresse.
+      // Le tuileset ne porte aucune adresse et `03-CARTO.md` écarte le géocodage : l'ID-RNB
+      // tient lieu d'étiquette jusqu'à ce que quelqu'un saisisse l'adresse dans la fiche.
       addressLabel: `Bâtiment ${identifier}`,
       location: { latitude, longitude },
       geohash: geohashForLocation([latitude, longitude]),

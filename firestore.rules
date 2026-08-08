@@ -1,21 +1,19 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // HYPOTHÈSE: la spécification WP2 ne décrit pas encore le stockage des
-    // affectations de zone. Les claims Auth portent donc `zoneIds` et `role`
-    // jusqu'au lot qui introduira l'administration de ces affectations.
+    // Aucune restriction territoriale : tout membre agit sur n'importe quelle porte,
+    // partout. Ce qui protège l'historique, c'est l'immutabilité de `passages`, pas un
+    // périmètre géographique. Le claim Auth `role` vaut 'admin' ou 'member'.
     function atharSignedIn() {
       return request.auth != null;
     }
 
-    function atharMemberOfZone(zoneId) {
-      return atharSignedIn() && request.auth.token.keys().hasAll(['zoneIds']) &&
-        request.auth.token.zoneIds is list && request.auth.token.zoneIds.hasAny([zoneId]);
+    function estMembre() {
+      return atharSignedIn() && request.auth.token.get('role', '') in ['admin', 'member'];
     }
 
-    function atharCoordinator() {
-      return atharSignedIn() && request.auth.token.keys().hasAll(['role']) &&
-        request.auth.token.role == 'coordinator';
+    function estCoordinateur() {
+      return atharSignedIn() && request.auth.token.get('role', '') == 'admin';
     }
 
     function atharValidZone() {
@@ -55,10 +53,6 @@ service cloud.firestore {
         (data.note == null || data.note is string && data.note.size() <= 280) &&
         data.auteurUid is string && data.auteurNom is string && data.auteurNom.size() >= 1 &&
         data.auteurNom.size() <= 80 && data.at is timestamp;
-    }
-
-    function atharBuildingZone(buildingId) {
-      return get(/databases/$(database)/documents/buildings/$(buildingId)).data.zoneId;
     }
 
     function atharUnchangedDerived() {
@@ -258,31 +252,30 @@ service cloud.firestore {
     // WP2 — modèle Athar append-only. Ces collections racines coexistent
     // temporairement avec /workspaces, qui appartient au socle antérieur.
     match /zones/{zoneId} {
-      allow read: if atharMemberOfZone(zoneId);
-      allow create, update: if atharCoordinator() && atharValidZone();
-      allow delete: if atharCoordinator();
+      allow read: if estMembre();
+      allow create, update: if estCoordinateur() && atharValidZone();
+      allow delete: if estCoordinateur();
     }
 
     match /buildings/{buildingId} {
-      allow read: if atharMemberOfZone(resource.data.zoneId);
-      allow create: if atharMemberOfZone(request.resource.data.zoneId) &&
+      allow read: if estMembre();
+      allow create: if estMembre() &&
         request.resource.data.createdBy == request.auth.uid && atharValidBuilding() &&
         !request.resource.data.keys().hasAny(['derived']);
-      allow update: if atharMemberOfZone(resource.data.zoneId) && atharValidBuilding() &&
-        atharUnchangedDerived();
-      allow delete: if atharCoordinator();
+      allow update: if estMembre() && atharValidBuilding() && atharUnchangedDerived();
+      allow delete: if estCoordinateur();
 
       match /doors/{doorId} {
-        allow read: if atharMemberOfZone(atharBuildingZone(buildingId));
-        allow create: if atharMemberOfZone(atharBuildingZone(buildingId)) && atharValidDoor() &&
+        allow read: if estMembre();
+        allow create: if estMembre() && atharValidDoor() &&
           !request.resource.data.keys().hasAny(['derived']);
-        allow update: if atharMemberOfZone(atharBuildingZone(buildingId)) && atharValidDoor() &&
-          atharUnchangedDerived();
-        allow delete: if atharCoordinator();
+        allow update: if estMembre() && atharValidDoor() && atharUnchangedDerived();
+        allow delete: if estCoordinateur();
 
         match /passages/{passageId} {
-          allow read: if atharMemberOfZone(atharBuildingZone(buildingId));
-          allow create: if atharMemberOfZone(atharBuildingZone(buildingId)) && atharValidPassage() &&
+          allow read: if estMembre();
+          // Seule barrière qui compte : on écrit sous son propre nom, et jamais deux fois.
+          allow create: if estMembre() && atharValidPassage() &&
             request.resource.data.auteurUid == request.auth.uid;
           allow update, delete: if false;
         }

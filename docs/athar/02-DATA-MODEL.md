@@ -83,25 +83,48 @@ dans une base partagée engage une responsabilité. Traitement :
   qu'en ouvrant la fiche de la porte concernée.
 - Aucun export CSV ne les inclut.
 
+## Modèle d'accès — pas de périmètre géographique
+
+**Il n'y a aucune restriction territoriale.** Tout membre peut agir sur n'importe quelle porte,
+partout. Une zone est un outil d'organisation du travail — elle découpe et mesure la couverture —
+jamais une frontière de droits.
+
+Ce qui protège les données n'est pas le périmètre, c'est **l'immutabilité de `passages`**. Un frère
+qui se trompe de bâtiment ajoute un passage de trop ; il n'efface rien, et l'erreur reste lisible avec
+son auteur et sa date. Une barrière géographique n'aurait rien empêché de tel, et aurait coûté cher :
+un frère qui dépanne sur la zone d'à côté un samedi se serait retrouvé bloqué en pleine rue.
+
+Deux rôles seulement, portés par le **custom claim Auth `role`** :
+
+| `role` | Qui | Droits |
+|---|---|---|
+| `member` | Un frère sur le terrain | Lire tout, créer bâtiments, portes et passages |
+| `admin` | Le coordinateur | Idem, plus créer / modifier / supprimer une zone, et supprimer bâtiments et portes |
+
+Un compte authentifié **sans** claim `role` n'est pas membre de l'effort : il ne lit rien.
+
 ## Règles de sécurité — esquisse
 
 ```
+function estMembre()       { return request.auth != null && request.auth.token.role in ['admin','member']; }
+function estCoordinateur() { return request.auth != null && request.auth.token.role == 'admin'; }
+
 match /zones/{z} {
-  allow read: if signedIn() && membreDeZone(z);
-  allow write: if signedIn() && estCoordinateur();
+  allow read: if estMembre();
+  allow create, update, delete: if estCoordinateur();
 }
 match /buildings/{b} {
-  allow read: if signedIn() && membreDeZone(resource.data.zoneId);
-  allow create, update: if signedIn() && membreDeZone(request.resource.data.zoneId);
+  allow read: if estMembre();
+  allow create, update: if estMembre();
   allow delete: if estCoordinateur();
 
   match /doors/{d} {
-    allow read, create, update: if signedIn() && membreDeZone(zoneDuBatiment(b));
+    allow read, create, update: if estMembre();
     allow delete: if estCoordinateur();
 
     match /passages/{p} {
-      allow read: if signedIn() && membreDeZone(zoneDuBatiment(b));
-      allow create: if signedIn() && request.resource.data.auteurUid == request.auth.uid;
+      allow read: if estMembre();
+      allow create: if estMembre() && request.resource.data.auteurUid == request.auth.uid;
       allow update, delete: if false;   // append-only, sans exception
     }
   }
@@ -109,7 +132,8 @@ match /buildings/{b} {
 ```
 
 `passages` est immuable par conception : c'est ce qui rend l'historique digne de confiance.
-Une correction se fait en ajoutant un passage, pas en modifiant le précédent.
+Une correction se fait en ajoutant un passage, pas en modifiant le précédent. On écrit sous son
+propre nom — `auteurUid` doit être celui de l'appelant — et jamais deux fois sur le même document.
 
 ## Suppression d'une porte
 

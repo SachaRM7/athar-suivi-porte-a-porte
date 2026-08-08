@@ -123,12 +123,7 @@
   color: var(--ink);
 }
 
-/*
- * HYPOTHÈSE: la glose est décrite « en 12px » dans 01-DESIGN-SYSTEM.md, taille absente
- * de l'échelle 10/11.5/12.5/13.5/15/17/19 imposée par le même fichier. On prend la
- * valeur d'échelle la plus proche (12.5px) plutôt que d'introduire une taille hors jeton.
- * Question consignée dans docs/athar/QUESTIONS.md.
- */
+/* La glose reste sur --t-125 : l'échelle typographique prime sur l'écart de 0.5 px. */
 .ds-stepper__gloss {
   margin-left: 5px;
   font-family: var(--font-ui);

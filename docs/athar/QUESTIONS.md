@@ -83,12 +83,21 @@ Conserver `Bâtiment <ID-RNB>` comme étiquette de repli tant que le bâtiment n
 géocoder, ne pas inventer d'adresse et ne pas créer de document Firestore à l'ouverture. Dès que l'adresse
 est saisie et enregistrée dans la fiche, elle remplace naturellement cette étiquette.
 
-### 2026-08-08 — HYPOTHÈSE WP2 · Affectation aux zones par claims Auth
+### 2026-08-08 — WP2 · Aucune affectation aux zones : pas de restriction territoriale
 
-Le modèle WP2 décrit `membreDeZone(zoneId)` sans préciser où vivent les affectations. Les règles racines
-utilisent provisoirement les claims Auth `zoneIds: string[]` et `role: 'coordinator'`. Cette hypothèse ne
-matérialise aucune donnée métier supplémentaire ; elle devra être remplacée par le modèle d’affectation
-explicite lorsqu’il sera spécifié.
+La question était de savoir où vivent les affectations de zone que supposait `membreDeZone(zoneId)`.
+Réponse : nulle part, parce qu'il n'y en a pas. **Tout membre peut agir sur n'importe quelle porte,
+partout.** Une zone découpe et mesure le travail ; elle ne borne aucun droit.
+
+La protection repose sur l'immutabilité de `passages`, pas sur un périmètre géographique. Un frère qui se
+trompe de bâtiment ajoute un passage de trop, il n'efface rien, et l'erreur reste lisible avec son auteur
+et sa date. Une frontière n'aurait rien empêché de tel et aurait bloqué en pleine rue le frère qui dépanne
+sur la zone d'à côté.
+
+Appliqué : `membreDeZone()` est remplacée par `estMembre()` dans `firestore.rules`, `estMembre()` et
+`estCoordinateur()` lisent le custom claim `role` valant `'admin'` ou `'member'`, `02-DATA-MODEL.md` porte
+la section « Modèle d'accès » et l'esquisse corrigée, et `tests/emulator/athar-wp2.rules.test.ts` vérifie
+qu'un membre agit hors de toute zone d'affectation et qu'un compte sans claim `role` ne lit rien.
 
 ### 2026-08-08 — Clôture de WP0 · Les quatre décisions sont appliquées
 
