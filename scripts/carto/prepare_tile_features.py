@@ -8,6 +8,14 @@ import json
 from pathlib import Path
 
 MAX_SAFE_INTEGER = (1 << 53) - 1
+TILE_PROPERTIES = (
+    "rnb_id",
+    "cleabs",
+    "usage_1",
+    "nombre_d_etages",
+    "nombre_de_logements",
+    "hauteur",
+)
 
 
 def tile_id_for(rnb_id: str) -> int:
@@ -27,7 +35,8 @@ def main() -> None:
     with args.input.open(encoding="utf-8") as source, args.output.open("w", encoding="utf-8") as target:
         for line in source:
             feature = json.loads(line)
-            properties = feature.setdefault("properties", {})
+            source_properties = feature.setdefault("properties", {})
+            properties = {key: source_properties[key] for key in TILE_PROPERTIES if key in source_properties}
             rnb_id = properties.get("rnb_id")
             if not isinstance(rnb_id, str) or not rnb_id:
                 raise ValueError(f"Emprise sans rnb_id à la ligne {count + 1}")
@@ -36,6 +45,7 @@ def main() -> None:
             if previous != rnb_id:
                 raise ValueError(f"Collision d'identifiant entre {previous} et {rnb_id}")
             properties["tile_id"] = tile_id
+            feature["properties"] = properties
             target.write(json.dumps(feature, ensure_ascii=False, separators=(",", ":")) + "\n")
             count += 1
     print(f"{count} emprises préparées avec un identifiant MVT numérique.")

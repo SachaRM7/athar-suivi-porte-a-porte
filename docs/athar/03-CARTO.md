@@ -49,6 +49,24 @@ confirmation humaine.
 > La nomenclature diffère selon le format de livraison (GPKG / Shapefile) et la version de la BD TOPO.
 > Étape obligatoire : `ogrinfo -so` sur la couche bâtiment, et consigner les noms observés dans ce fichier.
 
+### Schéma réellement observé — livraison Haute-Garonne du 15 juin 2026
+
+Inspection exécutée le 9 août 2026 sur
+`BDT_3-5_GPKG_LAMB93_D031-ED2026-06-15.gpkg`, couche `batiment` :
+
+- pilote `GPKG`, **1 175 990** objets, géométrie `3D Multi Polygon` ;
+- projection `RGF93 v1 / Lambert-93` (`EPSG:2154`) ;
+- identifiant interne `fid`, géométrie nommée **`geometrie`** ;
+- `cleabs` : `String(24)` ;
+- `usage_1`, `usage_2` : `String` ;
+- `construction_legere` : `Integer(Boolean)` ;
+- `nombre_de_logements`, `nombre_d_etages` : `Integer` ;
+- `hauteur` : `Real` ;
+- `identifiants_rnb` : `String`.
+
+Ce sont les noms utilisés par les scripts de cette livraison. Répéter `ogrinfo -ro -so` avant de traiter une
+version plus récente ; ne pas supposer que `geom` ou une casse différente existe.
+
 ```bash
 # 1. Récupérer la BD TOPO Haute-Garonne (31) depuis geoservices.ign.fr, couche bâtiment.
 
@@ -58,11 +76,12 @@ ogrinfo -so BDTOPO.gpkg batiment
 # 3. Filtrer + reprojeter en WGS84 (adapter les noms de champs à l'étape 2)
 ogr2ogr -f GeoJSONSeq batiments_filtres.geojsonl BDTOPO.gpkg batiment \
   -t_srs EPSG:4326 \
-  -where "usage_1 NOT IN ('Annexe','Agricole','Industriel','Commercial et services','Sportif','Religieux') \
-          AND (construction_legere IS NULL OR construction_legere = 'false') \
-          AND ST_Area(ST_Transform(geom,2154)) >= 40" \
-  -select "cleabs,usage_1,nombre_d_etages,nombre_de_logements,hauteur" \
+  -where "(usage_1 IS NULL OR usage_1 NOT IN ('Annexe','Agricole','Industriel','Commercial et services','Sportif','Religieux')) \
+          AND (construction_legere IS NULL OR construction_legere = 0)" \
+  -select "cleabs,nature,usage_1,usage_2,construction_legere,nombre_d_etages,nombre_de_logements,hauteur,identifiants_rnb" \
   -dialect SQLITE
+
+# Le seuil exact de 40 m² est appliqué par join_rnb.py après retour en EPSG:2154.
 
 # 4. Rapprochement RNB : jointure spatiale sur l'export départemental 31 du RNB
 #    (data.gouv.fr → « Référentiel National des Bâtiments », fichier par département).
@@ -70,12 +89,25 @@ ogr2ogr -f GeoJSONSeq batiments_filtres.geojsonl BDTOPO.gpkg batiment \
 #    du bâtiment RNB dont la géométrie la recouvre le plus.
 #    Écrire ce script en Python (geopandas) : scripts/carto/join_rnb.py
 
+python scripts/carto/join_rnb.py \
+  --buildings batiments_filtres.geojsonl \
+  --rnb RNB_31.csv \
+  --output batiments_avec_rnb.geojsonl
+
 # 5. Générer le tuileset
-tippecanoe -o public/tiles/batiments-31.pmtiles \
-  --minimum-zoom=14 --maximum-zoom=16 \
+python scripts/carto/prepare_tile_features.py \
+  --input batiments_avec_rnb.geojsonl \
+  --output batiments_pour_tuiles.geojsonl
+
+tippecanoe -o batiments-31.mbtiles \
+  --minimum-zoom=16 --maximum-zoom=16 \
   --drop-densest-as-needed \
   --layer=batiments \
-  batiments_avec_rnb.geojsonl
+  --use-attribute-for-id=tile_id \
+  batiments_pour_tuiles.geojsonl
+
+pmtiles convert batiments-31.mbtiles public/tiles/batiments-31.pmtiles
+pmtiles verify public/tiles/batiments-31.pmtiles
 ```
 
 Contrainte à respecter : **zoom minimal 16** pour l'affichage individuel des bâtiments. Ce n'est pas gênant,

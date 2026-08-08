@@ -23,8 +23,20 @@ livré avec certaines installations GDAL/QGIS ne charge pas `ST_Area`.
 
 ## 3. Rapprochement RNB
 
-`join_rnb.py` doit faire l’intersection de plus grande surface entre les emprises filtrées et `shape` du RNB,
-et produire un `rnb_id` pour chaque emprise. Il nécessite `geopandas` et `shapely`.
+`join_rnb.py` fait l’intersection de plus grande surface entre les emprises filtrées et `shape` du RNB,
+et produit un `rnb_id` pour chaque emprise. Installer son environnement hors du dépôt :
+
+```powershell
+python -m venv .athar-local/carto-venv
+& .athar-local/carto-venv/Scripts/pip.exe install -r scripts/carto/requirements.txt
+& .athar-local/carto-venv/Scripts/python.exe scripts/carto/join_rnb.py `
+  --buildings data/carto-work/batiments_filtres.geojsonl `
+  --rnb data/carto-work/RNB_31.csv `
+  --output data/carto-work/batiments_avec_rnb.geojsonl
+```
+
+Les emprises de moins de 40 m² sont supprimées en Lambert-93. Les propriétés de sortie sont volontairement
+réduites aux champs utiles à Athar ; `prepare_tile_features.py` applique une seconde liste blanche avant MVT.
 
 ## 4. Tuiles
 
@@ -49,9 +61,29 @@ Le script produit `public/tiles/batiments-31.pmtiles`, hors Git, avec un zoom d'
 `pmtiles verify` avant de remplacer l'archive. Vérifier manuellement 20 emprises avant de publier : garages et
 locaux commerciaux doivent être écartés.
 
-## 5. Échantillon versionné
+## 5. Contrôle avant publication
 
-Le tuileset départemental pèse 72 Mo et reste hors de Git. Sans lui, la carte n'aurait aucune emprise en
+Le contrôle parcourt toute la sortie, refuse les ID-RNB invalides, les usages exclus et les constructions
+légères, vérifie que chaque zone demandée contient des emprises, puis produit un échantillon déterministe de 20
+bâtiments à relire :
+
+```powershell
+python scripts/carto/validate_pipeline.py `
+  --input data/carto-work/batiments_avec_rnb.geojsonl `
+  --zone carmes=1.4418,43.6039,1.4518,43.6089 `
+  --sample-size 20 `
+  --pmtiles public/tiles/batiments-31.pmtiles `
+  --pmtiles-command tools/pmtiles/pmtiles.exe `
+  --report docs/athar/WP6-CONTROLE.md
+```
+
+Pour la livraison du 15 juin 2026 : **543 436** emprises jointes, PMTiles valide de **43 197 509 octets**,
+bornes `(0.380019,42.700167)–(2.109365,43.966458)`, zoom 16. Le rapport versionné porte le contrôle des 20
+emprises de la zone de démonstration.
+
+## 6. Échantillon versionné
+
+Le tuileset départemental pèse 43,2 Mo et reste hors de Git. Sans lui, la carte n'aurait aucune emprise en
 développement ni en test. `scripts/carto/fixture_carmes.geojsonl` décrit sept emprises autour de la zone de
 démonstration « Carmes » — une suivie, plusieurs détectées sans document, une hors zone — et se compile avec les
 mêmes réglages que le tuileset réel :

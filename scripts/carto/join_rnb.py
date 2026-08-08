@@ -9,6 +9,20 @@ from pathlib import Path
 import geopandas as gpd
 from shapely import wkt
 
+OUTPUT_COLUMNS = [
+    "cleabs",
+    "nature",
+    "usage_1",
+    "usage_2",
+    "construction_legere",
+    "nombre_d_etages",
+    "nombre_de_logements",
+    "hauteur",
+    "identifiants_rnb",
+    "rnb_id",
+    "geometry",
+]
+
 
 def rnb_geometries(csv_path: Path) -> gpd.GeoDataFrame:
     rows: list[dict[str, object]] = []
@@ -44,7 +58,7 @@ def main() -> None:
     # Une emprise sans identifiant stable ne doit jamais sortir dans le tuileset.
     buildings = buildings[buildings["rnb_id"].notna()].copy()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    buildings.to_crs("EPSG:4326").to_file(args.output, driver="GeoJSONSeq")
+    buildings[OUTPUT_COLUMNS].to_crs("EPSG:4326").to_file(args.output, driver="GeoJSONSeq")
 
 
 if __name__ == "__main__":
