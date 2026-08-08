@@ -2,10 +2,18 @@ export type PasswordSignIn = (email: string, password: string) => Promise<void>;
 
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 
+/** Nommée pour que l'interface distingue une saisie invalide d'un refus du serveur. */
+export class InvalidUsernameError extends Error {
+  constructor() {
+    super('Username must contain 3 to 32 lowercase ASCII characters.');
+    this.name = 'InvalidUsernameError';
+  }
+}
+
 export function normalizeUsername(username: string): string {
   const normalized = username.trim().toLowerCase();
   if (!USERNAME_PATTERN.test(normalized)) {
-    throw new Error('Username must contain 3 to 32 lowercase ASCII characters.');
+    throw new InvalidUsernameError();
   }
   return normalized;
 }

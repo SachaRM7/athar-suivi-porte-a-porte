@@ -1,5 +1,7 @@
 import { useState, type FormEvent, type ReactElement } from 'react';
 import { useAuth } from '../../../app/providers/auth-context';
+import { environment } from '../../../app/config/environment';
+import { signInErrorMessage } from '../../../domain/auth/sign-in-error';
 import { Redirect } from '../../../app/routes/router';
 import { AccessState } from './AccessState';
 
@@ -21,8 +23,8 @@ export function LoginPage(): ReactElement {
     setError(null);
     try {
       await signIn(String(data.get('username') ?? ''), String(data.get('password') ?? ''));
-    } catch {
-      setError('Identifiant ou mot de passe incorrect.');
+    } catch (cause) {
+      setError(signInErrorMessage(cause, { useEmulators: environment.firebase?.useEmulators ?? false }));
     } finally {
       setPending(false);
     }
