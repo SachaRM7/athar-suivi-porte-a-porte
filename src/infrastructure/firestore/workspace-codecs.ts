@@ -62,6 +62,9 @@ export function fromFirestoreDoor(id: string, data: DocumentData): Door {
     // elle se lit « jamais vu » comme n'importe quelle porte sans passage.
     lastVisitAt: data.lastVisitId && data.lastVisitAt instanceof Timestamp ? data.lastVisitAt.toDate().toISOString() : null,
     createdBy: requiredString(data, 'createdBy'),
+    // Les anciennes portes n'avaient pas encore ce champ : elles se relisent comme
+    // « Non renseigné », sans inventer une information sensible.
+    foyer: ['femme', 'homme', 'couple', 'famille'].includes(data.foyer) ? data.foyer : null,
     // Le champ garde son nom français du `02-DATA-MODEL.md`. Absent des portes créées
     // avant ce lot : une porte sans marqueur n'est pas une porte invalide.
     sisters: data.aConfierAuxSoeurs === true

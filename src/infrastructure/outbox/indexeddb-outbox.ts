@@ -164,7 +164,7 @@ export class IndexedDbOutbox implements Outbox {
 }
 
 /**
- * File du marqueur « à confier aux sœurs », clé par porte : une nouvelle bascule
+ * File du profil sensible, clé par porte : une nouvelle modification
  * remplace la précédente au lieu de s'empiler. Aucun passage n'est touché.
  */
 export class IndexedDbDoorMarkerOutbox implements DoorMarkerOutbox {

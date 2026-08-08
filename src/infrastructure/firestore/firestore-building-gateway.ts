@@ -2,10 +2,12 @@ import { GeoPoint, doc, runTransaction, serverTimestamp, type Firestore } from '
 import type { Building, Status } from '../../domain/workspace/models';
 
 const DEFAULT_STATUSES: readonly Status[] = [
-  { id: 'unvisited', label: 'Pas visite', color: '#8C9494', order: 0, active: true },
-  { id: 'contacted', label: 'Contact etabli', color: '#16835F', order: 1, active: true },
-  { id: 'retry', label: 'A revenir', color: '#D8A200', order: 2, active: true },
-  { id: 'do-not-return', label: 'Ne pas deranger', color: '#B8403B', order: 3, active: true }
+  { id: 'unvisited', label: 'Pas encore fait', color: '#8B948F', order: 0, active: true },
+  { id: 'contacted', label: 'Contact établi', color: '#1F7A5A', order: 1, active: true },
+  { id: 'retry', label: 'Absent', color: '#C87A0A', order: 2, active: true },
+  { id: 'linked', label: "Attaché à l'effort", color: '#2456A6', order: 3, active: true },
+  { id: 'do-not-return', label: 'Ne pas déranger', color: '#A93B2E', order: 4, active: true },
+  { id: 'locked', label: 'Accès bloqué', color: '#6B5AA8', order: 5, active: true }
 ];
 
 export class FirestoreBuildingGateway {

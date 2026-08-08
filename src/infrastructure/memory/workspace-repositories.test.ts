@@ -8,7 +8,7 @@ describe('memory workspace repositories', () => {
     const repositories = createMemoryWorkspaceRepositories(demoWorkspace);
     await expect(repositories.members.listActive()).resolves.toHaveLength(3);
     const statuses = await repositories.statuses.list();
-    expect(statuses.map((status) => status.id)).toEqual(['unvisited', 'retry', 'contacted', 'do-not-return']);
+    expect(statuses.map((status) => status.id)).toEqual(['unvisited', 'contacted', 'retry', 'linked', 'do-not-return', 'locked']);
   });
 
   it('returns only demo doors in the requested viewport without exposing mutable storage', async () => {

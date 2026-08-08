@@ -11,15 +11,15 @@ async function signIn(page: import('@playwright/test').Page, username: string): 
 async function openDoor(page: import('@playwright/test').Page): Promise<void> {
   await page.getByRole('button', { name: '1 rue du Pilote, Toulouse' }).click();
   await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Porte 02, Pas visite' })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole('button', { name: 'Porte 02, Pas visite' }).click();
+  await expect(page.getByRole('button', { name: 'Porte 02, Pas encore fait' })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Porte 02, Pas encore fait' }).click();
   await page.getByRole('button', { name: 'Absent', exact: true }).click();
 }
 
 async function prepareBuildingCache(page: import('@playwright/test').Page): Promise<void> {
   await page.getByRole('button', { name: '1 rue du Pilote, Toulouse' }).click();
-  await expect(page.getByRole('button', { name: 'Porte 02, Pas visite' })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole('button', { name: 'Fermer le batiment' }).click();
+  await expect(page.getByRole('button', { name: 'Porte 02, Pas encore fait' })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Retour à la zone' }).click();
 }
 
 async function waitForOfflineShell(page: import('@playwright/test').Page): Promise<void> {
@@ -93,7 +93,7 @@ test('two terrain clients retain offline intentions and resolve a real Firestore
     await expect(second.getByRole('heading', { name: 'Zones de Toulouse' })).toBeVisible({ timeout: 20_000 });
     await expect.poll(async () => outboxEntries(second, 'member-b')).toEqual(pendingBeforeReload);
     await second.getByRole('button', { name: '1 rue du Pilote, Toulouse' }).click();
-    await expect(second.getByRole('button', { name: 'Porte 02, A revenir' })).toBeVisible({ timeout: 15_000 });
+    await expect(second.getByRole('button', { name: 'Porte 02, Absent' })).toBeVisible({ timeout: 15_000 });
 
     await firstContext.setOffline(false);
     await first.evaluate(() => window.dispatchEvent(new Event('online')));

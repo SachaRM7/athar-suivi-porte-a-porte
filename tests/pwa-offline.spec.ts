@@ -23,7 +23,7 @@ test('keeps the prepared local map asset and app shell available offline', async
   await expect(page.locator('.maplibregl-canvas')).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole('button', { name: 'Reseau disponible' }).click();
-  await page.getByRole('button', { name: 'A revenir' }).click();
+  await page.getByRole('button', { name: 'Absent' }).click();
   await expect(page.locator('.sync-message')).toHaveText('Changement en attente');
   await expect.poll(() => page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {

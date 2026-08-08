@@ -1,7 +1,7 @@
 import type { DoorMarkerIntent } from '../doors/contracts';
 
 /**
- * File d'attente du marqueur « à confier aux sœurs ».
+ * File d'attente du profil sensible (composition + marqueur sœurs).
  *
  * Séparée de l'`Outbox` des passages : elle n'a ni révision attendue, ni conflit, ni
  * rejet à rejouer. La dernière intention gagne, par porte et par auteur.

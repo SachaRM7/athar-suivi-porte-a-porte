@@ -34,7 +34,7 @@ async function seed() {
     const db = context.firestore();
     await setDoc(doc(db, `${workspace}/members/admin-a`), { role: 'admin', active: true, createdAt: Timestamp.now() });
     await setDoc(doc(db, `${workspace}/members/member-a`), { role: 'member', active: true, createdAt: Timestamp.now() });
-    await setDoc(doc(db, `${workspace}/statuses/unvisited`), { label: 'Pas visite', color: '#8C9494', order: 0, active: true });
+    await setDoc(doc(db, `${workspace}/statuses/unvisited`), { label: 'Pas encore fait', color: '#8B948F', order: 0, active: true });
     await setDoc(doc(db, `${workspace}/statuses/contacted`), { label: 'Contact', color: '#16835F', order: 1, active: true });
     await setDoc(doc(db, `${workspace}/statuses/retry`), { label: 'Repasser', color: '#D8A200', order: 2, active: true });
     await setDoc(doc(db, `${workspace}/zones/zone-a`), { name: 'Zone A' });

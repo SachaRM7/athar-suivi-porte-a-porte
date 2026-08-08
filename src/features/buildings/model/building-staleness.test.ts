@@ -26,7 +26,7 @@ function door(overrides: Partial<Door> & Pick<Door, 'id' | 'buildingId'>): Door 
   return {
     zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: 'spdt',
     floor: 0, label: '01', sortOrder: 0, active: true, currentStatusId: 'unvisited', revision: 0,
-    lastVisitId: null, lastVisitAt: null, createdBy: 'admin-1', sisters: false,
+    lastVisitId: null, lastVisitAt: null, createdBy: 'admin-1', foyer: null, sisters: false,
     ...overrides
   };
 }

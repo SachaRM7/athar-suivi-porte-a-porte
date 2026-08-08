@@ -60,7 +60,7 @@ async function seed() {
       active: false,
       createdAt: Timestamp.now()
     });
-    await setDoc(doc(db, `${workspace}/statuses/unvisited`), statusData({ label: 'Pas visite', order: 0 }));
+    await setDoc(doc(db, `${workspace}/statuses/unvisited`), statusData({ label: 'Pas encore fait', color: '#8B948F', order: 0 }));
     await setDoc(doc(db, `${workspace}/statuses/contacted`), statusData());
     await setDoc(doc(db, `${workspace}/zones/zone-a`), zoneData());
     await setDoc(doc(db, `${workspace}/buildings/building-a`), {
@@ -89,7 +89,7 @@ async function seed() {
 }
 
 function statusData(overrides: Record<string, unknown> = {}) {
-  return { label: 'Contact', color: '#16835F', order: 1, active: true, ...overrides };
+  return { label: 'Contact établi', color: '#1F7A5A', order: 1, active: true, ...overrides };
 }
 
 function zoneData(overrides: Record<string, unknown> = {}) {
@@ -163,7 +163,7 @@ describe('Firestore security rules', () => {
   it('accepts only complete status and zone schemas from an administrator', async () => {
     await seed();
     const db = member('admin-a');
-    await assertSucceeds(setDoc(doc(db, `${workspace}/statuses/retry`), statusData({ label: 'A revenir', order: 2 })));
+    await assertSucceeds(setDoc(doc(db, `${workspace}/statuses/retry`), statusData({ label: 'Absent', color: '#C87A0A', order: 2 })));
     await assertFails(setDoc(doc(db, `${workspace}/statuses/bad-color`), statusData({ color: 'green' })));
     await assertFails(setDoc(doc(db, `${workspace}/zones/bad-zone`), zoneData({ geometry: { type: 'Polygon', vertices: [] } })));
   });
@@ -172,7 +172,10 @@ describe('Firestore security rules', () => {
     await seed();
     const db = member('member-a');
     await assertSucceeds(setDoc(doc(db, `${workspace}/statuses/retry`), {
-      label: 'A revenir', color: '#D8A200', order: 2, active: true
+      label: 'Absent', color: '#C87A0A', order: 2, active: true
+    }));
+    await assertSucceeds(setDoc(doc(db, `${workspace}/statuses/linked`), {
+      label: "Attaché à l'effort", color: '#2456A6', order: 3, active: true
     }));
     await assertFails(setDoc(doc(db, `${workspace}/statuses/custom-member`), statusData({ label: 'Libre' })));
   });
@@ -303,6 +306,23 @@ describe('Firestore security rules', () => {
     }));
     await assertFails(updateDoc(doc(db, `${workspace}/doors/door-a`), {
       aConfierAuxSoeurs: 'oui',
+      updatedAt: serverTimestamp()
+    }));
+  });
+
+  it('lets a member update the sensitive door profile without touching its passage chain', async () => {
+    await seed();
+    const db = member('member-a');
+    await assertSucceeds(updateDoc(doc(db, `${workspace}/doors/door-a`), {
+      foyer: 'femme',
+      aConfierAuxSoeurs: true,
+      updatedAt: serverTimestamp()
+    }));
+    const updated = await getDoc(doc(db, `${workspace}/doors/door-a`));
+    expect(updated.data()).toMatchObject({ foyer: 'femme', aConfierAuxSoeurs: true, revision: 0, currentStatusId: 'unvisited' });
+    await assertFails(updateDoc(doc(db, `${workspace}/doors/door-a`), {
+      foyer: 'inconnu',
+      aConfierAuxSoeurs: true,
       updatedAt: serverTimestamp()
     }));
   });

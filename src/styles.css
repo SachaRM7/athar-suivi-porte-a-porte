@@ -267,32 +267,45 @@ h2 { font-size: 22px; }
 .building-empty-state .text-button { color: var(--brand-lift); text-align: left; }
 
 /* WP4 — fiche porte : les données sensibles restent confinées à cette sheet. */
-.door-detail-sheet { display: grid; gap: 12px; max-height: min(760px, calc(100vh - 18px)); overflow-y: auto; }
+.door-status-layer { inset: 0; }
+.door-status-backdrop { display: none; }
+.door-detail-sheet { background: var(--paper); border-radius: inherit; box-shadow: none; display: grid; gap: 12px; inset: 0; max-height: none; overflow-y: auto; padding: 18px 20px 26px; position: absolute; }
 .door-detail-back { background: transparent; border: 0; color: var(--brand-lift); cursor: pointer; font: var(--t-115) var(--font-ui); min-height: var(--touch); padding: 0; text-align: left; }
 .door-detail-sheet h3 { font: var(--t-17) var(--font-data); margin: 0; }
 .door-detail-subline { color: var(--ink-soft); font: var(--t-125) var(--font-ui); margin: -8px 0 2px; }
 .door-detail-sheet .eyebrow { margin: 8px 0 -4px; }
 .door-detail-sheet .status-palette { gap: 7px; grid-template-columns: 1fr 1fr; }
-.door-detail-sheet .status-swatch { align-items: center; background: var(--paper); border-color: var(--hairline); color: var(--ink); display: flex; min-height: var(--touch); padding: 9px 10px; }
-.door-detail-sheet .status-swatch span { background: var(--st-open); flex-basis: 8px; height: 8px; }
-.door-detail-sheet .status-swatch:nth-child(2) span { background: var(--st-away); }
-.door-detail-sheet .status-swatch:nth-child(3) span { background: var(--st-dnd); }
-.door-detail-sheet .linked-result { border-color: var(--st-linked); grid-column: 1 / -1; }
+.door-detail-sheet .status-swatch { align-items: center; background: var(--paper); border-color: var(--hairline); color: var(--ink); display: flex; font-size: var(--t-125); gap: 9px; min-height: 56px; padding: 9px 10px; }
+.door-detail-sheet .status-swatch span { border: 0; border-radius: 50%; flex: 0 0 8px; height: 8px; }
+.door-detail-sheet .open-result span { background: var(--st-open); }
+.door-detail-sheet .away-result span { background: var(--st-away); }
+.door-detail-sheet .dnd-result span { background: var(--st-dnd); }
+.door-detail-sheet .linked-result { border-color: color-mix(in srgb, var(--st-linked) 55%, var(--hairline)); }
 .door-detail-sheet .linked-result span { background: var(--st-linked); }
 .door-detail-sheet .locked-result { grid-column: 1 / -1; }
 .door-detail-sheet .locked-result span { background: var(--st-locked); }
 .foyer-chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .foyer-chips button { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-pill); color: var(--ink); cursor: pointer; font: var(--t-125) var(--font-ui); min-height: var(--touch); padding: 7px 11px; }
 .foyer-chips button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-.sisters-toggle { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); cursor: pointer; display: grid; gap: 3px; min-height: 62px; padding: 10px 12px; text-align: left; width: 100%; }
-.sisters-toggle strong { font: var(--t-15) var(--font-ui); }
-.sisters-toggle span, .sisters-auto { color: var(--ink-soft); font: var(--t-115) var(--font-ui); margin: 0; }
-.sisters-toggle[aria-pressed="true"] { border: 2px solid var(--st-sisters); }
+.sisters-toggle { align-items: center; background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); cursor: pointer; display: flex; gap: 12px; justify-content: space-between; min-height: 64px; padding: 10px 12px; text-align: left; width: 100%; }
+.sisters-toggle-copy { display: grid; gap: 3px; }
+.sisters-toggle strong { font: 500 var(--t-15) var(--font-ui); }
+.sisters-toggle-copy > span, .sisters-auto { color: var(--ink-soft); font: var(--t-115) var(--font-ui); margin: 0; }
+.sisters-toggle-control { background: var(--hairline); border-radius: var(--r-pill); flex: 0 0 38px; height: 22px; position: relative; }
+.sisters-toggle-control::after { background: var(--paper); border-radius: 50%; box-shadow: var(--shadow); content: ''; height: 16px; left: 3px; position: absolute; top: 3px; transition: transform .2s ease; width: 16px; }
+.sisters-toggle[aria-pressed="true"] { background: color-mix(in srgb, var(--st-sisters) 7%, var(--paper)); border: 2px solid var(--st-sisters); }
+.sisters-toggle[aria-pressed="true"] .sisters-toggle-control { background: var(--st-sisters); }
+.sisters-toggle[aria-pressed="true"] .sisters-toggle-control::after { transform: translateX(16px); }
 .sisters-auto { color: var(--st-sisters); }
 .door-history { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
-.door-history li { border-left: 2px solid var(--hairline); display: grid; gap: 2px; padding: 3px 0 3px 9px; }
-.door-history strong { font: var(--t-115) var(--font-data); }
-.door-history span, .door-history li { color: var(--ink-soft); font: var(--t-125) var(--font-ui); }
+.door-history li { align-items: start; display: grid; gap: 9px; grid-template-columns: 9px minmax(0, 1fr); padding: 3px 0; }
+.door-history-dot { background: var(--history-status); border-radius: 50%; height: 8px; margin-top: 4px; width: 8px; }
+.door-history-body { display: grid; gap: 3px; }
+.door-history strong { color: var(--ink); font: var(--t-115) var(--font-data); }
+.door-history-body > span, .door-history li { color: var(--ink-soft); font: var(--t-125) var(--font-ui); }
+.door-history .door-history-empty { color: var(--ink-soft); display: block; }
+.door-detail-sheet .passage-note-toggle { color: var(--brand-lift); margin: 2px 0 0; padding-left: 0; text-align: left; }
+.door-detail-sheet .passage-note-field { margin-top: 0; }
 
 .numbering-options { display: flex; flex-wrap: wrap; gap: 7px; }
 .numbering-options button { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-pill); cursor: pointer; font: var(--t-115) var(--font-data); min-height: var(--touch); padding: 7px 10px; }
@@ -338,7 +351,9 @@ h2 { font-size: 22px; }
   .building-progress-row { gap: 9px; }
   .building-sheet > .workspace-map-message { padding-left: 20px; }
   .sync-resolution, .sync-controls, .sync-rejection { margin-left: 20px; }
-  .door-status-sheet, .structure-sheet { border-radius: var(--r-sheet-m) var(--r-sheet-m) 0 0; padding: 24px 20px 26px; position: fixed; }
+  .building-sheet--door-detail { height: 392px; }
+  .door-status-sheet { border-radius: inherit; padding: 16px 20px 26px; position: absolute; }
+  .structure-sheet { border-radius: var(--r-sheet-m) var(--r-sheet-m) 0 0; padding: 24px 20px 26px; position: fixed; }
   .status-palette { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .structure-fields { grid-template-columns: 1fr 1fr 1fr; }
 }

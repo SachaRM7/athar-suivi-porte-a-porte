@@ -145,6 +145,7 @@ export function buildBuildingStructureDiff(input: BuildStructureDiffInput): Buil
         lastVisitId: null,
         lastVisitAt: null,
         createdBy: input.authorId,
+        foyer: null,
         sisters: false
       });
       continue;

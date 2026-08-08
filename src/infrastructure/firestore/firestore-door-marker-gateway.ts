@@ -3,9 +3,9 @@ import type { DoorMarkerIntent } from '../../domain/doors/contracts';
 import type { DoorMarkerWriter } from '../../domain/sync/door-marker-outbox';
 
 /**
- * Écrit le seul champ `aConfierAuxSoeurs`.
+ * Écrit les deux champs sensibles du profil de porte.
  *
- * `updateDoc` sur ces deux clés est ce que les règles autorisent : la révision, le statut
+ * `updateDoc` sur ces trois clés est ce que les règles autorisent : la révision, le statut
  * et le dernier passage restent intacts. Aucun document de `passages` n'est touché —
  * l'historique reste ce qu'il est.
  */
@@ -22,6 +22,7 @@ export class FirestoreDoorMarkerGateway implements DoorMarkerWriter {
     }
     await updateDoc(doc(this.db, `workspaces/${this.workspaceId}/doors/${intent.doorId}`), {
       aConfierAuxSoeurs: intent.sisters,
+      foyer: intent.foyer ?? null,
       updatedAt: serverTimestamp()
     });
   }

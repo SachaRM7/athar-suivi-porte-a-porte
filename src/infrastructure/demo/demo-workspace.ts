@@ -27,10 +27,12 @@ export const demoWorkspace: WorkspaceSnapshot = {
     { id: 'former-member', username: 'archive.31', displayName: 'Archive 31', role: 'member', active: false, createdAt }
   ],
   statuses: [
-    { id: 'unvisited', label: 'Pas visite', color: '#8C9494', order: 0, active: true },
-    { id: 'retry', label: 'A revenir', color: '#D8A200', order: 1, active: true },
-    { id: 'contacted', label: 'Contact', color: '#16835F', order: 2, active: true },
-    { id: 'do-not-return', label: 'Ne pas revenir', color: '#B8403B', order: 3, active: true }
+    { id: 'unvisited', label: 'Pas encore fait', color: '#8B948F', order: 0, active: true },
+    { id: 'contacted', label: 'Contact établi', color: '#1F7A5A', order: 1, active: true },
+    { id: 'retry', label: 'Absent', color: '#C87A0A', order: 2, active: true },
+    { id: 'linked', label: "Attaché à l'effort", color: '#2456A6', order: 3, active: true },
+    { id: 'do-not-return', label: 'Ne pas déranger', color: '#A93B2E', order: 4, active: true },
+    { id: 'locked', label: 'Accès bloqué', color: '#6B5AA8', order: 5, active: true }
   ],
   zones: [{
     id: 'carmes', name: 'Carmes', color: '#16835F', coverageState: 'active', assigneeLabel: 'Terrain 31',
@@ -43,12 +45,12 @@ export const demoWorkspace: WorkspaceSnapshot = {
     { id: 'building-carmes', addressLabel: '7 rue des Filatiers, Toulouse', location: { latitude: 43.6072, longitude: 1.4481 }, geohash: carmesGeohash, zoneId: 'carmes', createdBy: 'admin-1', structureRevision: 0 }
   ],
   doors: [
-    { id: 'door-dalbad-01', buildingId: 'building-dalbad', zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: dalbadGeohash, floor: 0, label: '01', sortOrder: 0, active: true, currentStatusId: 'contacted', revision: 1, lastVisitId: 'visit-dalbad-01', lastVisitAt: visitedAt, createdBy: 'admin-1', sisters: false },
-    { id: 'door-dalbad-02', buildingId: 'building-dalbad', zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: dalbadGeohash, floor: 0, label: '02', sortOrder: 1, active: true, currentStatusId: 'unvisited', revision: 0, lastVisitId: null, lastVisitAt: null, createdBy: 'admin-1', sisters: false },
-    { id: 'door-dalbad-11', buildingId: 'building-dalbad', zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: dalbadGeohash, floor: 1, label: '11', sortOrder: 2, active: true, currentStatusId: 'contacted', revision: 1, lastVisitId: 'visit-dalbad-11', lastVisitAt: visitedAt, createdBy: 'admin-1', sisters: false },
-    { id: 'door-dalbad-12', buildingId: 'building-dalbad', zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: dalbadGeohash, floor: 1, label: '12', sortOrder: 3, active: true, currentStatusId: 'unvisited', revision: 0, lastVisitId: null, lastVisitAt: null, createdBy: 'admin-1', sisters: false },
-    { id: 'door-carmes-11', buildingId: 'building-carmes', zoneId: 'carmes', location: { latitude: 43.6072, longitude: 1.4481 }, geohash: carmesGeohash, floor: 1, label: '11', sortOrder: 0, active: true, currentStatusId: 'retry', revision: 1, lastVisitId: 'visit-carmes-11', lastVisitAt: staleVisitedAt, createdBy: 'admin-1', sisters: false },
-    { id: 'door-carmes-12', buildingId: 'building-carmes', zoneId: 'carmes', location: { latitude: 43.6072, longitude: 1.4481 }, geohash: carmesGeohash, floor: 1, label: '12', sortOrder: 1, active: true, currentStatusId: 'unvisited', revision: 0, lastVisitId: null, lastVisitAt: null, createdBy: 'admin-1', sisters: true }
+    { id: 'door-dalbad-01', buildingId: 'building-dalbad', zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: dalbadGeohash, floor: 0, label: '01', sortOrder: 0, active: true, currentStatusId: 'contacted', revision: 1, lastVisitId: 'visit-dalbad-01', lastVisitAt: visitedAt, createdBy: 'admin-1', foyer: 'famille', sisters: false },
+    { id: 'door-dalbad-02', buildingId: 'building-dalbad', zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: dalbadGeohash, floor: 0, label: '02', sortOrder: 1, active: true, currentStatusId: 'unvisited', revision: 0, lastVisitId: null, lastVisitAt: null, createdBy: 'admin-1', foyer: null, sisters: false },
+    { id: 'door-dalbad-11', buildingId: 'building-dalbad', zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: dalbadGeohash, floor: 1, label: '11', sortOrder: 2, active: true, currentStatusId: 'contacted', revision: 1, lastVisitId: 'visit-dalbad-11', lastVisitAt: visitedAt, createdBy: 'admin-1', foyer: null, sisters: false },
+    { id: 'door-dalbad-12', buildingId: 'building-dalbad', zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: dalbadGeohash, floor: 1, label: '12', sortOrder: 3, active: true, currentStatusId: 'unvisited', revision: 0, lastVisitId: null, lastVisitAt: null, createdBy: 'admin-1', foyer: null, sisters: false },
+    { id: 'door-carmes-11', buildingId: 'building-carmes', zoneId: 'carmes', location: { latitude: 43.6072, longitude: 1.4481 }, geohash: carmesGeohash, floor: 1, label: '11', sortOrder: 0, active: true, currentStatusId: 'retry', revision: 1, lastVisitId: 'visit-carmes-11', lastVisitAt: staleVisitedAt, createdBy: 'admin-1', foyer: null, sisters: false },
+    { id: 'door-carmes-12', buildingId: 'building-carmes', zoneId: 'carmes', location: { latitude: 43.6072, longitude: 1.4481 }, geohash: carmesGeohash, floor: 1, label: '12', sortOrder: 1, active: true, currentStatusId: 'unvisited', revision: 0, lastVisitId: null, lastVisitAt: null, createdBy: 'admin-1', foyer: 'femme', sisters: true }
   ],
   visits: [
     { id: 'visit-dalbad-01', doorId: 'door-dalbad-01', statusId: 'contacted', note: 'Accueil cordial.', authorId: 'member-1', occurredAt: visitedAt, syncedAt: visitedAt, doorRevision: 1, replacesVisitId: null, voidedAt: null },

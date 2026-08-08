@@ -1,4 +1,5 @@
 export type DoorStatusId = string;
+export type DoorFoyer = 'femme' | 'homme' | 'couple' | 'famille' | null;
 
 export type DoorSnapshot = {
   id: string;
@@ -20,9 +21,9 @@ export type VisitIntent = {
 };
 
 /**
- * Mutation dédiée au marqueur « à confier aux sœurs ».
+ * Mutation dédiée au profil sensible de la porte.
  *
- * Volontairement séparée de `VisitIntent` : un marqueur n'est pas un passage. Il ne fait
+ * Volontairement séparée de `VisitIntent` : ce profil n'est pas un passage. Il ne fait
  * pas avancer la révision de la porte, il n'entre pas dans la chaîne de conflits, et il
  * n'écrit jamais dans `passages`. Deux basculements sur la même porte se remplacent —
  * un booléen n'a pas d'historique à préserver.
@@ -32,6 +33,8 @@ export type DoorMarkerIntent = {
   authorId: string;
   doorId: string;
   sisters: boolean;
+  /** Le profil sensible voyage en une seule intention : la dernière modification gagne. */
+  foyer: DoorFoyer;
   createdAt: string;
 };
 

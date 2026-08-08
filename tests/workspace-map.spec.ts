@@ -67,11 +67,11 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '18 rue du Languedoc, Toulouse' })).toBeVisible();
   await expect(page.locator('.building-floor-label')).toHaveText(['1er', 'RDC']);
-  await page.getByRole('button', { name: 'Porte 11, Contact' }).click();
+  await page.getByRole('button', { name: 'Porte 11, Contact établi' }).click();
   await expect(page.getByRole('dialog', { name: 'Fiche de la porte 11' })).toBeVisible();
   await page.getByRole('button', { name: 'Absent', exact: true }).click();
   await expect(page.getByText(/Porte 11: passage .* cree, revision 2\./)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Porte 11, A revenir' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Porte 11, Absent' })).toBeVisible();
 
   await page.getByRole('button', { name: 'tout marquer absent' }).first().click();
   await expect(page.getByText('1 passage(s) « Absent » enregistres pour cet etage.')).toBeVisible();
@@ -209,6 +209,8 @@ test('keeps the map full-frame and moves the mobile controls with the bottom she
   expect(buildingSheet).toMatchObject({ x: 0, y: 224, width: 390, height: 620 });
   expect(await page.getByLabel('Carte MapLibre des zones').boundingBox()).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
   await expect(page.locator('.building-floor-label')).toHaveText(['1er', 'RDC']);
+  await page.getByRole('button', { name: 'Porte 11, Contact établi' }).click();
+  expect(await page.getByRole('dialog', { name: 'Detail du batiment' }).boundingBox()).toMatchObject({ x: 0, y: 452, width: 390, height: 392 });
   await page.close();
 });
 
@@ -219,7 +221,7 @@ test('keeps the sisters marker on the door across reopenings, without touching i
   await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 45_000 });
 
   await page.getByRole('button', { name: '7 rue des Filatiers, Toulouse' }).click();
-  const sistersDoor = page.getByRole('button', { name: 'Porte 12, Pas visite' });
+  const sistersDoor = page.getByRole('button', { name: 'Porte 12, Pas encore fait' });
   await expect(sistersDoor).toHaveClass(/door-row--sisters/);
   await sistersDoor.click();
   const toggle = page.getByRole('button', { name: 'À confier aux sœurs' });
@@ -232,9 +234,54 @@ test('keeps the sisters marker on the door across reopenings, without touching i
   await expect(page.getByRole('heading', { name: 'Porte 12 · 1er' })).toBeVisible();
   await expect(page.getByText('Aucun passage enregistré.')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Fermer le choix de statut' }).click();
-  await page.getByRole('button', { name: 'Porte 12, Pas visite' }).click();
+  await page.locator('.door-detail-back').click();
+  await page.getByRole('button', { name: 'Porte 12, Pas encore fait' }).click();
   await expect(page.getByRole('button', { name: 'À confier aux sœurs' })).toHaveAttribute('aria-pressed', 'false');
+  await page.close();
+});
+
+test('records the five real passage results and keeps the previous history immutable', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await page.goto('/technical-map');
+  await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 45_000 });
+
+  // Aucune composition sensible ne fuit dans la liste des bâtiments.
+  await expect(page.getByText('Femme seule')).toHaveCount(0);
+  await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
+  await page.getByRole('button', { name: 'Porte 11, Contact établi' }).click();
+  const detail = page.getByRole('dialog', { name: 'Fiche de la porte 11' });
+  await expect(detail.getByRole('button', { name: 'Contact établi' })).toBeVisible();
+  await expect(detail.getByRole('button', { name: 'Absent', exact: true })).toBeVisible();
+  await expect(detail.getByRole('button', { name: "Attaché à l'effort — plus à revisiter" })).toBeVisible();
+  await expect(detail.getByRole('button', { name: 'Ne pas déranger' })).toBeVisible();
+  await expect(detail.getByRole('button', { name: 'Accès bloqué (interphone / code)' })).toBeVisible();
+  await expect(detail.locator('.door-history li')).toHaveCount(1);
+  await expect(detail.locator('.door-history')).toContainText('Terrain 31');
+
+  await detail.getByRole('button', { name: "Attaché à l'effort — plus à revisiter" }).click();
+  await expect(page.getByRole('button', { name: "Porte 11, Attaché à l'effort" })).toBeVisible();
+  await page.getByRole('button', { name: "Porte 11, Attaché à l'effort" }).click();
+  await expect(page.getByRole('dialog', { name: 'Fiche de la porte 11' }).locator('.door-history li')).toHaveCount(2);
+  await page.close();
+});
+
+test('persists the household composition and automatically arms the sisters marker', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await page.goto('/technical-map');
+  await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 45_000 });
+  await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
+  await page.getByRole('button', { name: 'Porte 12, Pas encore fait' }).click();
+
+  await page.getByRole('button', { name: 'Femme seule' }).click();
+  await expect(page.getByRole('button', { name: 'Femme seule' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'À confier aux sœurs' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('Activé automatiquement — tu peux le désactiver.')).toBeVisible();
+
+  await page.locator('.door-detail-back').click();
+  await expect(page.getByRole('button', { name: 'Porte 12, Pas encore fait' })).toHaveClass(/door-row--sisters/);
+  await page.getByRole('button', { name: 'Porte 12, Pas encore fait' }).click();
+  await expect(page.getByRole('button', { name: 'Femme seule' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'À confier aux sœurs' })).toHaveAttribute('aria-pressed', 'true');
   await page.close();
 });
 

@@ -58,7 +58,7 @@ describe('Firestore workspace model', () => {
     ]);
 
     expect(zones.map((zone) => zone.id)).toEqual(['carmes']);
-    expect(statuses.map((status) => status.id)).toEqual(['unvisited', 'retry', 'contacted', 'do-not-return']);
+    expect(statuses.map((status) => status.id)).toEqual(['unvisited', 'contacted', 'retry', 'linked', 'do-not-return', 'locked']);
     expect(stats).toMatchObject({ doorCount: 6, countsByStatus: { unvisited: 3, contacted: 2 } });
     expect(buildings).toHaveLength(2);
     expect(doors).toHaveLength(6);

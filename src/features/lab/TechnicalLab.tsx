@@ -8,10 +8,10 @@ import { MemoryDoorGateway, SyncLab } from '../../domain/sync/sync-service';
 const OfflineMap = lazy(async () => import('../map/components/OfflineMap'));
 
 const statuses: Array<{ id: DoorStatusId; label: string; color: string }> = [
-  { id: 'unvisited', label: 'Pas visite', color: '#8c9494' },
-  { id: 'retry', label: 'A revenir', color: '#d8a200' },
-  { id: 'contacted', label: 'Contact', color: '#16835f' },
-  { id: 'do-not-return', label: 'Ne pas revenir', color: '#b8403b' }
+  { id: 'unvisited', label: 'Pas encore fait', color: '#8B948F' },
+  { id: 'retry', label: 'Absent', color: '#C87A0A' },
+  { id: 'contacted', label: 'Contact établi', color: '#1F7A5A' },
+  { id: 'do-not-return', label: 'Ne pas déranger', color: '#A93B2E' }
 ];
 
 const sampleDoors = [

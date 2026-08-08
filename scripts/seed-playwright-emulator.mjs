@@ -38,10 +38,12 @@ for (const user of PILOTE_MINIMAL.users) {
   });
 }
 for (const [id, label, color, order] of [
-  ['unvisited', 'Pas visite', '#8C9494', 0],
-  ['retry', 'A revenir', '#D8A200', 1],
-  ['contacted', 'Contact', '#16835F', 2],
-  ['do-not-return', 'Ne pas revenir', '#B8403B', 3]
+  ['unvisited', 'Pas encore fait', '#8B948F', 0],
+  ['contacted', 'Contact établi', '#1F7A5A', 1],
+  ['retry', 'Absent', '#C87A0A', 2],
+  ['linked', "Attaché à l'effort", '#2456A6', 3],
+  ['do-not-return', 'Ne pas déranger', '#A93B2E', 4],
+  ['locked', 'Accès bloqué', '#6B5AA8', 5]
 ]) {
   batch.set(workspace.collection('statuses').doc(id), { label, color, order, active: true });
 }
@@ -94,7 +96,7 @@ if (includeRegressionData) {
 batch.set(workspace.collection('doors').doc(PILOTE_MINIMAL.door.id), {
   buildingId: PILOTE_MINIMAL.building.id, zoneId: PILOTE_MINIMAL.building.zoneId, location: point, geohash: pointGeohash,
   floor: 0, label: PILOTE_MINIMAL.door.label, sortOrder: 1, active: true, currentStatusId: 'unvisited', revision: 0,
-  lastVisitId: null, createdBy: 'admin-1'
+  lastVisitId: null, createdBy: 'admin-1', foyer: null, aConfierAuxSoeurs: false
 });
 if (bootstrapCode) {
   batch.set(workspace.collection('setup').doc('admin-bootstrap'), {

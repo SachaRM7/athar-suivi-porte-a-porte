@@ -108,10 +108,12 @@ service cloud.firestore {
 
     function defaultStatus(statusId) {
       let data = request.resource.data;
-      return (statusId == 'unvisited' && data.label == 'Pas visite' && data.color == '#8C9494' && data.order == 0 && data.active == true) ||
-        (statusId == 'contacted' && data.label == 'Contact etabli' && data.color == '#16835F' && data.order == 1 && data.active == true) ||
-        (statusId == 'retry' && data.label == 'A revenir' && data.color == '#D8A200' && data.order == 2 && data.active == true) ||
-        (statusId == 'do-not-return' && data.label == 'Ne pas deranger' && data.color == '#B8403B' && data.order == 3 && data.active == true);
+      return (statusId == 'unvisited' && data.label == 'Pas encore fait' && data.color == '#8B948F' && data.order == 0 && data.active == true) ||
+        (statusId == 'contacted' && data.label == 'Contact établi' && data.color == '#1F7A5A' && data.order == 1 && data.active == true) ||
+        (statusId == 'retry' && data.label == 'Absent' && data.color == '#C87A0A' && data.order == 2 && data.active == true) ||
+        (statusId == 'linked' && data.label == "Attaché à l'effort" && data.color == '#2456A6' && data.order == 3 && data.active == true) ||
+        (statusId == 'do-not-return' && data.label == 'Ne pas déranger' && data.color == '#A93B2E' && data.order == 4 && data.active == true) ||
+        (statusId == 'locked' && data.label == 'Accès bloqué' && data.color == '#6B5AA8' && data.order == 5 && data.active == true);
     }
 
     function validZone() {
@@ -142,7 +144,8 @@ service cloud.firestore {
     function validDoor() {
       let data = request.resource.data;
       return data.keys().hasAll(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'createdBy']) &&
-        data.keys().hasOnly(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'lastVisitAt', 'createdBy', 'updatedAt', 'aConfierAuxSoeurs']) &&
+        data.keys().hasOnly(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'lastVisitAt', 'createdBy', 'updatedAt', 'foyer', 'aConfierAuxSoeurs']) &&
+        (!data.keys().hasAny(['foyer']) || data.foyer == null || data.foyer in ['femme', 'homme', 'couple', 'famille']) &&
         (!data.keys().hasAny(['aConfierAuxSoeurs']) || data.aConfierAuxSoeurs is bool) &&
         // Ancienneté : absente des portes écrites avant WP8, jamais posée sans passage.
         (data.get('lastVisitAt', null) == null || data.lastVisitAt is timestamp) &&
@@ -228,9 +231,10 @@ service cloud.firestore {
           getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.doorRevision == request.resource.data.revision) ||
         (activeMember(workspaceId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['floor', 'label', 'sortOrder', 'active', 'updatedAt']) &&
           structureRevisionAdvanced(workspaceId, resource.data.buildingId)) ||
-        // Marqueur « à confier aux sœurs » : mutation dédiée. Elle ne touche ni la chaîne
-        // de révisions, ni le statut, ni un passage — l'historique reste intact.
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aConfierAuxSoeurs', 'updatedAt']) &&
+        // Profil sensible : mutation dédiée. Elle ne touche ni la chaîne de révisions,
+        // ni le statut, ni un passage — l'historique reste intact.
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['foyer', 'aConfierAuxSoeurs', 'updatedAt']) &&
+          (request.resource.data.get('foyer', null) == null || request.resource.data.foyer in ['femme', 'homme', 'couple', 'famille']) &&
           request.resource.data.aConfierAuxSoeurs is bool &&
           request.resource.data.revision == resource.data.revision &&
           request.resource.data.currentStatusId == resource.data.currentStatusId &&

@@ -18,15 +18,15 @@ const zone: Zone = {
 };
 
 const statuses = new Map<string, Status>([
-  ['unvisited', { id: 'unvisited', label: 'Pas visite', color: '#8C9494', order: 0, active: true }],
-  ['retry', { id: 'retry', label: 'A revenir', color: '#D8A200', order: 1, active: true }],
-  ['contacted', { id: 'contacted', label: 'Contact', color: '#16835F', order: 2, active: true }]
+  ['unvisited', { id: 'unvisited', label: 'Pas encore fait', color: '#8B948F', order: 0, active: true }],
+  ['retry', { id: 'retry', label: 'Absent', color: '#C87A0A', order: 1, active: true }],
+  ['contacted', { id: 'contacted', label: 'Contact établi', color: '#1F7A5A', order: 2, active: true }]
 ]);
 
 function door(overrides: Partial<Door> & Pick<Door, 'id' | 'buildingId' | 'currentStatusId'>): Door {
   return {
     zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: 'spdt',
-    floor: 0, label: '01', sortOrder: 0, active: true, revision: 1, lastVisitId: 'visit-1', lastVisitAt: '2026-08-01T09:00:00.000Z', createdBy: 'admin-1', sisters: false,
+    floor: 0, label: '01', sortOrder: 0, active: true, revision: 1, lastVisitId: 'visit-1', lastVisitAt: '2026-08-01T09:00:00.000Z', createdBy: 'admin-1', foyer: null, sisters: false,
     ...overrides
   };
 }
@@ -73,7 +73,7 @@ describe('footprintState', () => {
       buildings: new Map([['building-dalbad', building('building-dalbad')]]),
       doorsByBuilding: new Map([['building-dalbad', [door({ id: 'd1', buildingId: 'building-dalbad', currentStatusId: 'retry' })]]])
     }));
-    expect(state).toEqual({ inZone: true, tracked: true, color: '#D8A200', sisters: false });
+    expect(state).toEqual({ inZone: true, tracked: true, color: '#C87A0A', sisters: false });
   });
 
   it('keeps a described building without any passage grey', () => {

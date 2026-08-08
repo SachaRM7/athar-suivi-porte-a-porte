@@ -2,6 +2,7 @@ export type EntityId = string;
 export type WorkspaceId = string;
 export type UserId = string;
 export type StatusId = string;
+export type DoorFoyer = 'femme' | 'homme' | 'couple' | 'famille' | null;
 
 export type MemberRole = 'admin' | 'member';
 
@@ -86,6 +87,8 @@ export type Door = {
    */
   lastVisitAt: string | null;
   createdBy: UserId;
+  /** Composition sensible, lisible uniquement dans la fiche de cette porte. */
+  foyer: DoorFoyer;
   /**
    * Marqueur « à confier aux sœurs ». Donnée sensible : elle n'apparaît jamais dans une
    * liste ni dans un export, et sur la carte seul l'anneau rose du bâtiment la trahit.

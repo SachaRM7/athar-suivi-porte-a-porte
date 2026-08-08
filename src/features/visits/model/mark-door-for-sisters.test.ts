@@ -3,7 +3,7 @@ import { MemoryDoorMarkerOutbox, flushDoorMarkers } from '../../../domain/sync/d
 import { demoWorkspace } from '../../../infrastructure/demo/demo-workspace';
 import { createMemoryWorkspaceRepositories } from '../../../infrastructure/memory/workspace-repositories';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
-import { markDoorForSisters } from './mark-door-for-sisters';
+import { markDoorForSisters, updateDoorProfile } from './mark-door-for-sisters';
 import { recordLocalVisit } from './record-local-visit';
 import { MemoryOutbox } from '../../../domain/sync/sync-service';
 
@@ -30,6 +30,18 @@ describe('markDoorForSisters', () => {
     const before = await repositories.visits.listByDoor('door-dalbad-01');
     await markDoorForSisters(repositories, markers, { doorId: 'door-dalbad-01', sisters: true, authorId: 'member-1' });
     expect(await repositories.visits.listByDoor('door-dalbad-01')).toHaveLength(before.length);
+  });
+
+  it('persists the household composition with the marker without touching passages', async () => {
+    const beforeVisits = await repositories.visits.listByDoor('door-dalbad-02');
+    const door = await updateDoorProfile(repositories, markers, {
+      doorId: 'door-dalbad-02', foyer: 'femme', sisters: true, authorId: 'member-1'
+    });
+
+    expect(door).toMatchObject({ foyer: 'femme', sisters: true, revision: 0, currentStatusId: 'unvisited' });
+    expect(await repositories.doors.get(door.id)).toMatchObject({ foyer: 'femme', sisters: true });
+    expect(await repositories.visits.listByDoor(door.id)).toEqual(beforeVisits);
+    expect(await markers.pending()).toEqual([expect.objectContaining({ doorId: door.id, foyer: 'femme', sisters: true })]);
   });
 
   it('queues one intent per door, the last toggle winning', async () => {
