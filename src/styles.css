@@ -304,6 +304,16 @@ h2 { font-size: 22px; }
 .door-history strong { font: var(--t-115) var(--font-data); }
 .door-history span, .door-history li { color: var(--ink-soft); font: var(--t-125) var(--font-ui); }
 
+.numbering-options { display: flex; flex-wrap: wrap; gap: 7px; }
+.numbering-options button { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-pill); cursor: pointer; font: var(--t-115) var(--font-data); min-height: var(--touch); padding: 7px 10px; }
+.numbering-options button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.structure-preview { background: var(--sunk); border: 1px solid var(--hairline); display: grid; gap: 7px; padding: 11px; }
+.structure-preview > div { align-items: center; display: flex; flex-wrap: wrap; gap: 5px; }
+.structure-preview strong { color: var(--ink-soft); flex-basis: 38px; font: var(--t-115) var(--font-data); }
+.structure-preview span { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-door); font: var(--t-115) var(--font-data); padding: 6px; }
+.structure-preview small { border-top: 1px solid var(--hairline); color: var(--ink-soft); font: var(--t-10) var(--font-data); padding-top: 8px; }
+.door-delete { background: var(--paper); border: 1px solid var(--st-dnd); border-radius: var(--r-pill); color: var(--st-dnd); cursor: pointer; font: var(--t-115) var(--font-ui); min-height: 26px; padding: 2px 6px; position: absolute; right: -5px; top: -7px; z-index: 2; }
+
 @media (max-width: 760px) {
   .login-shell { grid-template-columns: 1fr; }
   .login-intro { border-bottom: 1px solid #a9a397; border-right: 0; min-height: 42vh; }
