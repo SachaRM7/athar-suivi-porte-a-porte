@@ -11,7 +11,8 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "**/*.pmtiles-journal"
     ],
     "rewrites": [
       {
@@ -83,6 +84,19 @@
           {
             "key": "Cache-Control",
             "value": "public, max-age=3600"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          }
+        ]
+      },
+      {
+        "source": "**/*.pmtiles",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=86400, must-revalidate"
           },
           {
             "key": "X-Content-Type-Options",
