@@ -104,6 +104,16 @@ type WorkspaceMapProps = {
   onBuildingLocationSelect?: (location: GeoPoint) => void;
 };
 
+/**
+ * Le bloc `prefers-reduced-motion` de `tokens.css` ne couvre que les transitions CSS.
+ * Un déplacement de caméra MapLibre est piloté en JavaScript : il doit consulter la
+ * préférence lui-même, sinon la carte continue de glisser pour qui l'a désactivée.
+ */
+function motionDuration(milliseconds: number): number {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return milliseconds;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : milliseconds;
+}
+
 const BUILDING_LIST_FILTERS: readonly { id: BuildingListFilter; label: string }[] = [
   { id: 'all', label: 'Tous' },
   { id: 'todo', label: 'Pas encore fait' },
@@ -579,7 +589,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
         {canEditZones && selectedZone && <button className="secondary-action map-tool danger-action" disabled={editing !== null || savingZone} onClick={() => void deleteSelectedZone()} type="button">Supprimer la zone</button>}
         {canCreateBuildings && <button className="secondary-action map-tool" disabled={editing !== null || placing} onClick={startBuildingPlacement} type="button">Ajouter un bâtiment</button>}
         {editing && <button className="primary-action map-tool" disabled={savingZone} onClick={() => void saveZone()} type="button">Enregistrer la zone</button>}
-        <button aria-label="Cadrer sur les emprises" className="secondary-action map-tool" onClick={() => map.current?.easeTo({ zoom: FOOTPRINT_MIN_ZOOM + 0.4, duration: 450 })} type="button">Voir les emprises</button>
+        <button aria-label="Cadrer sur les emprises" className="secondary-action map-tool" onClick={() => map.current?.easeTo({ zoom: FOOTPRINT_MIN_ZOOM + 0.4, duration: motionDuration(450) })} type="button">Voir les emprises</button>
       </div>
       {canEditZones && (selectedZone || editing) && (
         <div className="zone-properties" aria-label="Proprietes de la zone">
