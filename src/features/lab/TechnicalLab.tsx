@@ -27,7 +27,7 @@ export function TechnicalLab(): ReactElement {
   const [message, setMessage] = useState('Aucun changement en attente');
   const layout = useMemo(() => layoutDoorsAtBuilding(sampleDoors), []);
   const gateway = useMemo(
-    () => new MemoryDoorGateway([{ id: 'd1', currentStatusId: 'unvisited', revision: 1, lastVisitId: null }]),
+    () => new MemoryDoorGateway([{ id: 'd1', currentStatusId: 'unvisited', revision: 1, lastVisitId: null, lastVisitAt: null }]),
     []
   );
   const outbox = useMemo(() => new IndexedDbOutbox('prototype-user'), []);

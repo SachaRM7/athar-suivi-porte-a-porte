@@ -26,7 +26,7 @@ const statuses = new Map<string, Status>([
 function door(overrides: Partial<Door> & Pick<Door, 'id' | 'buildingId' | 'currentStatusId'>): Door {
   return {
     zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: 'spdt',
-    floor: 0, label: '01', sortOrder: 0, active: true, revision: 1, lastVisitId: 'visit-1', createdBy: 'admin-1', sisters: false,
+    floor: 0, label: '01', sortOrder: 0, active: true, revision: 1, lastVisitId: 'visit-1', lastVisitAt: '2026-08-01T09:00:00.000Z', createdBy: 'admin-1', sisters: false,
     ...overrides
   };
 }

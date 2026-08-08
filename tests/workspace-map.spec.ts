@@ -87,7 +87,10 @@ test('opens the building detail as a constrained desktop dialog', async ({ brows
   await page.goto('/technical-map');
   await expect.poll(() => page.getByText('2 batiment(s) visibles').isVisible(), { timeout: 15_000 }).toBe(true);
   const mapBounds = await page.getByLabel('Carte MapLibre des zones').boundingBox();
-  expect(mapBounds?.y).toBeLessThan(350);
+  // WP8 ajoute la bande de filtres et de tri au-dessus de la carte dans cette coquille
+  // technique empilée. La liste ne défile jamais au-delà de deux lignes pour que la carte
+  // ne recule pas d'un cran à chaque bâtiment ; sa hauteur reste la vraie garde.
+  expect(mapBounds?.y).toBeLessThan(400);
   expect(mapBounds?.height).toBeGreaterThan(400);
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
   const dialog = page.getByRole('dialog', { name: 'Detail du batiment' });
@@ -189,5 +192,58 @@ test('keeps the sisters marker on the door across reopenings, without touching i
   await page.getByRole('button', { name: 'Fermer le choix de statut' }).click();
   await page.getByRole('button', { name: 'Porte 12, Pas visite' }).click();
   await expect(page.getByRole('button', { name: 'À confier aux sœurs' })).toHaveAttribute('aria-pressed', 'false');
+  await page.close();
+});
+
+test('reads the ancienneté column, its ninety-day alert and its two filters', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await page.goto('/technical-map');
+  await expect.poll(() => page.getByText('2 batiment(s) visibles').isVisible(), { timeout: 45_000 }).toBe(true);
+  const rows = page.locator('.building-row');
+
+  // Le jeu de démonstration oppose un passage récent à un passage de plus de trois mois.
+  const stale = rows.filter({ hasText: '7 rue des Filatiers' });
+  const fresh = rows.filter({ hasText: '18 rue du Languedoc' });
+  await expect(stale.locator('.building-row-age')).toHaveText(/il y a \d+ mois/);
+  await expect(stale.locator('.building-row-age')).toHaveClass(/alert/);
+  await expect(fresh.locator('.building-row-age')).not.toHaveClass(/alert/);
+
+  // Tri par ancienneté : le plus ancien vient en premier.
+  await expect(rows.first()).toContainText('7 rue des Filatiers');
+  await page.getByLabel('Trier les bâtiments').selectOption('address');
+  await expect(rows.first()).toContainText('18 rue du Languedoc');
+
+  await page.getByRole('button', { name: 'Pas vu > 3 mois' }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('7 rue des Filatiers');
+
+  // « Pas encore fait » est une autre pile : ici, aucun bâtiment décrit sans passage.
+  await page.getByRole('button', { name: 'Pas encore fait' }).click();
+  await expect(rows).toHaveCount(0);
+  await page.getByRole('button', { name: 'Tous' }).click();
+  await expect(rows).toHaveCount(2);
+  await page.close();
+});
+
+test('suggests the cadastral structure without ever creating a door on its own', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await openFieldMap(page);
+
+  // PG31CARMES003 porte 1 niveau et 1 logement : le cadastre décrit un pavillon.
+  await clickOnMap(page, { longitude: 1.45, latitude: 43.608 });
+  await expect(page.getByRole('heading', { name: 'Bâtiment PG31CARMES003' })).toBeVisible();
+  await page.getByRole('button', { name: 'Décrire le bâtiment' }).click();
+  const notice = page.getByText('suggestion d’après le cadastre — à confirmer');
+  await expect(notice).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Créer 1 portes' })).toBeVisible();
+
+  // La mention s'efface dès qu'un frère ajuste un réglage : ce n'est plus le cadastre.
+  await page.getByLabel('Étages au-dessus du rez-de-chaussée').fill('2');
+  await expect(notice).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Créer 3 portes' })).toBeVisible();
+
+  // La suggestion n'écrit rien : tant que personne ne valide, aucune porte n'existe.
+  await page.getByRole('button', { name: 'Fermer la configuration' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Bâtiment non décrit' })).toBeVisible();
   await page.close();
 });

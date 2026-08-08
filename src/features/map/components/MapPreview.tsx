@@ -22,7 +22,7 @@ export function MapPreview(): ReactElement {
   const markers = useMemo(() => new MemoryDoorMarkerOutbox(), []);
   const opened = useOpenedBuilding(repositories);
   const [newBuildingLocation, setNewBuildingLocation] = useState<GeoPoint | null>(null);
-  const changeBuilding = useCallback((building: Building) => opened.select(building, { persisted: true }), [opened]);
+  const changeBuilding = useCallback((building: Building) => opened.select(building, { persisted: true, suggestion: null }), [opened]);
   return (
     <>
       <Suspense fallback={<div className="workspace-map-loading" aria-label="Chargement de la carte" />}>
@@ -46,6 +46,7 @@ export function MapPreview(): ReactElement {
         onClose={opened.close}
         outbox={outbox}
         repositories={repositories}
+        structureSuggestion={opened.suggestion}
       />
       <BuildingCreationSheet authorId="member-1" location={newBuildingLocation} onClose={() => setNewBuildingLocation(null)} onCreated={changeBuilding} repositories={repositories} />
     </>

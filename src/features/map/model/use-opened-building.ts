@@ -1,10 +1,19 @@
 import { useCallback, useRef, useState } from 'react';
 import type { Building } from '../../../domain/workspace/models';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
+import type { CadastralSuggestion } from '../../buildings/model/cadastral-structure';
+
+export type SelectBuildingOptions = {
+  persisted: boolean;
+  /** Attributs cadastraux portés par l'emprise, s'ils existent. Jamais appliqués d'office. */
+  suggestion?: CadastralSuggestion | null;
+};
 
 export type OpenedBuilding = {
   building: Building | null;
-  select(building: Building, options: { persisted: boolean }): void;
+  /** Suggestion de structure du bâtiment ouvert, à confirmer par un humain. */
+  suggestion: CadastralSuggestion | null;
+  select(building: Building, options: SelectBuildingOptions): void;
   close(): void;
   /** Écrit le document du bâtiment uniquement s'il n'existe pas encore. */
   ensureExists(): Promise<void>;
@@ -17,19 +26,22 @@ export type OpenedBuilding = {
  */
 export function useOpenedBuilding(repositories: WorkspaceRepositories): OpenedBuilding {
   const [building, setBuilding] = useState<Building | null>(null);
+  const [suggestion, setSuggestion] = useState<CadastralSuggestion | null>(null);
   const persisted = useRef(true);
   const opened = useRef<Building | null>(null);
 
-  const select = useCallback((next: Building, options: { persisted: boolean }) => {
+  const select = useCallback((next: Building, options: SelectBuildingOptions) => {
     persisted.current = options.persisted;
     opened.current = next;
     setBuilding(next);
+    setSuggestion(options.suggestion ?? null);
   }, []);
 
   const close = useCallback(() => {
     opened.current = null;
     persisted.current = true;
     setBuilding(null);
+    setSuggestion(null);
   }, []);
 
   const ensureExists = useCallback(async () => {
@@ -39,5 +51,5 @@ export function useOpenedBuilding(repositories: WorkspaceRepositories): OpenedBu
     persisted.current = true;
   }, [repositories]);
 
-  return { building, select, close, ensureExists };
+  return { building, suggestion, select, close, ensureExists };
 }

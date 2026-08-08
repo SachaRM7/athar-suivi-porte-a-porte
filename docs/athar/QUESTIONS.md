@@ -5,6 +5,39 @@ Une question résolue est déplacée dans « Tranchées » avec la décision.
 
 ---
 
+### 2026-08-08 — `FirestoreBuildingStructureGateway` écrit `sisters`, que les règles refusent
+
+Repéré en relisant le chemin d'écriture des portes pour WP8, pas corrigé : hors périmètre.
+
+`firestore-building-structure-gateway.ts:80` sérialise une porte par `const { id, location, ...doorData } = door`
+et pose `doorData` tel quel. Le champ domaine `sisters` part donc en base sous ce nom, alors que
+`workspace-codecs.ts` le lit sous `aConfierAuxSoeurs` et que `validDoor()` de `firestore.rules` ne
+liste pas `sisters` dans son `hasOnly`. La création de portes par le dialogue de structure devrait
+donc être refusée par les règles depuis WP4, et une porte ainsi créée reviendrait sans son marqueur.
+
+À vérifier par `npm run test:emulator` (`building-structure.integration.test.ts` couvre ce chemin),
+puis corriger la sérialisation comme le fait `toFirestoreSeedDocuments`. Je n'ai pas pu lancer ces
+tests : les ports d'émulateur étaient pris par la session `dev:local` en cours, et le suite appelle
+`clearFirestore()` sur `athar-local` — elle aurait effacé les données de pilote.
+
+### 2026-08-08 — La liste des bâtiments est empilée au lieu de flotter (WP8)
+
+`04-SCREENS.md` §1 place la liste, ses filtres et son pied dans le **panneau gauche flottant**
+(top 74, bottom 16, largeur 352) posé au-dessus d'une carte plein cadre. `WorkspaceMap.tsx` empile
+au contraire en-tête, outils, propriétés de zone et liste dans une grille verticale, la carte venant
+en dernier.
+
+Tant que la liste tenait en une rangée de pastilles, l'écart restait cosmétique. La colonne
+d'ancienneté de WP8 y ajoute une bande de filtres et de tri, et la carte descend de ~100 px : sur un
+écran de 800 px, son bas passe sous la ligne de flottaison. J'ai compacté la bande et plafonné la
+liste à deux lignes défilantes, et j'ai desserré le seuil `mapBounds.y` de 350 à 400 px dans
+`tests/workspace-map.spec.ts` — la garde de hauteur (`> 400 px`) est inchangée.
+
+C'est un pansement. Le vrai correctif est de faire flotter le panneau au-dessus de la carte comme le
+prescrit `04-SCREENS.md`, ce qui rend le budget vertical sans objet et restaure le principe 1
+(« la carte est le produit »). Hors périmètre de WP8 : cela touche la coquille de WP1 et les huit
+tests e2e de carte. À traiter dans un lot de mise en conformité de l'écran terrain.
+
 ### 2026-08-08 — Deux schémas Firestore parallèles, et un seul est branché
 
 Le dépôt porte deux modèles côte à côte, ce que les règles assument déjà en commentaire :

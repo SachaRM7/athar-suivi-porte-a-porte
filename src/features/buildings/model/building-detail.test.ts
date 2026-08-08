@@ -5,7 +5,7 @@ import type { Door } from '../../../domain/workspace/models';
 const door = (id: string, floor: number, status: string, active = true): Door => ({
   id, buildingId: 'building', zoneId: 'zone', location: { latitude: 43.6, longitude: 1.4 }, geohash: 'spc0',
   floor, label: id, sortOrder: Number(id.replace(/\D/g, '')) || 0, active, currentStatusId: status,
-  revision: 3, lastVisitId: 'visit', createdBy: 'member', sisters: false
+  revision: 3, lastVisitId: 'visit', lastVisitAt: '2026-08-01T09:00:00.000Z', createdBy: 'member', sisters: false
 });
 
 describe('building detail progress', () => {

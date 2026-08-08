@@ -224,9 +224,36 @@ describe('Firestore security rules', () => {
       currentStatusId: 'contacted',
       revision: 1,
       lastVisitId: 'visit-a',
+      lastVisitAt: Timestamp.fromDate(new Date('2026-07-29T12:00:00Z')),
       updatedAt: serverTimestamp()
     });
     await assertSucceeds(batch.commit());
+  });
+
+  it('refuses a door whose ancienneté does not come from its own passage', async () => {
+    await seed();
+    const db = member('member-a');
+    const forged = writeBatch(db);
+    forged.set(doc(db, `${workspace}/visits/visit-forged-date`), visitData());
+    forged.update(doc(db, `${workspace}/doors/door-a`), {
+      currentStatusId: 'contacted',
+      revision: 1,
+      lastVisitId: 'visit-forged-date',
+      // Antidatée pour se soustraire au seuil d'alerte de 90 jours.
+      lastVisitAt: Timestamp.fromDate(new Date('2026-08-08T12:00:00Z')),
+      updatedAt: serverTimestamp()
+    });
+    await assertFails(forged.commit());
+
+    const undated = writeBatch(db);
+    undated.set(doc(db, `${workspace}/visits/visit-undated`), visitData());
+    undated.update(doc(db, `${workspace}/doors/door-a`), {
+      currentStatusId: 'contacted',
+      revision: 1,
+      lastVisitId: 'visit-undated',
+      updatedAt: serverTimestamp()
+    });
+    await assertFails(undated.commit());
   });
 
   it('rejects a direct door mutation, a foreign author and a stale revision', async () => {
@@ -297,6 +324,7 @@ describe('Firestore security rules', () => {
       currentStatusId: 'contacted',
       revision: 1,
       lastVisitId: 'visit-a',
+      lastVisitAt: Timestamp.fromDate(new Date('2026-07-29T12:00:00Z')),
       updatedAt: serverTimestamp()
     });
     await assertSucceeds(batch.commit());
@@ -312,6 +340,7 @@ describe('Firestore security rules', () => {
       currentStatusId: 'contacted',
       revision: 1,
       lastVisitId: 'visit-forbidden-field',
+      lastVisitAt: Timestamp.fromDate(new Date('2026-07-29T12:00:00Z')),
       createdBy: 'member-a',
       updatedAt: serverTimestamp()
     });

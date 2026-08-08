@@ -33,7 +33,7 @@ export function toFirestoreSeedDocuments(snapshot: WorkspaceSnapshot): Firestore
     })),
     ...snapshot.zoneStats.map(({ zoneId, ...stats }) => ({ path: workspaceDocumentPath(root, 'zoneStats', zoneId), data: { ...stats, updatedAt: timestamp(stats.updatedAt) } })),
     ...snapshot.buildings.map(({ id, location, ...building }) => ({ path: workspaceDocumentPath(root, 'buildings', id), data: { ...building, location: new GeoPoint(location.latitude, location.longitude) } })),
-    ...snapshot.doors.map(({ id, location, sisters, ...door }) => ({ path: workspaceDocumentPath(root, 'doors', id), data: { ...door, location: new GeoPoint(location.latitude, location.longitude), aConfierAuxSoeurs: sisters } })),
+    ...snapshot.doors.map(({ id, location, sisters, lastVisitAt, ...door }) => ({ path: workspaceDocumentPath(root, 'doors', id), data: { ...door, location: new GeoPoint(location.latitude, location.longitude), lastVisitAt: lastVisitAt ? timestamp(lastVisitAt) : null, aConfierAuxSoeurs: sisters } })),
     ...snapshot.visits.map(({ id, occurredAt, syncedAt, ...visit }) => ({ path: workspaceDocumentPath(root, 'visits', id), data: { ...visit, occurredAt: timestamp(occurredAt), syncedAt: syncedAt ? timestamp(syncedAt) : null } }))
   ];
 }
@@ -42,6 +42,9 @@ export function fromFirestoreDoor(id: string, data: DocumentData): Door {
   if (!(data.location instanceof GeoPoint)) throw new Error('Door location must be a Firestore GeoPoint.');
   if (typeof data.active !== 'boolean') throw new Error('Door active state must be boolean.');
   if (data.lastVisitId !== null && typeof data.lastVisitId !== 'string') throw new Error('Door last visit must be a string or null.');
+  if (data.lastVisitAt !== null && data.lastVisitAt !== undefined && !(data.lastVisitAt instanceof Timestamp)) {
+    throw new Error('Door last visit date must be a Firestore Timestamp or null.');
+  }
   const door: Door = {
     id,
     buildingId: requiredString(data, 'buildingId'),
@@ -55,6 +58,9 @@ export function fromFirestoreDoor(id: string, data: DocumentData): Door {
     currentStatusId: requiredString(data, 'currentStatusId'),
     revision: requiredNumber(data, 'revision'),
     lastVisitId: data.lastVisitId,
+    // Absente des portes écrites avant WP8 : une porte sans date n'est pas invalide,
+    // elle se lit « jamais vu » comme n'importe quelle porte sans passage.
+    lastVisitAt: data.lastVisitId && data.lastVisitAt instanceof Timestamp ? data.lastVisitAt.toDate().toISOString() : null,
     createdBy: requiredString(data, 'createdBy'),
     // Le champ garde son nom français du `02-DATA-MODEL.md`. Absent des portes créées
     // avant ce lot : une porte sans marqueur n'est pas une porte invalide.

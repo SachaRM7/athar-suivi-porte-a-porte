@@ -374,3 +374,27 @@ h2 { font-size: 22px; }
   .status-swatch span { flex-basis: 24px; height: 24px; }
   .structure-fields { grid-template-columns: 1fr 1fr 1fr; }
 }
+
+/*
+ * WP8 — ancienneté et pré-remplissage.
+ *
+ * La colonne d'ancienneté répond à la seule question qui compte sur le terrain :
+ * depuis quand personne n'est passé. L'ambre `--st-away` n'apparaît qu'au-delà du seuil
+ * de 90 jours ; « jamais vu » reste en gris, parce que ce n'est pas un retard.
+ */
+.building-list { border-bottom: 1px solid var(--hairline); display: grid; gap: 7px; grid-area: buildings; padding: 9px clamp(18px, 4vw, 56px); }
+.building-list-controls { align-items: end; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.building-list-filters { display: flex; flex-wrap: wrap; gap: 7px; }
+.building-list-filter { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-pill); color: var(--ink); cursor: pointer; font: var(--t-125) var(--font-ui); min-height: var(--touch); padding: 7px 13px; }
+.building-list-filter[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.building-list-sort { align-items: center; color: var(--ink-soft); display: inline-flex; font: var(--t-115) var(--font-ui); gap: 8px; }
+.building-list-sort select { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); font: var(--t-125) var(--font-ui); min-height: var(--touch); padding: 7px 10px; }
+.building-list-empty { color: var(--ink-soft); font: var(--t-125) var(--font-ui); line-height: 1.4; margin: 0; }
+.building-list-rows { display: grid; gap: 5px; list-style: none; margin: 0; max-height: 93px; overflow-y: auto; padding: 0; }
+.building-row { align-items: center; background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); cursor: pointer; display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) auto auto; min-height: var(--touch); padding: 8px 12px; text-align: left; width: 100%; }
+.building-row-address { font: var(--t-135) var(--font-data); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.building-row-progress { color: var(--ink-soft); font: var(--t-115) var(--font-data); }
+.building-row-age { color: var(--ink-soft); font: var(--t-115) var(--font-data); min-width: 84px; text-align: right; }
+.building-row-age.alert { color: var(--st-away); }
+/* Le cadastre propose, il ne dispose : la mention accompagne des steppers modifiables. */
+.structure-suggestion { color: var(--ink-soft); font: var(--t-115) var(--font-ui); margin: 0; }

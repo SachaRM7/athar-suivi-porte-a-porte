@@ -48,7 +48,7 @@ describe('IndexedDbOutbox', () => {
   });
 
   it('keeps dependent revisions blocked after a conflict and a reload', async () => {
-    const initialDoor = { id: 'door-a', currentStatusId: 'unvisited' as const, revision: 4, lastVisitId: null };
+    const initialDoor = { id: 'door-a', currentStatusId: 'unvisited' as const, revision: 4, lastVisitId: null, lastVisitAt: null };
     const gateway = new MemoryDoorGateway([initialDoor]);
     const firstSession = new IndexedDbOutbox('member-a');
     const ids = ['visit-local-1', 'visit-local-2'];
@@ -69,7 +69,7 @@ describe('IndexedDbOutbox', () => {
     const outbox = new IndexedDbOutbox('member-a');
     await outbox.add({ ...intent, commandId: 'visit-conflict', expectedRevision: 4 });
     await outbox.add({ ...intent, commandId: 'visit-dependent', expectedRevision: 5 });
-    await outbox.markConflict('visit-conflict', { id: 'door-a', currentStatusId: 'contacted', revision: 5, lastVisitId: 'remote' });
+    await outbox.markConflict('visit-conflict', { id: 'door-a', currentStatusId: 'contacted', revision: 5, lastVisitId: 'remote', lastVisitAt: '2026-08-03T08:00:00.000Z' });
 
     await outbox.reapplyConflict('visit-conflict');
     const reloaded = new IndexedDbOutbox('member-a');
@@ -77,7 +77,7 @@ describe('IndexedDbOutbox', () => {
       { commandId: 'visit-conflict', expectedRevision: 5 },
       { commandId: 'visit-dependent', expectedRevision: 6 }
     ]);
-    await reloaded.markConflict('visit-conflict', { id: 'door-a', currentStatusId: 'contacted', revision: 6, lastVisitId: 'remote-2' });
+    await reloaded.markConflict('visit-conflict', { id: 'door-a', currentStatusId: 'contacted', revision: 6, lastVisitId: 'remote-2', lastVisitAt: '2026-08-03T08:05:00.000Z' });
     await reloaded.abandonConflict('visit-conflict');
     await expect(reloaded.all()).resolves.toEqual([]);
   });
@@ -99,7 +99,7 @@ describe('IndexedDbOutbox', () => {
     await firstTab.add(intent);
 
     await Promise.allSettled([
-      firstTab.markConflict(intent.commandId, { id: 'door-a', currentStatusId: 'contacted', revision: 5, lastVisitId: 'remote' }),
+      firstTab.markConflict(intent.commandId, { id: 'door-a', currentStatusId: 'contacted', revision: 5, lastVisitId: 'remote', lastVisitAt: '2026-08-03T08:00:00.000Z' }),
       clearIndexedDbOutboxForUser('member-a')
     ]);
 
@@ -110,7 +110,7 @@ describe('IndexedDbOutbox', () => {
     const firstTab = new IndexedDbOutbox('member-a');
     const secondTab = new IndexedDbOutbox('member-a');
     await firstTab.add(intent);
-    await firstTab.markConflict(intent.commandId, { id: 'door-a', currentStatusId: 'contacted', revision: 5, lastVisitId: 'remote' });
+    await firstTab.markConflict(intent.commandId, { id: 'door-a', currentStatusId: 'contacted', revision: 5, lastVisitId: 'remote', lastVisitAt: '2026-08-03T08:00:00.000Z' });
 
     const outcomes = await Promise.allSettled([
       firstTab.reapplyConflict(intent.commandId),

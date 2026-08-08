@@ -82,8 +82,8 @@ describe('terrain session repositories', () => {
     await repositories.commitVisitAndDoor({
       id: 'visit-local-newer', doorId: door.id, statusId: 'contacted', note: '', authorId: member.id,
       occurredAt: '2026-08-06T10:01:00.000Z', syncedAt: null, doorRevision: 2, replacesVisitId: null, voidedAt: null
-    }, { ...door, currentStatusId: 'contacted', revision: 2, lastVisitId: 'visit-local-newer' });
-    await repositories.reconcileDoorSnapshot({ id: door.id, currentStatusId: 'retry', revision: 1, lastVisitId: 'visit-stale' });
+    }, { ...door, currentStatusId: 'contacted', revision: 2, lastVisitId: 'visit-local-newer', lastVisitAt: '2026-08-06T10:01:00.000Z' });
+    await repositories.reconcileDoorSnapshot({ id: door.id, currentStatusId: 'retry', revision: 1, lastVisitId: 'visit-stale', lastVisitAt: '2026-08-06T09:00:00.000Z' });
 
     await expect(repositories.doors.get(door.id)).resolves.toMatchObject({
       currentStatusId: 'contacted', revision: 2, lastVisitId: 'visit-local-newer'
@@ -112,9 +112,9 @@ describe('terrain session repositories', () => {
       id: 'visit-server', doorId: serverBase.id, statusId: 'contacted', note: '', authorId: member.id,
       occurredAt: '2026-08-06T10:02:00.000Z', syncedAt: '2026-08-06T10:02:00.000Z', doorRevision: 1,
       replacesVisitId: null, voidedAt: null
-    }, { ...serverBase, currentStatusId: 'contacted', revision: 1, lastVisitId: 'visit-server' });
+    }, { ...serverBase, currentStatusId: 'contacted', revision: 1, lastVisitId: 'visit-server', lastVisitAt: '2026-08-06T10:02:00.000Z' });
     await outbox.markConflict('visit-conflict', {
-      id: serverBase.id, currentStatusId: 'contacted', revision: 1, lastVisitId: 'visit-server'
+      id: serverBase.id, currentStatusId: 'contacted', revision: 1, lastVisitId: 'visit-server', lastVisitAt: '2026-08-06T10:02:00.000Z'
     });
 
     await outbox.abandonConflict('visit-conflict');

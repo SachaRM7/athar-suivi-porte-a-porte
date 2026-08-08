@@ -92,11 +92,12 @@ describe('building structure against emulator rules', () => {
     const batch = writeBatch(db);
     batch.update(doc(db, `${workspace}/buildings/building-a`), { structureRevision: 5, updatedAt: serverTimestamp() });
     batch.set(doc(db, `${workspace}/doors/door-10`), doorData(10, { currentStatusId: 'unvisited', revision: 0, lastVisitId: null }));
+    const concurrentAt = Timestamp.now();
     batch.set(doc(db, `${workspace}/visits/visit-structure-concurrent`), {
-      doorId: 'door-0', statusId: 'retry', note: '', authorId: 'admin-a', occurredAt: Timestamp.now(), syncedAt: serverTimestamp(), doorRevision: 2
+      doorId: 'door-0', statusId: 'retry', note: '', authorId: 'admin-a', occurredAt: concurrentAt, syncedAt: serverTimestamp(), doorRevision: 2
     });
     batch.update(doc(db, `${workspace}/doors/door-0`), {
-      currentStatusId: 'retry', revision: 2, lastVisitId: 'visit-structure-concurrent', updatedAt: serverTimestamp()
+      currentStatusId: 'retry', revision: 2, lastVisitId: 'visit-structure-concurrent', lastVisitAt: concurrentAt, updatedAt: serverTimestamp()
     });
 
     await assertSucceeds(batch.commit());
@@ -114,11 +115,12 @@ describe('building structure against emulator rules', () => {
 
     const db = testEnv.authenticatedContext('member-a').firestore();
     const delayedVisit = writeBatch(db);
+    const delayedAt = Timestamp.now();
     delayedVisit.set(doc(db, `${workspace}/visits/visit-before-archive`), {
-      doorId: 'door-0', statusId: 'retry', note: '', authorId: 'member-a', occurredAt: Timestamp.now(), syncedAt: serverTimestamp(), doorRevision: 2
+      doorId: 'door-0', statusId: 'retry', note: '', authorId: 'member-a', occurredAt: delayedAt, syncedAt: serverTimestamp(), doorRevision: 2
     });
     delayedVisit.update(doc(db, `${workspace}/doors/door-0`), {
-      currentStatusId: 'retry', revision: 2, lastVisitId: 'visit-before-archive', updatedAt: serverTimestamp()
+      currentStatusId: 'retry', revision: 2, lastVisitId: 'visit-before-archive', lastVisitAt: delayedAt, updatedAt: serverTimestamp()
     });
     await assertSucceeds(delayedVisit.commit());
 

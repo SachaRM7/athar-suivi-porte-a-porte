@@ -6,7 +6,8 @@ const initialDoor: DoorSnapshot = {
   id: 'door-a',
   currentStatusId: 'unvisited',
   revision: 4,
-  lastVisitId: null
+  lastVisitId: null,
+  lastVisitAt: null
 };
 
 describe('offline synchronization prototype', () => {

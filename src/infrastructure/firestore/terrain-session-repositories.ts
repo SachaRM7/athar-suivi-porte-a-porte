@@ -97,7 +97,8 @@ export function createTerrainSessionRepositories(input: {
         ...projected,
         currentStatusId: entry.statusId,
         revision: entry.expectedRevision + 1,
-        lastVisitId: entry.commandId
+        lastVisitId: entry.commandId,
+        lastVisitAt: entry.createdAt
       };
     }
     return projected;
@@ -230,7 +231,8 @@ export function createTerrainSessionRepositories(input: {
         ...existing,
         currentStatusId: snapshot.currentStatusId,
         revision: snapshot.revision,
-        lastVisitId: snapshot.lastVisitId
+        lastVisitId: snapshot.lastVisitId,
+        lastVisitAt: snapshot.lastVisitAt
       });
     },
     async refreshDoor(doorId) {

@@ -139,8 +139,11 @@ service cloud.firestore {
     function validDoor() {
       let data = request.resource.data;
       return data.keys().hasAll(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'createdBy']) &&
-        data.keys().hasOnly(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'createdBy', 'updatedAt', 'aConfierAuxSoeurs']) &&
+        data.keys().hasOnly(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'lastVisitAt', 'createdBy', 'updatedAt', 'aConfierAuxSoeurs']) &&
         (!data.keys().hasAny(['aConfierAuxSoeurs']) || data.aConfierAuxSoeurs is bool) &&
+        // Ancienneté : absente des portes écrites avant WP8, jamais posée sans passage.
+        (data.get('lastVisitAt', null) == null || data.lastVisitAt is timestamp) &&
+        (data.lastVisitId != null || data.get('lastVisitAt', null) == null) &&
         data.buildingId is string && data.zoneId is string && data.location is latlng &&
         data.geohash is string && data.geohash.size() >= 4 && data.geohash.size() <= 12 &&
         data.floor is int && data.floor >= -5 && data.floor <= 200 &&
@@ -213,10 +216,12 @@ service cloud.firestore {
         request.resource.data.location == get(/databases/$(database)/documents/workspaces/$(workspaceId)/buildings/$(request.resource.data.buildingId)).data.location &&
         request.resource.data.geohash == get(/databases/$(database)/documents/workspaces/$(workspaceId)/buildings/$(request.resource.data.buildingId)).data.geohash;
       allow update: if activeMember(workspaceId) && validDoor() && (
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentStatusId', 'revision', 'lastVisitId', 'updatedAt']) &&
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentStatusId', 'revision', 'lastVisitId', 'lastVisitAt', 'updatedAt']) &&
           request.resource.data.revision == resource.data.revision + 1 && request.resource.data.lastVisitId is string &&
           getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.doorId == doorId &&
           getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.statusId == request.resource.data.currentStatusId &&
+          // L'ancienneté affichée est celle du passage : la porte ne peut pas se dater elle-même.
+          request.resource.data.get('lastVisitAt', null) == getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.occurredAt &&
           getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/visits/$(request.resource.data.lastVisitId)).data.doorRevision == request.resource.data.revision) ||
         (activeMember(workspaceId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['floor', 'label', 'sortOrder', 'active', 'updatedAt']) &&
           structureRevisionAdvanced(workspaceId, resource.data.buildingId)) ||
@@ -226,7 +231,8 @@ service cloud.firestore {
           request.resource.data.aConfierAuxSoeurs is bool &&
           request.resource.data.revision == resource.data.revision &&
           request.resource.data.currentStatusId == resource.data.currentStatusId &&
-          request.resource.data.lastVisitId == resource.data.lastVisitId)
+          request.resource.data.lastVisitId == resource.data.lastVisitId &&
+          request.resource.data.get('lastVisitAt', null) == resource.data.get('lastVisitAt', null))
       );
       allow delete: if admin(workspaceId);
     }

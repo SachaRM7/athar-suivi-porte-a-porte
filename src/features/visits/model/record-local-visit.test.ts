@@ -63,7 +63,7 @@ describe('local field visit recording', () => {
       expectedRevision: 0,
       createdAt: '2026-08-02T09:00:00.000Z'
     });
-    await outbox.markConflict('visit-conflict', { id: 'door-dalbad-02', currentStatusId: 'contacted', revision: 1, lastVisitId: 'remote-visit' });
+    await outbox.markConflict('visit-conflict', { id: 'door-dalbad-02', currentStatusId: 'contacted', revision: 1, lastVisitId: 'remote-visit', lastVisitAt: '2026-08-02T08:00:00.000Z' });
 
     await expect(recordLocalVisit(repositories, outbox, {
       authorId: 'member-1',

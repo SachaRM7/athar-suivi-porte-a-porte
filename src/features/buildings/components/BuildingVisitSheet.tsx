@@ -10,6 +10,7 @@ import { markDoorForSisters } from '../../visits/model/mark-door-for-sisters';
 import type { DoorMarkerOutbox } from '../../../domain/sync/door-marker-outbox';
 import type { FieldVisitSync } from '../../visits/model/use-field-visit-sync';
 import { isTrustedDevice, setTrustedDevice } from '../../../infrastructure/offline/device-storage';
+import { CADASTRAL_SUGGESTION_NOTICE, type CadastralSuggestion } from '../model/cadastral-structure';
 
 type BuildingVisitSheetProps = {
   authorId: string;
@@ -19,6 +20,11 @@ type BuildingVisitSheetProps = {
   /** File dédiée du marqueur « à confier aux sœurs » : elle ne transporte aucun passage. */
   markers: DoorMarkerOutbox;
   repositories: WorkspaceRepositories;
+  /**
+   * Attributs cadastraux de l'emprise. Ils pré-remplissent les steppers du dialogue de
+   * structure et rien d'autre : aucune porte n'est créée sans validation humaine.
+   */
+  structureSuggestion?: CadastralSuggestion | null;
   sync?: FieldVisitSync;
   /**
    * Matérialise le document Firestore d'un bâtiment détecté mais jamais visité.
@@ -66,7 +72,7 @@ function manualTargetLine(target: DoorStructureTarget): string {
   return `${target.floor} | ${target.label} | ${identity}`;
 }
 
-export function BuildingVisitSheet({ authorId, building, canEditStructure, outbox, markers, repositories, sync, ensureBuildingExists, onBuildingChange, onClose }: BuildingVisitSheetProps): ReactElement | null {
+export function BuildingVisitSheet({ authorId, building, canEditStructure, outbox, markers, repositories, structureSuggestion = null, sync, ensureBuildingExists, onBuildingChange, onClose }: BuildingVisitSheetProps): ReactElement | null {
   const [doors, setDoors] = useState<readonly Door[]>([]);
   const [structureDoors, setStructureDoors] = useState<readonly Door[]>([]);
   const [statuses, setStatuses] = useState<readonly Status[]>([]);
@@ -85,8 +91,13 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
   const [structureMode, setStructureMode] = useState<'quick-floor' | 'manage' | null>(null);
   const [quickDoorCount, setQuickDoorCount] = useState('4');
   const [quickFirstLabel, setQuickFirstLabel] = useState('101');
-  const [floorCount, setFloorCount] = useState('2');
-  const [doorsPerFloor, setDoorsPerFloor] = useState('4');
+  /**
+   * `null` signifie « personne n'a encore touché aux réglages » : les steppers reflètent
+   * alors la suggestion cadastrale, ou les valeurs par défaut quand elle manque. Le brouillon
+   * est dérivé au rendu plutôt que recopié par un effet, et porte le bâtiment auquel il
+   * appartient pour qu'ouvrir un autre immeuble reparte de sa propre suggestion.
+   */
+  const [structureDraft, setStructureDraft] = useState<{ buildingId: string; floorCount: string; doorsPerFloor: string } | null>(null);
   const [manualPlan, setManualPlan] = useState('');
   const [showManual, setShowManual] = useState(false);
   const [numbering, setNumbering] = useState<'floor' | 'hundreds' | 'serial'>('floor');
@@ -137,6 +148,20 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
       setStructureDoors(applySnapshots);
     });
   }, [sync?.reconciledDoors]);
+
+  /**
+   * Pré-remplissage des steppers depuis le cadastre. Il pose des valeurs de départ et
+   * s'arrête là : le bouton « Créer N portes » reste le seul geste qui écrit.
+   */
+  const openedBuildingId = building?.id ?? null;
+  const draft = structureDraft?.buildingId === openedBuildingId ? structureDraft : null;
+  const floorCount = draft?.floorCount ?? (structureSuggestion ? String(structureSuggestion.floorsAboveGround) : '2');
+  const doorsPerFloor = draft?.doorsPerFloor ?? (structureSuggestion ? String(structureSuggestion.doorsPerFloor) : '4');
+  // La mention disparaît dès que quelqu'un ajuste un réglage : ce n'est plus le cadastre.
+  const showsCadastralNotice = structureSuggestion !== null && draft === null;
+  const editStructureDraft = (changes: Partial<{ floorCount: string; doorsPerFloor: string }>) => {
+    setStructureDraft({ buildingId: openedBuildingId ?? '', floorCount, doorsPerFloor, ...changes });
+  };
 
   const statusesById = useMemo(() => byId(statuses), [statuses]);
   const floors = useMemo(() => floorProgress(doors), [doors]);
@@ -414,7 +439,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
               <div className="quick-door-fields"><label>Combien<input aria-label="Nombre de portes a ajouter" min="1" max="50" onChange={(event) => setQuickDoorCount(event.target.value)} type="number" value={quickDoorCount} /></label><label>Premier numero<input aria-label="Premier numero de porte" min="0" onChange={(event) => setQuickFirstLabel(event.target.value)} type="number" value={quickFirstLabel} /></label></div>
               <button className="primary-action" onClick={() => void addDoorsToCurrentFloor()} type="button">Generer les portes</button>
             </> : <div className="structure-panel">
-              <div className="structure-fields"><label>Étages au-dessus du rez-de-chaussée<input min="0" onChange={(event) => setFloorCount(event.target.value)} type="number" value={floorCount} /><em>étages · RDC compris = {Math.max(1, Number(floorCount) + 1)} niveaux</em></label><label>Portes par étage<input min="1" onChange={(event) => setDoorsPerFloor(event.target.value)} type="number" value={doorsPerFloor} /><em>modifiable étage par étage</em></label></div>
+              {showsCadastralNotice && <p className="structure-suggestion">{CADASTRAL_SUGGESTION_NOTICE}</p>}
+              <div className="structure-fields"><label>Étages au-dessus du rez-de-chaussée<input min="0" onChange={(event) => editStructureDraft({ floorCount: event.target.value })} type="number" value={floorCount} /><em>étages · RDC compris = {Math.max(1, Number(floorCount) + 1)} niveaux</em></label><label>Portes par étage<input min="1" onChange={(event) => editStructureDraft({ doorsPerFloor: event.target.value })} type="number" value={doorsPerFloor} /><em>modifiable étage par étage</em></label></div>
               <div className="numbering-options" aria-label="Numérotation"><button aria-pressed={numbering === 'floor'} onClick={() => setNumbering('floor')} type="button">01, 02 · 11, 12</button><button aria-pressed={numbering === 'hundreds'} onClick={() => setNumbering('hundreds')} type="button">101, 102 · 201</button><button aria-pressed={numbering === 'serial'} onClick={() => setNumbering('serial')} type="button">1 à {structurePreview.flat().length}, en suite</button></div>
               <section className="structure-preview" aria-label="Aperçu vivant"><p className="eyebrow">Aperçu</p>{structurePreview.slice().reverse().map((labels, reverseIndex) => { const floorNumber = structurePreview.length - reverseIndex - 1; return <div key={floorNumber}><strong>{floorLabel(floorNumber)}</strong>{labels.map((label) => <span key={label}>{label}</span>)}</div>; })}<small>Rue · entrée principale</small></section>
               <button className="primary-action" onClick={() => void runStructure(() => structurePreview.flatMap((labels, floorIndex) => labels.map((label, index) => ({ floor: floorIndex, label, sortOrder: floorIndex * labels.length + index, newDoorId: `door-${crypto.randomUUID()}` }))))} type="button">Créer {structurePreview.flat().length} portes</button>

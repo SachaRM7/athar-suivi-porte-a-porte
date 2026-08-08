@@ -74,7 +74,8 @@ export async function recordLocalVisit(
     ...door,
     currentStatusId: input.statusId,
     revision: door.revision + 1,
-    lastVisitId: visit.id
+    lastVisitId: visit.id,
+    lastVisitAt: occurredAt
   };
 
   assertDoor(nextDoor);
@@ -122,7 +123,7 @@ export async function recordLocalVisits(
       note: normalizeNote(input.note), authorId: input.authorId, occurredAt, syncedAt: null,
       doorRevision: door.revision + 1, replacesVisitId: null, voidedAt: null
     };
-    const nextDoor: Door = { ...door, currentStatusId: input.statusId, revision: door.revision + 1, lastVisitId: visit.id };
+    const nextDoor: Door = { ...door, currentStatusId: input.statusId, revision: door.revision + 1, lastVisitId: visit.id, lastVisitAt: occurredAt };
     assertDoor(nextDoor);
     assertVisit(visit);
     return { door: nextDoor, visit };

@@ -62,6 +62,10 @@ export function assertDoor(door: Door, building?: Building): void {
   if (typeof door.active !== 'boolean') throw new Error('Door active state must be boolean.');
   if (typeof door.sisters !== 'boolean') throw new Error('Door sisters marker must be boolean.');
   if (!Number.isInteger(door.revision) || door.revision < 0) throw new Error('Door revision must be a non-negative integer.');
+  if (door.lastVisitAt !== null && Number.isNaN(Date.parse(door.lastVisitAt))) throw new Error('Door last visit date must be a date or null.');
+  // Une porte sans passage n'a pas d'ancienneté : le gris « pas encore fait » vient de
+  // l'absence, jamais d'une date posée d'office.
+  if (door.lastVisitId === null && door.lastVisitAt !== null) throw new Error('A door without a passage cannot carry a last visit date.');
   assertGeoPoint(door.location, 'door.location');
   if (!GEOHASH.test(door.geohash)) throw new Error('Door geohash is invalid.');
   if (building && (door.buildingId !== building.id || door.zoneId !== building.zoneId || door.geohash !== building.geohash || door.location.latitude !== building.location.latitude || door.location.longitude !== building.location.longitude)) {

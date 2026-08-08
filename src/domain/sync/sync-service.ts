@@ -66,7 +66,8 @@ export class MemoryDoorGateway implements DoorWriteGateway {
       ...door,
       currentStatusId: intent.statusId,
       revision: door.revision + 1,
-      lastVisitId: intent.commandId
+      lastVisitId: intent.commandId,
+      lastVisitAt: intent.createdAt
     };
     this.doors.set(nextDoor.id, nextDoor);
     return { ...nextDoor };

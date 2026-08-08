@@ -143,6 +143,7 @@ export function buildBuildingStructureDiff(input: BuildStructureDiffInput): Buil
         currentStatusId: 'unvisited',
         revision: 0,
         lastVisitId: null,
+        lastVisitAt: null,
         createdBy: input.authorId,
         sisters: false
       });

@@ -79,6 +79,12 @@ export type Door = {
   currentStatusId: StatusId;
   revision: number;
   lastVisitId: EntityId | null;
+  /**
+   * `door.derived.dernierPassageAt` de `02-DATA-MODEL.md` : date du passage le plus récent.
+   * C'est l'axe de lecture du terrain — la question utile n'est pas « quoi » mais
+   * « depuis quand ». `null` tant qu'aucun passage n'a été enregistré.
+   */
+  lastVisitAt: string | null;
   createdBy: UserId;
   /**
    * Marqueur « à confier aux sœurs ». Donnée sensible : elle n'apparaît jamais dans une

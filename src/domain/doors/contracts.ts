@@ -5,6 +5,8 @@ export type DoorSnapshot = {
   currentStatusId: DoorStatusId;
   revision: number;
   lastVisitId: string | null;
+  /** Date du passage le plus récent, pour que l'ancienneté survive à une réconciliation. */
+  lastVisitAt: string | null;
 };
 
 export type VisitIntent = {

@@ -57,6 +57,9 @@ export class FirestoreDoorGateway implements DoorWriteGateway {
       currentStatusId: intent.statusId,
       revision: intent.expectedRevision + 1,
       lastVisitId: intent.commandId,
+      // Même horodatage que `occurredAt` du passage : l'ancienneté lue sur le terrain est
+      // celle du passage, pas celle de la synchronisation.
+      lastVisitAt: Timestamp.fromDate(new Date(intent.createdAt)),
       updatedAt: serverTimestamp()
     });
 
@@ -66,7 +69,8 @@ export class FirestoreDoorGateway implements DoorWriteGateway {
         id: intent.doorId,
         currentStatusId: intent.statusId,
         revision: intent.expectedRevision + 1,
-        lastVisitId: intent.commandId
+        lastVisitId: intent.commandId,
+        lastVisitAt: intent.createdAt
       };
     } catch (error) {
       const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : null;
@@ -91,7 +95,8 @@ export class FirestoreDoorGateway implements DoorWriteGateway {
           id: intent.doorId,
           currentStatusId: serverDoor.data().currentStatusId,
           revision: Number(serverDoor.data().revision),
-          lastVisitId: intent.commandId
+          lastVisitId: intent.commandId,
+          lastVisitAt: intent.createdAt
         };
       }
       const status = await getDocFromServer(doc(this.db, `${workspace}/statuses/${intent.statusId}`));
@@ -99,11 +104,13 @@ export class FirestoreDoorGateway implements DoorWriteGateway {
         throw new SyncRejectedError('invalid-intent', 'The queued visit is invalid.');
       }
       if (serverDoor.exists() && Number(serverDoor.data().revision) > intent.expectedRevision) {
+        const serverVisitAt = serverDoor.data().lastVisitAt;
         throw new RevisionConflictError({
           id: intent.doorId,
           currentStatusId: serverDoor.data().currentStatusId,
           revision: Number(serverDoor.data().revision),
-          lastVisitId: serverDoor.data().lastVisitId ?? null
+          lastVisitId: serverDoor.data().lastVisitId ?? null,
+          lastVisitAt: serverVisitAt instanceof Timestamp ? serverVisitAt.toDate().toISOString() : null
         });
       }
       throw new SyncRejectedError('security', `Firestore rejected the queued visit: ${String(error)}`);

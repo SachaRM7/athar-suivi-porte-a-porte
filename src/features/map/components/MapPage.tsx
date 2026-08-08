@@ -55,7 +55,8 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
   }, [member, outbox]);
   const sync = useFieldVisitSync(member.id, outbox, markers, repositories);
   const opened = useOpenedBuilding(repositories);
-  const changeBuilding = useCallback((building: Building) => opened.select(building, { persisted: true }), [opened]);
+  // La structure vient d'être écrite : la suggestion cadastrale n'a plus rien à proposer.
+  const changeBuilding = useCallback((building: Building) => opened.select(building, { persisted: true, suggestion: null }), [opened]);
   const initialAdmin = useMemo(() => {
     const client = getFirebaseClient();
     return (code: string) => claimInitialAdminWithFunction(client.functions, client.auth.currentUser, code);
@@ -77,6 +78,7 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
         onClose={opened.close}
         outbox={outbox}
         repositories={repositories}
+        structureSuggestion={opened.suggestion}
         sync={sync}
       />
       <BuildingCreationSheet authorId={member.id} location={newBuildingLocation} onClose={() => setNewBuildingLocation(null)} onCreated={changeBuilding} repositories={repositories} />

@@ -32,6 +32,16 @@ import {
   zoneProgressLabel,
   type FootprintContext,
 } from '../model/footprints';
+import {
+  buildingListEntries,
+  matchesBuildingListFilter,
+  sortBuildingList,
+  type BuildingListEntry,
+  type BuildingListFilter,
+  type BuildingListSort,
+} from '../../buildings/model/building-staleness';
+import { cadastralSuggestion, type CadastralSuggestion } from '../../buildings/model/cadastral-structure';
+import type { SelectBuildingOptions } from '../model/use-opened-building';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 class LocalPackageSource implements Source {
@@ -90,9 +100,15 @@ type WorkspaceMapProps = {
   canCreateBuildings?: boolean;
   /** Archives PMTiles essayées dans l'ordre ; la première disponible fournit les emprises. */
   footprintArchives?: readonly string[];
-  onBuildingSelect?: (building: Building, options: { persisted: boolean }) => void;
+  onBuildingSelect?: (building: Building, options: SelectBuildingOptions) => void;
   onBuildingLocationSelect?: (location: GeoPoint) => void;
 };
+
+const BUILDING_LIST_FILTERS: readonly { id: BuildingListFilter; label: string }[] = [
+  { id: 'all', label: 'Tous' },
+  { id: 'todo', label: 'Pas encore fait' },
+  { id: 'stale', label: 'Pas vu > 3 mois' }
+];
 
 async function firstAvailableArchive(urls: readonly string[]): Promise<string | null> {
   for (const url of urls) {
@@ -161,8 +177,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
   const zones = useRef<readonly Zone[]>([]);
   const selectedZoneRef = useRef<string | null>(null);
   const footprintContext = useRef<FootprintContext>({ zone: null, buildings: new Map(), doorsByBuilding: new Map(), statuses: new Map(), untouchedColor: UNTOUCHED_COLOR });
+  /** Suggestions cadastrales lues sur les tuiles, indexées par ID-RNB. Jamais appliquées seules. */
+  const footprintSuggestions = useRef(new Map<string, CadastralSuggestion>());
   const [zoneList, setZoneList] = useState<readonly Zone[]>([]);
-  const [visibleBuildings, setVisibleBuildings] = useState<readonly Building[]>([]);
+  const [visibleBuildings, setVisibleBuildings] = useState<readonly BuildingListEntry[]>([]);
+  const [listFilter, setListFilter] = useState<BuildingListFilter>('all');
+  const [listSort, setListSort] = useState<BuildingListSort>('staleness');
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [visibleBuildingCount, setVisibleBuildingCount] = useState(0);
   const [attachedBuildingCount, setAttachedBuildingCount] = useState<number | null>(null);
@@ -178,6 +198,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
   const [message, setMessage] = useState('Fond Toulouse local pret.');
 
   const selectedZone = zoneList.find((zone) => zone.id === selectedZoneId) ?? null;
+  const listedBuildings = sortBuildingList(visibleBuildings.filter((entry) => matchesBuildingListFilter(entry, listFilter)), listSort);
   const draftZoneName = zoneDraft?.name ?? selectedZone?.name ?? '';
   const draftZoneColor = zoneDraft?.color ?? selectedZone?.color ?? DEFAULT_ZONE_COLOR;
 
@@ -205,6 +226,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
           const ring = outerRing(feature);
           if (!ring) continue;
           tiled.add(rnbId);
+          const suggestion = cadastralSuggestion(feature.properties);
+          if (suggestion) footprintSuggestions.current.set(rnbId, suggestion);
           instance.setFeatureState(
             { source: FOOTPRINT_SOURCE, sourceLayer: FOOTPRINT_SOURCE_LAYER, id: rnbId },
             footprintState(rnbId, centerOfRing(ring), context)
@@ -240,16 +263,17 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
     zones.current = nextZones;
     setZoneList(nextZones);
     const activeZoneId = selectedZoneRef.current ?? nextZones[0]?.id ?? null;
+    const grouped = groupDoorsByBuilding(doors);
     footprintContext.current = {
       zone: nextZones.find((zone) => zone.id === activeZoneId) ?? null,
       buildings: new Map(buildings.map((building) => [building.id, building])),
-      doorsByBuilding: groupDoorsByBuilding(doors),
+      doorsByBuilding: grouped,
       statuses: new Map<string, Status>(statuses.map((status) => [status.id, status])),
       untouchedColor: UNTOUCHED_COLOR
     };
     (instance.getSource(ZONE_SOURCE) as GeoJSONSource | undefined)?.setData(zoneFeatures(nextZones, new Map(stats)));
     setVisibleBuildingCount(buildings.length);
-    setVisibleBuildings(buildings);
+    setVisibleBuildings(buildingListEntries(buildings, grouped));
     setSelectedZoneId((current) => current ?? nextZones[0]?.id ?? null);
     paintFootprints();
   }, [paintFootprints, repositories]);
@@ -262,9 +286,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
   const openFootprint = useCallback(async (feature: GeoJSONFeature) => {
     const identifier = feature.properties?.rnb_id ?? feature.properties?.id;
     if (typeof identifier !== 'string') return;
+    // La suggestion cadastrale voyage avec l'emprise : elle pré-remplit le dialogue de
+    // structure sans jamais créer de porte, cf. `03-CARTO.md`.
+    const suggestion = cadastralSuggestion(feature.properties) ?? footprintSuggestions.current.get(identifier) ?? null;
     const existing = await repositories.buildings.get(identifier);
     if (existing) {
-      onBuildingSelect?.(existing, { persisted: true });
+      onBuildingSelect?.(existing, { persisted: true, suggestion });
       return;
     }
     const zone = footprintContext.current.zone;
@@ -281,7 +308,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
       zoneId: zone.id,
       createdBy: authorId,
       structureRevision: 0
-    }, { persisted: false });
+    }, { persisted: false, suggestion });
   }, [authorId, onBuildingSelect, repositories.buildings]);
 
   useEffect(() => {
@@ -562,13 +589,39 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
         </div>
       )}
       {onBuildingSelect && (
-        <div className="visible-building-list" aria-label="Batiments visibles">
-          {visibleBuildings.map((building) => (
-            <button className="building-chip" key={building.id} onClick={() => onBuildingSelect(building, { persisted: true })} type="button">
-              {building.addressLabel}
-            </button>
-          ))}
-        </div>
+        <section className="building-list" aria-label="Batiments visibles">
+          <div className="building-list-controls">
+            <div className="building-list-filters" role="group" aria-label="Filtrer les bâtiments">
+              {BUILDING_LIST_FILTERS.map((filter) => (
+                <button aria-pressed={listFilter === filter.id} className="building-list-filter" key={filter.id} onClick={() => setListFilter(filter.id)} type="button">{filter.label}</button>
+              ))}
+            </div>
+            <label className="building-list-sort">Trier par
+              <select aria-label="Trier les bâtiments" onChange={(event) => setListSort(event.target.value as BuildingListSort)} value={listSort}>
+                <option value="staleness">Ancienneté</option>
+                <option value="address">Adresse</option>
+              </select>
+            </label>
+          </div>
+          {listedBuildings.length === 0
+            ? <p className="building-list-empty">{listFilter === 'stale' ? 'Aucun bâtiment vu il y a plus de trois mois. Tout est à jour ici.' : 'Aucun bâtiment décrit dans ce cadrage. Touche une emprise pour commencer.'}</p>
+            : <ul className="building-list-rows">
+              {listedBuildings.map((entry) => (
+                <li key={entry.building.id}>
+                  <button
+                    className="building-row"
+                    onClick={() => onBuildingSelect(entry.building, { persisted: true, suggestion: footprintSuggestions.current.get(entry.building.id) ?? null })}
+                    type="button"
+                  >
+                    <span className="building-row-address">{entry.building.addressLabel}</span>
+                    <span className="building-row-progress">{entry.treatedCount}/{entry.doorCount}</span>
+                    {/* Colonne d'ancienneté : ambre au-delà du seuil de 90 jours. */}
+                    <span className={entry.staleness.alert ? 'building-row-age alert' : 'building-row-age'}>{entry.staleness.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>}
+        </section>
       )}
       <div className="workspace-map-stage">
         {placing && (
