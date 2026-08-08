@@ -12,7 +12,7 @@ import { FirestoreZoneGateway } from '../../../infrastructure/firestore/firestor
 import { claimInitialAdminWithFunction } from '../../../infrastructure/firebase/initial-admin-gateway';
 import { createFirestoreWorkspaceReadRepositories } from '../../../infrastructure/firestore/firestore-workspace-read-repositories';
 import { createTerrainSessionRepositories } from '../../../infrastructure/firestore/terrain-session-repositories';
-import { IndexedDbOutbox } from '../../../infrastructure/outbox/indexeddb-outbox';
+import { IndexedDbDoorMarkerOutbox, IndexedDbOutbox } from '../../../infrastructure/outbox/indexeddb-outbox';
 import { useFieldVisitSync } from '../../visits/model/use-field-visit-sync';
 import { useOpenedBuilding } from '../model/use-opened-building';
 
@@ -29,6 +29,7 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
   const [newBuildingLocation, setNewBuildingLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const outbox = useMemo(() => new IndexedDbOutbox(member.id), [member.id]);
+  const markers = useMemo(() => new IndexedDbDoorMarkerOutbox(member.id), [member.id]);
   const repositories = useMemo(() => {
     const client = getFirebaseClient();
     return createTerrainSessionRepositories({
@@ -52,7 +53,7 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
       )
     });
   }, [member, outbox]);
-  const sync = useFieldVisitSync(member.id, outbox, repositories);
+  const sync = useFieldVisitSync(member.id, outbox, markers, repositories);
   const opened = useOpenedBuilding(repositories);
   const changeBuilding = useCallback((building: Building) => opened.select(building, { persisted: true }), [opened]);
   const initialAdmin = useMemo(() => {
@@ -71,6 +72,7 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
         building={opened.building}
         canEditStructure
         ensureBuildingExists={opened.ensureExists}
+        markers={markers}
         onBuildingChange={changeBuilding}
         onClose={opened.close}
         outbox={outbox}

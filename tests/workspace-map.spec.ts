@@ -167,3 +167,27 @@ test('announces the manual placement mode and cancels without creating anything'
   await expect(page.getByRole('dialog', { name: 'Nouveau batiment' })).toBeVisible();
   await page.close();
 });
+
+test('keeps the sisters marker on the door across reopenings, without touching its status', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  // Ce parcours passe par la fiche, pas par la carte : inutile d'attendre les emprises.
+  await page.goto('/technical-map');
+  await expect.poll(() => page.getByText('2 batiment(s) visibles').isVisible(), { timeout: 45_000 }).toBe(true);
+
+  await page.getByRole('button', { name: '7 rue des Filatiers, Toulouse' }).click();
+  await page.getByRole('button', { name: 'Porte 12, Pas visite' }).click();
+  const toggle = page.getByRole('button', { name: 'À confier aux sœurs' });
+  // La donnée de démonstration porte déjà le marqueur : il doit revenir armé.
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  // Le marqueur ne crée aucun passage : le statut de la porte ne bouge pas.
+  await expect(page.getByRole('heading', { name: 'Porte 12 · 1er' })).toBeVisible();
+  await expect(page.getByText('Aucun passage enregistré.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Fermer le choix de statut' }).click();
+  await page.getByRole('button', { name: 'Porte 12, Pas visite' }).click();
+  await expect(page.getByRole('button', { name: 'À confier aux sœurs' })).toHaveAttribute('aria-pressed', 'false');
+  await page.close();
+});

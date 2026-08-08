@@ -5,6 +5,33 @@ Une question résolue est déplacée dans « Tranchées » avec la décision.
 
 ---
 
+### 2026-08-08 — Deux schémas Firestore parallèles, et un seul est branché
+
+Le dépôt porte deux modèles côte à côte, ce que les règles assument déjà en commentaire :
+
+- `buildings/{id}/doors/{id}/passages/{id}` — le modèle WP2 spécifié, noms de champs français.
+  Ses règles, ses index et ses Functions (`deriveAtharPassage`, `deriveAtharSistersMarker`) existent,
+  mais seuls `scripts/seed.ts` et les tests d'émulateur y écrivent.
+- `workspaces/main/{buildings,doors,visits}` — noms anglais, plat. C'est ce que l'application lit et
+  écrit réellement, de WP3 à WP7.
+
+Conséquence pour la clôture de WP4 : le marqueur est écrit sur `workspaces/…/doors`, sinon l'anneau
+rose ne s'allumerait jamais. La dérivation du bâtiment se fait donc côté client, là où WP7 dérive
+déjà le statut dominant, et non par la Cloud Function — celle-ci ne voit pas ces documents.
+
+Question : à quel lot rattache-t-on la convergence des deux schémas ? Tant qu'elle n'est pas faite,
+chaque champ métier nouveau doit être écrit deux fois ou choisir un camp.
+
+### 2026-08-08 — WP4 · Le champ `foyer` reste éphémère
+
+Même trou que le marqueur, même fiche : `foyer` (`femme` / `homme` / `couple` / `famille`) est saisi
+dans la fiche porte et perdu à la fermeture. Il est resté hors du correctif de clôture, qui ne
+portait que sur le marqueur.
+
+Il est au moins aussi sensible : c'est lui qui dit « femme seule » à une adresse précise. Le chemin
+d'écriture existe désormais — la mutation dédiée du marqueur transporterait le champ sans rien
+changer à sa forme. Question : l'ajouter à cette mutation, ou attendre un lot « attributs de porte » ?
+
 ---
 
 ## Tranchées

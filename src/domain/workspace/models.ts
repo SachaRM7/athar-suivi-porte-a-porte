@@ -80,6 +80,12 @@ export type Door = {
   revision: number;
   lastVisitId: EntityId | null;
   createdBy: UserId;
+  /**
+   * Marqueur « à confier aux sœurs ». Donnée sensible : elle n'apparaît jamais dans une
+   * liste ni dans un export, et sur la carte seul l'anneau rose du bâtiment la trahit.
+   * Cumulable avec n'importe quel statut — ce n'est pas un septième statut.
+   */
+  sisters: boolean;
 };
 
 export type Visit = {

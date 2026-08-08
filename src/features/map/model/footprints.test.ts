@@ -26,7 +26,7 @@ const statuses = new Map<string, Status>([
 function door(overrides: Partial<Door> & Pick<Door, 'id' | 'buildingId' | 'currentStatusId'>): Door {
   return {
     zoneId: 'carmes', location: { latitude: 43.6058, longitude: 1.4454 }, geohash: 'spdt',
-    floor: 0, label: '01', sortOrder: 0, active: true, revision: 1, lastVisitId: 'visit-1', createdBy: 'admin-1',
+    floor: 0, label: '01', sortOrder: 0, active: true, revision: 1, lastVisitId: 'visit-1', createdBy: 'admin-1', sisters: false,
     ...overrides
   };
 }
@@ -85,7 +85,22 @@ describe('footprintState', () => {
   });
 
   it('marks a footprint outside the active zone', () => {
-    expect(footprintState('PG31HORS0001', [1.4468, 43.6035], context()).inZone).toBe(false);
+    expect(footprintState('PG31HORS0001', [1.4415, 43.6065], context()).inZone).toBe(false);
+  });
+
+  it('lights the sisters ring as soon as one door carries the marker', () => {
+    const state = footprintState('building-dalbad', [1.4454, 43.6058], context({
+      buildings: new Map([['building-dalbad', building('building-dalbad')]]),
+      doorsByBuilding: new Map([['building-dalbad', [
+        door({ id: 'd1', buildingId: 'building-dalbad', currentStatusId: 'retry' }),
+        door({ id: 'd2', buildingId: 'building-dalbad', currentStatusId: 'retry', sisters: true })
+      ]]])
+    }));
+    expect(state.sisters).toBe(true);
+  });
+
+  it('leaves the ring dark on a footprint that has no document', () => {
+    expect(footprintState('PG31CARMES002', [1.447, 43.6065], context()).sisters).toBe(false);
   });
 });
 

@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DoorSnapshot, OutboxEntry } from '../../../domain/doors/contracts';
 import { SyncLab } from '../../../domain/sync/sync-service';
 import type { Outbox } from '../../../domain/sync/outbox';
+import { flushDoorMarkers, type DoorMarkerOutbox } from '../../../domain/sync/door-marker-outbox';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
 import { environment } from '../../../app/config/environment';
 import { getFirebaseClient } from '../../../infrastructure/firebase/client';
 import { FirestoreDoorGateway } from '../../../infrastructure/firestore/firestore-door-gateway';
+import { FirestoreDoorMarkerGateway } from '../../../infrastructure/firestore/firestore-door-marker-gateway';
 
 export type FieldVisitSync = {
   online: boolean;
@@ -25,6 +27,7 @@ function browserOnline(): boolean {
 export function useFieldVisitSync(
   authorId: string,
   outbox: Outbox,
+  markers: DoorMarkerOutbox,
   repositories: WorkspaceRepositories
 ): FieldVisitSync {
   const [online, setOnline] = useState(browserOnline);
@@ -39,6 +42,10 @@ export function useFieldVisitSync(
       authorId
     );
   }, [authorId, outbox]);
+  const markerWriter = useMemo(() => {
+    const client = getFirebaseClient();
+    return new FirestoreDoorMarkerGateway(client.firestore, environment.workspaceId, () => client.auth.currentUser?.uid ?? null);
+  }, []);
 
   const refresh = useCallback(async () => {
     setEntries(await outbox.all());
@@ -54,6 +61,9 @@ export function useFieldVisitSync(
     setSyncing(true);
     try {
       const entriesBeforeFlush = await outbox.all();
+      // Les marqueurs partent dans la même passe, mais par leur propre chemin : ils
+      // n'entrent ni dans la chaîne de révisions, ni dans la résolution de conflits.
+      await flushDoorMarkers(markers, markerWriter);
       const events = await sync.flush();
       const refreshedDoors = await Promise.all(events.map(async (event) => {
         if (event.type !== 'rejected') {
@@ -68,7 +78,7 @@ export function useFieldVisitSync(
       setSyncing(false);
       await refresh();
     }
-  }, [outbox, refresh, repositories, sync]);
+  }, [markerWriter, markers, outbox, refresh, repositories, sync]);
 
   const reapplyConflict = useCallback(async (commandId: string) => {
     const conflict = (await outbox.all()).find((entry) => entry.commandId === commandId && entry.state === 'conflict');

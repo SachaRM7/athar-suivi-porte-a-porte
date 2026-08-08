@@ -60,6 +60,7 @@ export function assertDoor(door: Door, building?: Building): void {
   if (!door.label.trim() || door.label.length > 32) throw new Error('Door label must contain 1 to 32 characters.');
   if (!Number.isInteger(door.sortOrder) || door.sortOrder < 0) throw new Error('Door sort order must be a non-negative integer.');
   if (typeof door.active !== 'boolean') throw new Error('Door active state must be boolean.');
+  if (typeof door.sisters !== 'boolean') throw new Error('Door sisters marker must be boolean.');
   if (!Number.isInteger(door.revision) || door.revision < 0) throw new Error('Door revision must be a non-negative integer.');
   assertGeoPoint(door.location, 'door.location');
   if (!GEOHASH.test(door.geohash)) throw new Error('Door geohash is invalid.');

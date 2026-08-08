@@ -251,6 +251,43 @@ describe('Firestore security rules', () => {
     await assertFails(stale.commit());
   });
 
+  it('lets a member toggle the sisters marker alone, and nothing else with it', async () => {
+    await seed();
+    const db = member('member-a');
+    await assertSucceeds(updateDoc(doc(db, `${workspace}/doors/door-a`), {
+      aConfierAuxSoeurs: true,
+      updatedAt: serverTimestamp()
+    }));
+    await assertSucceeds(updateDoc(doc(db, `${workspace}/doors/door-a`), {
+      aConfierAuxSoeurs: false,
+      updatedAt: serverTimestamp()
+    }));
+
+    // Le marqueur ne doit servir de cheval de Troie ni au statut, ni à la révision.
+    await assertFails(updateDoc(doc(db, `${workspace}/doors/door-a`), {
+      aConfierAuxSoeurs: true,
+      currentStatusId: 'contacted',
+      updatedAt: serverTimestamp()
+    }));
+    await assertFails(updateDoc(doc(db, `${workspace}/doors/door-a`), {
+      aConfierAuxSoeurs: true,
+      revision: 1,
+      updatedAt: serverTimestamp()
+    }));
+    await assertFails(updateDoc(doc(db, `${workspace}/doors/door-a`), {
+      aConfierAuxSoeurs: 'oui',
+      updatedAt: serverTimestamp()
+    }));
+  });
+
+  it('refuses the sisters marker to an inactive member', async () => {
+    await seed();
+    await assertFails(updateDoc(doc(member('inactive-a'), `${workspace}/doors/door-a`), {
+      aConfierAuxSoeurs: true,
+      updatedAt: serverTimestamp()
+    }));
+  });
+
   it('keeps visits immutable after their atomic creation', async () => {
     await seed();
     const db = member('member-a');

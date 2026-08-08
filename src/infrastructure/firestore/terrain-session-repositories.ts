@@ -209,6 +209,9 @@ export function createTerrainSessionRepositories(input: {
       visits.set(visit.id, { ...visit });
       doors.set(door.id, { ...door, location: { ...door.location } });
     },
+    async commitDoorMarker(door) {
+      doors.set(door.id, { ...door, location: { ...door.location } });
+    },
     async commitVisitsAndDoors(entries) {
       for (const { visit, door } of entries) {
         if (visit.doorId !== door.id || visit.doorRevision !== door.revision || door.lastVisitId !== visit.id) {

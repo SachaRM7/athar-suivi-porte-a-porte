@@ -29,10 +29,10 @@ export function generateLoadWorkspace(options: LoadWorkspaceOptions = {}): Works
     if (index === 0) {
       for (let doorIndex = 0; doorIndex < featuredDoorCount; doorIndex += 1) {
         const isHistoryDoor = doorIndex === 0 && featuredVisitCount > 0;
-        doors.push({ id: `load-door-${String(doorIndex).padStart(3, '0')}`, buildingId: id, zoneId: 'load-zone', location, geohash, floor: Math.floor(doorIndex / 12), label: String(100 + doorIndex), sortOrder: doorIndex, active: true, currentStatusId: 'unvisited', revision: isHistoryDoor ? featuredVisitCount : 0, lastVisitId: isHistoryDoor ? `load-visit-${String(featuredVisitCount - 1).padStart(3, '0')}` : null, createdBy: 'load-member' });
+        doors.push({ id: `load-door-${String(doorIndex).padStart(3, '0')}`, buildingId: id, zoneId: 'load-zone', location, geohash, floor: Math.floor(doorIndex / 12), label: String(100 + doorIndex), sortOrder: doorIndex, active: true, currentStatusId: 'unvisited', revision: isHistoryDoor ? featuredVisitCount : 0, lastVisitId: isHistoryDoor ? `load-visit-${String(featuredVisitCount - 1).padStart(3, '0')}` : null, createdBy: 'load-member', sisters: false });
       }
     } else {
-      doors.push({ id: `load-door-${String(featuredDoorCount + index).padStart(3, '0')}`, buildingId: id, zoneId: 'load-zone', location, geohash, floor: 0, label: '01', sortOrder: 0, active: true, currentStatusId: 'unvisited', revision: 0, lastVisitId: null, createdBy: 'load-member' });
+      doors.push({ id: `load-door-${String(featuredDoorCount + index).padStart(3, '0')}`, buildingId: id, zoneId: 'load-zone', location, geohash, floor: 0, label: '01', sortOrder: 0, active: true, currentStatusId: 'unvisited', revision: 0, lastVisitId: null, createdBy: 'load-member', sisters: false });
     }
     return { id, addressLabel: `${index} rue de charge, Toulouse`, location, geohash, zoneId: 'load-zone', createdBy: 'load-member', structureRevision: 0 };
   });

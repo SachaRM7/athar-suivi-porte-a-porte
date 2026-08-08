@@ -6,6 +6,8 @@ import { buildBuildingStructureDiff, normalizeDoorLabel, type StructureAmbiguity
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
 import { floorLabel, floorProgress, overallProgress, compareDoorsForFloor } from '../model/building-detail';
 import { recordLocalVisit, recordLocalVisits } from '../../visits/model/record-local-visit';
+import { markDoorForSisters } from '../../visits/model/mark-door-for-sisters';
+import type { DoorMarkerOutbox } from '../../../domain/sync/door-marker-outbox';
 import type { FieldVisitSync } from '../../visits/model/use-field-visit-sync';
 import { isTrustedDevice, setTrustedDevice } from '../../../infrastructure/offline/device-storage';
 
@@ -14,6 +16,8 @@ type BuildingVisitSheetProps = {
   building: Building | null;
   canEditStructure: boolean;
   outbox: Outbox;
+  /** File dédiée du marqueur « à confier aux sœurs » : elle ne transporte aucun passage. */
+  markers: DoorMarkerOutbox;
   repositories: WorkspaceRepositories;
   sync?: FieldVisitSync;
   /**
@@ -62,7 +66,7 @@ function manualTargetLine(target: DoorStructureTarget): string {
   return `${target.floor} | ${target.label} | ${identity}`;
 }
 
-export function BuildingVisitSheet({ authorId, building, canEditStructure, outbox, repositories, sync, ensureBuildingExists, onBuildingChange, onClose }: BuildingVisitSheetProps): ReactElement | null {
+export function BuildingVisitSheet({ authorId, building, canEditStructure, outbox, markers, repositories, sync, ensureBuildingExists, onBuildingChange, onClose }: BuildingVisitSheetProps): ReactElement | null {
   const [doors, setDoors] = useState<readonly Door[]>([]);
   const [structureDoors, setStructureDoors] = useState<readonly Door[]>([]);
   const [statuses, setStatuses] = useState<readonly Status[]>([]);
@@ -186,7 +190,25 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
     setSelectedDoorId(door.id);
     setOpenPaletteDoorId(door.id);
     setShowPassageNote(false);
+    setSisters(door.sisters);
+    setAutoSisters(false);
+    setFoyer(null);
     setDoorVisits(await repositories.visits.listByDoor(door.id));
+  }
+
+  /** Bascule le marqueur seul : aucun passage n'est créé, la révision ne bouge pas. */
+  async function toggleSisters(door: Door, next: boolean, automatic: boolean): Promise<void> {
+    setSisters(next);
+    setAutoSisters(automatic);
+    try {
+      await markDoorForSisters(repositories, markers, { doorId: door.id, sisters: next, authorId });
+      await refresh();
+      await sync?.synchronize();
+    } catch (error) {
+      setSisters(!next);
+      setAutoSisters(false);
+      setMessage(error instanceof Error ? error.message : 'Le marqueur n a pas pu etre enregistre.');
+    }
   }
 
   async function savePassage(door: Door, statusId: string): Promise<void> {
@@ -194,14 +216,11 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
     setDoorVisits(await repositories.visits.listByDoor(door.id));
   }
 
-  function chooseFoyer(value: typeof foyer): void {
+  function chooseFoyer(door: Door, value: typeof foyer): void {
     setFoyer(value);
-    if (value === 'femme') {
-      setSisters(true);
-      setAutoSisters(true);
-    } else {
-      setAutoSisters(false);
-    }
+    // « Femme seule » arme le marqueur d'office ; il reste désactivable d'un geste.
+    if (value === 'femme' && !sisters) void toggleSisters(door, true, true);
+    else setAutoSisters(false);
   }
 
   async function markFloorAway(scope: readonly Door[]): Promise<void> {
@@ -375,8 +394,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
             <p className="eyebrow">Résultat du passage</p>
             <div className="status-palette"><button className="status-swatch" onClick={() => void savePassage(paletteDoor, 'contacted')} type="button"><span aria-hidden="true" /><b>Contact établi</b></button><button className="status-swatch" onClick={() => void savePassage(paletteDoor, 'retry')} type="button"><span aria-hidden="true" /><b>Absent</b></button><button className="status-swatch" onClick={() => void savePassage(paletteDoor, 'do-not-return')} type="button"><span aria-hidden="true" /><b>Ne pas déranger</b></button><button className="status-swatch linked-result" onClick={() => void savePassage(paletteDoor, 'contacted')} type="button"><span aria-hidden="true" /><b>Attaché à l'effort — plus à revisiter</b></button><button className="status-swatch locked-result" onClick={() => void savePassage(paletteDoor, 'retry')} type="button"><span aria-hidden="true" /><b>Accès bloqué (interphone / code)</b></button></div>
             <p className="eyebrow">Composition du foyer</p>
-            <div className="foyer-chips">{([{ value: 'femme', label: 'Femme seule' }, { value: 'homme', label: 'Homme seul' }, { value: 'couple', label: 'Couple' }, { value: 'famille', label: 'Famille' }, { value: null, label: 'Non renseigné' }] as const).map((choice) => <button aria-pressed={foyer === choice.value} key={choice.label} onClick={() => chooseFoyer(choice.value)} type="button">{choice.label}</button>)}</div>
-            <button aria-pressed={sisters} className="sisters-toggle" onClick={() => { setSisters((current) => !current); setAutoSisters(false); }} type="button"><strong>À confier aux sœurs</strong><span>Le prochain passage sera fait par les sœurs.</span></button>
+            <div className="foyer-chips">{([{ value: 'femme', label: 'Femme seule' }, { value: 'homme', label: 'Homme seul' }, { value: 'couple', label: 'Couple' }, { value: 'famille', label: 'Famille' }, { value: null, label: 'Non renseigné' }] as const).map((choice) => <button aria-pressed={foyer === choice.value} key={choice.label} onClick={() => chooseFoyer(paletteDoor, choice.value)} type="button">{choice.label}</button>)}</div>
+            <button aria-pressed={sisters} className="sisters-toggle" onClick={() => void toggleSisters(paletteDoor, !sisters, false)} type="button"><strong>À confier aux sœurs</strong><span>Le prochain passage sera fait par les sœurs.</span></button>
             {autoSisters && <p className="sisters-auto">Activé automatiquement — tu peux le désactiver.</p>}
             <p className="eyebrow">Historique des passages</p>
             <ol className="door-history">{doorVisits.length === 0 ? <li>Aucun passage enregistré.</li> : doorVisits.map((visit) => <li key={visit.id}><strong>{new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(visit.occurredAt))}</strong><span>{visit.authorId}{visit.note ? ` — ${visit.note}` : ''}</span></li>)}</ol>

@@ -105,6 +105,14 @@ export function createMemoryWorkspaceRepositories(snapshot: WorkspaceSnapshot): 
       visits.push(copy(visit));
       doors.set(door.id, copy(door));
     },
+    async commitDoorMarker(door) {
+      const existing = doors.get(door.id);
+      if (!existing) throw new Error('Door not found.');
+      if (existing.revision !== door.revision || existing.currentStatusId !== door.currentStatusId || existing.lastVisitId !== door.lastVisitId) {
+        throw new Error('A sisters marker must not move the door revision chain.');
+      }
+      doors.set(door.id, copy(door));
+    },
     async commitVisitsAndDoors(entries) {
       const nextVisits = entries.map(({ visit }) => copy(visit));
       const nextDoors = entries.map(({ door }) => copy(door));

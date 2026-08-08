@@ -33,7 +33,7 @@ export function toFirestoreSeedDocuments(snapshot: WorkspaceSnapshot): Firestore
     })),
     ...snapshot.zoneStats.map(({ zoneId, ...stats }) => ({ path: workspaceDocumentPath(root, 'zoneStats', zoneId), data: { ...stats, updatedAt: timestamp(stats.updatedAt) } })),
     ...snapshot.buildings.map(({ id, location, ...building }) => ({ path: workspaceDocumentPath(root, 'buildings', id), data: { ...building, location: new GeoPoint(location.latitude, location.longitude) } })),
-    ...snapshot.doors.map(({ id, location, ...door }) => ({ path: workspaceDocumentPath(root, 'doors', id), data: { ...door, location: new GeoPoint(location.latitude, location.longitude) } })),
+    ...snapshot.doors.map(({ id, location, sisters, ...door }) => ({ path: workspaceDocumentPath(root, 'doors', id), data: { ...door, location: new GeoPoint(location.latitude, location.longitude), aConfierAuxSoeurs: sisters } })),
     ...snapshot.visits.map(({ id, occurredAt, syncedAt, ...visit }) => ({ path: workspaceDocumentPath(root, 'visits', id), data: { ...visit, occurredAt: timestamp(occurredAt), syncedAt: syncedAt ? timestamp(syncedAt) : null } }))
   ];
 }
@@ -55,7 +55,10 @@ export function fromFirestoreDoor(id: string, data: DocumentData): Door {
     currentStatusId: requiredString(data, 'currentStatusId'),
     revision: requiredNumber(data, 'revision'),
     lastVisitId: data.lastVisitId,
-    createdBy: requiredString(data, 'createdBy')
+    createdBy: requiredString(data, 'createdBy'),
+    // Le champ garde son nom français du `02-DATA-MODEL.md`. Absent des portes créées
+    // avant ce lot : une porte sans marqueur n'est pas une porte invalide.
+    sisters: data.aConfierAuxSoeurs === true
   };
   assertDoor(door);
   assertEntityId(door.currentStatusId, 'door.currentStatusId');

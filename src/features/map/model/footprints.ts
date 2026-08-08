@@ -62,14 +62,15 @@ export type FootprintContext = {
 
 export function footprintState(rnbId: string, center: readonly [number, number], context: FootprintContext): FootprintState {
   const building = context.buildings.get(rnbId);
-  const statusId = building ? dominantStatusId(context.doorsByBuilding.get(rnbId) ?? []) : null;
+  const doors = context.doorsByBuilding.get(rnbId) ?? [];
+  const statusId = building ? dominantStatusId(doors) : null;
   return {
     inZone: isInsideZone(context.zone, center),
     tracked: building !== undefined,
     color: (statusId ? context.statuses.get(statusId)?.color : undefined) ?? context.untouchedColor,
-    // HYPOTHÈSE: le marqueur « à confier aux sœurs » n'est encore persisté nulle part
-    // (cf. docs/athar/QUESTIONS.md). La couche existe et lira ce drapeau dès qu'il sera stocké.
-    sisters: false
+    // `02-DATA-MODEL.md` : le bâtiment porte le marqueur dès qu'une seule de ses portes
+    // le porte. Seul l'anneau rose sort sur la carte, jamais la composition du foyer.
+    sisters: building !== undefined && doors.some((door) => door.sisters)
   };
 }
 

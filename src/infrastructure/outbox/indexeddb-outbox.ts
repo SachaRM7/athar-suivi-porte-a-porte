@@ -1,10 +1,13 @@
-import type { DoorSnapshot, OutboxEntry, RejectionCategory, VisitIntent } from '../../domain/doors/contracts';
+import type { DoorMarkerIntent, DoorSnapshot, OutboxEntry, RejectionCategory, VisitIntent } from '../../domain/doors/contracts';
+import type { DoorMarkerOutbox } from '../../domain/sync/door-marker-outbox';
 import type { Outbox } from '../../domain/sync/outbox';
 
 const DATABASE_NAME = 'athar-prototype-outbox';
 const STORE_NAME = 'entries';
+const MARKER_STORE_NAME = 'door-markers';
 
 type StoredEntry = OutboxEntry & { storageKey: string };
+type StoredMarker = DoorMarkerIntent & { storageKey: string };
 
 function storageKey(authorId: string, commandId: string): string {
   return `${authorId}:${commandId}`;
@@ -12,22 +15,29 @@ function storageKey(authorId: string, commandId: string): string {
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE_NAME, 1);
+    // Version 2 : ajout de la file du marqueur « à confier aux sœurs ». La montée doit
+    // rester idempotente, un appareil de terrain pouvant encore porter la version 1.
+    const request = indexedDB.open(DATABASE_NAME, 2);
     request.onerror = () => reject(request.error);
     request.onupgradeneeded = () => {
-      const store = request.result.createObjectStore(STORE_NAME, { keyPath: 'storageKey' });
-      store.createIndex('authorId', 'authorId', { unique: false });
+      const database = request.result;
+      if (!database.objectStoreNames.contains(STORE_NAME)) {
+        database.createObjectStore(STORE_NAME, { keyPath: 'storageKey' }).createIndex('authorId', 'authorId', { unique: false });
+      }
+      if (!database.objectStoreNames.contains(MARKER_STORE_NAME)) {
+        database.createObjectStore(MARKER_STORE_NAME, { keyPath: 'storageKey' }).createIndex('authorId', 'authorId', { unique: false });
+      }
     };
     request.onsuccess = () => resolve(request.result);
   });
 }
 
-async function withStore<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+async function withStore<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>, storeName = STORE_NAME): Promise<T> {
   const database = await openDatabase();
   try {
     return await new Promise<T>((resolve, reject) => {
-      const transaction = database.transaction(STORE_NAME, mode);
-      const request = action(transaction.objectStore(STORE_NAME));
+      const transaction = database.transaction(storeName, mode);
+      const request = action(transaction.objectStore(storeName));
       let result: T;
       request.onsuccess = () => { result = request.result; };
       transaction.oncomplete = () => resolve(result);
@@ -153,6 +163,38 @@ export class IndexedDbOutbox implements Outbox {
   }
 }
 
+/**
+ * File du marqueur « à confier aux sœurs », clé par porte : une nouvelle bascule
+ * remplace la précédente au lieu de s'empiler. Aucun passage n'est touché.
+ */
+export class IndexedDbDoorMarkerOutbox implements DoorMarkerOutbox {
+  constructor(private readonly authorId: string) {}
+
+  async add(intent: DoorMarkerIntent): Promise<void> {
+    if (intent.authorId !== this.authorId) throw new Error('Outbox user does not match intent author.');
+    await withStore(
+      'readwrite',
+      (store) => store.put({ ...intent, storageKey: storageKey(this.authorId, intent.doorId) }),
+      MARKER_STORE_NAME
+    );
+  }
+
+  async pending(): Promise<DoorMarkerIntent[]> {
+    const stored = await withStore(
+      'readonly',
+      (store) => store.index('authorId').getAll(this.authorId),
+      MARKER_STORE_NAME
+    ) as StoredMarker[];
+    return stored
+      .map(({ storageKey: _storageKey, ...intent }) => intent)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.doorId.localeCompare(right.doorId));
+  }
+
+  async markSynced(doorId: string): Promise<void> {
+    await withStore('readwrite', (store) => store.delete(storageKey(this.authorId, doorId)), MARKER_STORE_NAME);
+  }
+}
+
 export async function clearIndexedDbOutboxForTests(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase(DATABASE_NAME);
@@ -165,4 +207,8 @@ export async function clearIndexedDbOutboxForUser(authorId: string): Promise<voi
   await mutateUserEntries(authorId, (store, entries) => {
     for (const entry of entries) store.delete(entry.storageKey);
   });
+  // Le marqueur « à confier aux sœurs » est une donnée sensible : il quitte l'appareil
+  // avec le reste quand celui-ci n'est pas de confiance.
+  const markers = await new IndexedDbDoorMarkerOutbox(authorId).pending();
+  for (const marker of markers) await new IndexedDbDoorMarkerOutbox(authorId).markSynced(marker.doorId);
 }
