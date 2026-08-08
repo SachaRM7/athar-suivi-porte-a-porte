@@ -359,18 +359,14 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
   return (
     <div className="building-detail-layer">
       <button aria-label="Fermer le detail du batiment" className="building-detail-backdrop" onClick={onClose} type="button" />
-      <aside aria-label="Detail du batiment" aria-modal="true" className="building-sheet" role="dialog">
-        <header className="building-sheet-toolbar">
-          <button aria-label="Fermer le batiment" className="building-toolbar-action" onClick={onClose} type="button">X</button>
-          <strong>Athar</strong>
-          {canEditStructure ? <button aria-label="Configurer le batiment" className="building-toolbar-action" onClick={() => setStructureMode('manage')} type="button">...</button> : <span />}
-        </header>
-
+      <aside aria-label="Detail du batiment" className="building-sheet" role="dialog">
         <section className="building-identity">
           <button className="building-zone-back" onClick={onClose} type="button">‹ Retour à la zone</button>
           <h2>{building.addressLabel}</h2>
-          {doors.length > 0 && <p className="building-structure-summary">{floors.length} niveau{floors.length > 1 ? 'x' : ''} · {total.doorCount} portes</p>}
-          {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => setEditing((current) => !current)} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button className="secondary-action" onClick={() => setStructureMode('manage')} type="button">Structure</button></div>}
+          <div className="building-meta-row">
+            {doors.length > 0 && <p className="building-structure-summary">{floors.length} niveau{floors.length > 1 ? 'x' : ''} · {total.doorCount} portes</p>}
+            {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => setEditing((current) => !current)} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => setStructureMode('manage')} type="button">Structure</button></div>}
+          </div>
           {doors.length > 0 && <>
           <div className="building-progress-row">
             <span aria-hidden="true" className="building-progress-track"><i style={{ width: `${total.ratio * 100}%` }} /></span>
@@ -386,14 +382,14 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
             return <section className="building-floor" key={item.floor}>
               <div className="building-floor-label"><span>{floorLabel(item.floor)}</span></div>
               <div className="building-floor-content">
-                <header className="building-floor-heading"><span>{item.doorCount} porte{item.doorCount > 1 ? 's' : ''}</span><span>{item.treatedCount}/{item.doorCount} · {item.treatedCount === item.doorCount ? 'terminé' : <button onClick={() => void markFloorAway(levelDoors)} type="button">tout marquer absent</button>}</span></header>
+                <header className="building-floor-heading"><span>{item.doorCount} porte{item.doorCount > 1 ? 's' : ''}</span><span>{item.treatedCount}/{item.doorCount} · {item.treatedCount === item.doorCount ? <strong className="building-floor-complete">terminé</strong> : <button onClick={() => void markFloorAway(levelDoors)} type="button">tout marquer absent</button>}</span></header>
                 <div className="door-grid" aria-label={`Portes ${floorLabel(item.floor)}`}>
               {levelDoors.map((door) => {
                 const status = statusesById.get(door.currentStatusId);
                 const open = openPaletteDoorId === door.id;
                 const statusColor = status?.color ?? '#8C9494';
                 return <div className="door-card" key={door.id}>
-                  <button aria-expanded={open} aria-label={`Porte ${door.label}, ${status?.label ?? door.currentStatusId}`} className="door-row" onClick={() => void openDoor(door)} style={{ '--status-color': statusColor, '--status-foreground': statusForeground(statusColor) } as CSSProperties} type="button"><span className="door-row-label">{door.label}</span><span aria-hidden="true" className="door-state-dot" /><span className="door-row-status">{status?.label ?? door.currentStatusId}</span></button>
+                  <button aria-expanded={open} aria-label={`Porte ${door.label}, ${status?.label ?? door.currentStatusId}`} className={`door-row${door.sisters ? ' door-row--sisters' : ''}`} onClick={() => void openDoor(door)} style={{ '--status-color': statusColor, '--status-foreground': statusForeground(statusColor) } as CSSProperties} type="button"><span className="door-row-label">{door.label}</span><span aria-hidden="true" className="door-state-dot" /><span className="door-row-status">{status?.label ?? door.currentStatusId}</span></button>
                   {editing && <button className="door-delete" onClick={() => void removeDoor(door)} type="button">{confirmDeletion === door.id ? 'Supprimer l’historique ? ✓' : '×'}</button>}
                 </div>;
               })}

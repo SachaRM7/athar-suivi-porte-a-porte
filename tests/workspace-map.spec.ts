@@ -66,6 +66,7 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
   await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '18 rue du Languedoc, Toulouse' })).toBeVisible();
+  await expect(page.locator('.building-floor-label')).toHaveText(['1er', 'RDC']);
   await page.getByRole('button', { name: 'Porte 11, Contact' }).click();
   await expect(page.getByRole('dialog', { name: 'Fiche de la porte 11' })).toBeVisible();
   await page.getByRole('button', { name: 'Absent', exact: true }).click();
@@ -74,6 +75,7 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
 
   await page.getByRole('button', { name: 'tout marquer absent' }).first().click();
   await expect(page.getByText('1 passage(s) « Absent » enregistres pour cet etage.')).toBeVisible();
+  await expect(page.locator('.building-floor').first().getByText('terminé', { exact: true })).toBeVisible();
   await expect(page.getByText('2 attente(s)')).toBeVisible();
 
   await page.getByRole('button', { name: 'Configurer le batiment' }).click();
@@ -90,20 +92,21 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await expect(page.getByText('5 portes')).toBeVisible();
 });
 
-test('opens the building detail as a constrained desktop dialog', async ({ browser }) => {
+test('opens the building cut in the desktop floating panel', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.goto('/technical-map');
   await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 15_000 });
   const mapBounds = await page.getByLabel('Carte MapLibre des zones').boundingBox();
-  // WP8 ajoute la bande de filtres et de tri au-dessus de la carte dans cette coquille
-  // technique empilée. La liste ne défile jamais au-delà de deux lignes pour que la carte
-  // ne recule pas d'un cran à chaque bâtiment ; sa hauteur reste la vraie garde.
   expect(mapBounds?.y).toBeLessThan(400);
   expect(mapBounds?.height).toBeGreaterThan(400);
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
   const dialog = page.getByRole('dialog', { name: 'Detail du batiment' });
   await expect(dialog).toBeVisible();
-  expect((await dialog.boundingBox())?.width).toBeLessThanOrEqual(820);
+  const bounds = await dialog.boundingBox();
+  expect(bounds?.x).toBeCloseTo(16, 0);
+  expect(bounds?.y).toBeCloseTo(74, 0);
+  expect(bounds?.width).toBeCloseTo(352, 0);
+  expect((bounds?.y ?? 0) + (bounds?.height ?? 0)).toBeCloseTo(784, 0);
   await page.close();
 });
 
@@ -118,7 +121,7 @@ test('opens a detected building that has no Firestore document on its empty stat
   await expect(page.getByRole('heading', { name: 'Bâtiment non décrit' })).toBeVisible();
   await expect(page.locator('.building-row')).toHaveCount(2);
 
-  await page.getByRole('button', { name: 'Fermer le detail du batiment' }).click();
+  await page.getByRole('button', { name: 'Retour à la zone' }).click();
   await expect(dialog).toBeHidden();
   await page.close();
 });
@@ -200,6 +203,12 @@ test('keeps the map full-frame and moves the mobile controls with the bottom she
   const fabAfter = await page.getByRole('button', { name: 'Cadrer sur les emprises' }).boundingBox();
   expect(panelAfter?.height).toBeCloseTo(620, 0);
   expect(fabAfter?.y ?? 0).toBeLessThan(fabBefore?.y ?? 0);
+
+  await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
+  const buildingSheet = await page.getByRole('dialog', { name: 'Detail du batiment' }).boundingBox();
+  expect(buildingSheet).toMatchObject({ x: 0, y: 224, width: 390, height: 620 });
+  expect(await page.getByLabel('Carte MapLibre des zones').boundingBox()).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
+  await expect(page.locator('.building-floor-label')).toHaveText(['1er', 'RDC']);
   await page.close();
 });
 
@@ -210,7 +219,9 @@ test('keeps the sisters marker on the door across reopenings, without touching i
   await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 45_000 });
 
   await page.getByRole('button', { name: '7 rue des Filatiers, Toulouse' }).click();
-  await page.getByRole('button', { name: 'Porte 12, Pas visite' }).click();
+  const sistersDoor = page.getByRole('button', { name: 'Porte 12, Pas visite' });
+  await expect(sistersDoor).toHaveClass(/door-row--sisters/);
+  await sistersDoor.click();
   const toggle = page.getByRole('button', { name: 'À confier aux sœurs' });
   // La donnée de démonstration porte déjà le marqueur : il doit revenir armé.
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
