@@ -5,21 +5,6 @@ Une question résolue est déplacée dans « Tranchées » avec la décision.
 
 ---
 
-### 2026-08-08 — `FirestoreBuildingStructureGateway` écrit `sisters`, que les règles refusent
-
-Repéré en relisant le chemin d'écriture des portes pour WP8, pas corrigé : hors périmètre.
-
-`firestore-building-structure-gateway.ts:80` sérialise une porte par `const { id, location, ...doorData } = door`
-et pose `doorData` tel quel. Le champ domaine `sisters` part donc en base sous ce nom, alors que
-`workspace-codecs.ts` le lit sous `aConfierAuxSoeurs` et que `validDoor()` de `firestore.rules` ne
-liste pas `sisters` dans son `hasOnly`. La création de portes par le dialogue de structure devrait
-donc être refusée par les règles depuis WP4, et une porte ainsi créée reviendrait sans son marqueur.
-
-À vérifier par `npm run test:emulator` (`building-structure.integration.test.ts` couvre ce chemin),
-puis corriger la sérialisation comme le fait `toFirestoreSeedDocuments`. Je n'ai pas pu lancer ces
-tests : les ports d'émulateur étaient pris par la session `dev:local` en cours, et le suite appelle
-`clearFirestore()` sur `athar-local` — elle aurait effacé les données de pilote.
-
 ### 2026-08-08 — La liste des bâtiments est empilée au lieu de flotter (WP8)
 
 `04-SCREENS.md` §1 place la liste, ses filtres et son pied dans le **panneau gauche flottant**
@@ -68,6 +53,27 @@ changer à sa forme. Question : l'ajouter à cette mutation, ou attendre un lot 
 ---
 
 ## Tranchées
+
+### 2026-08-08 — `FirestoreBuildingStructureGateway` écrivait `sisters` : confirmé sur le terrain, corrigé
+
+L'hypothèse était juste, et le symptôme est apparu en préversion : « Missing or insufficient permissions »
+au clic sur « Créer 12 portes », aucune porte écrite, le bâtiment restant « non décrit ».
+
+Deux défauts sur le même chemin, pas un seul :
+
+1. `const { id, location, ...doorData } = door` laissait passer `sisters`, absent du `hasOnly` de
+   `validDoor()`. Corrigé en sérialisant `aConfierAuxSoeurs`, comme `toFirestoreSeedDocuments`.
+2. `batch.update(..., { ...update })` étalait `doorId` dans le document. Ce n'est pas un champ mais
+   l'identité du document : la règle de mise à jour, qui n'autorise que
+   `floor, label, sortOrder, active, updatedAt`, refusait la clé. Corrigé par déstructuration.
+
+Les tests couvraient déjà les deux cas ; personne ne les avait exécutés. Preuve faite dans les deux
+sens : `building-structure.integration.test.ts` échoue 2/6 en `PERMISSION_DENIED` sans le correctif,
+passe 6/6 avec. La suite utilise le projet `athar-structure`, isolé de `athar-local` — la crainte
+d'effacer les données de pilote qui avait fait reporter la vérification était infondée.
+
+Aucune donnée à réparer : `writeBatch` est atomique, donc le `structureRevision` du bâtiment n'a pas
+avancé lors des tentatives refusées. Une nouvelle tentative repart d'un état propre.
 
 ### 2026-08-08 — WP4 · Persister le marqueur « à confier aux sœurs » avant de poursuivre WP7
 

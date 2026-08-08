@@ -77,15 +77,20 @@ export class FirestoreBuildingStructureGateway {
     const batch = writeBatch(this.db);
     batch.update(buildingRef, { structureRevision: diff.building.structureRevision, updatedAt: serverTimestamp() });
     for (const door of diff.created) {
-      const { id: _doorId, location, ...doorData } = door;
+      // Le marqueur porte son nom français en base, comme dans `workspace-codecs.ts` :
+      // `validDoor()` refuse `sisters`, et une porte relue sous ce nom perdrait son anneau.
+      const { id: _doorId, location, sisters, ...doorData } = door;
       batch.set(doc(this.db, `${workspace}/doors/${door.id}`), {
         ...doorData,
         location: new GeoPoint(location.latitude, location.longitude),
+        aConfierAuxSoeurs: sisters,
         updatedAt: serverTimestamp()
       });
     }
-    for (const update of diff.updated) {
-      batch.update(doc(this.db, `${workspace}/doors/${update.doorId}`), { ...update, updatedAt: serverTimestamp() });
+    for (const { doorId, ...fields } of diff.updated) {
+      // `doorId` désigne le document, il n'est pas un champ : l'étaler ici ajouterait une
+      // clé que la règle de mise à jour n'autorise pas.
+      batch.update(doc(this.db, `${workspace}/doors/${doorId}`), { ...fields, updatedAt: serverTimestamp() });
     }
     for (const doorId of diff.archivedDoorIds) {
       batch.update(doc(this.db, `${workspace}/doors/${doorId}`), { active: false, updatedAt: serverTimestamp() });
