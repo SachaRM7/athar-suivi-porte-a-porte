@@ -1,3 +1,6 @@
+$ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\select-node22.ps1"
+
 $required = @(
   'VITE_FIREBASE_API_KEY',
   'VITE_FIREBASE_AUTH_DOMAIN',
@@ -21,9 +24,6 @@ if ($env:VITE_USE_FIREBASE_EMULATORS -eq 'true') {
 
 $env:VITE_WORKSPACE_ID = 'main'
 $env:VITE_BASE_PATH = '/'
-
-node scripts/assert-node22.mjs
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 npm run build
 exit $LASTEXITCODE

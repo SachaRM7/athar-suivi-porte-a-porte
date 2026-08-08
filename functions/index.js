@@ -214,9 +214,13 @@ exports.claimInitialAdmin = onCall(async (request) => {
 
 const ATHAR_STATUS_PRIORITY = Object.freeze({ linked: 5, open: 4, away: 3, locked: 2, dnd: 1, todo: 0 });
 
+function isFirestoreTimestamp(value) {
+  return value != null && typeof value.toMillis === 'function';
+}
+
 function latestTimestamp(left, right) {
-  if (!(left instanceof Timestamp)) return right instanceof Timestamp ? right : null;
-  if (!(right instanceof Timestamp)) return left;
+  if (!isFirestoreTimestamp(left)) return isFirestoreTimestamp(right) ? right : null;
+  if (!isFirestoreTimestamp(right)) return left;
   return left.toMillis() >= right.toMillis() ? left : right;
 }
 
@@ -258,7 +262,7 @@ async function recomputeAtharBuilding(buildingId) {
 
 exports.deriveAtharPassage = onDocumentCreated('buildings/{buildingId}/doors/{doorId}/passages/{passageId}', async (event) => {
   const passage = event.data?.data();
-  if (!passage || !(passage.at instanceof Timestamp)) return;
+  if (!passage || !isFirestoreTimestamp(passage.at)) return;
   const db = getFirestore();
   const doorRef = db.doc(`buildings/${event.params.buildingId}/doors/${event.params.doorId}`);
 
@@ -266,7 +270,7 @@ exports.deriveAtharPassage = onDocumentCreated('buildings/{buildingId}/doors/{do
     const door = await transaction.get(doorRef);
     if (!door.exists) return;
     const existing = door.data().derived?.dernierPassageAt;
-    if (!(existing instanceof Timestamp) || passage.at.toMillis() >= existing.toMillis()) {
+    if (!isFirestoreTimestamp(existing) || passage.at.toMillis() >= existing.toMillis()) {
       transaction.set(doorRef, {
         derived: { statut: passage.statut, dernierPassageAt: passage.at }
       }, { merge: true });
@@ -278,7 +282,6 @@ exports.deriveAtharPassage = onDocumentCreated('buildings/{buildingId}/doors/{do
 exports.deriveAtharSistersMarker = onDocumentWritten('buildings/{buildingId}/doors/{doorId}', async (event) => {
   const before = event.data?.before;
   const after = event.data?.after;
-  if (!after?.exists) return;
-  if (before?.exists && before.data().aConfierAuxSoeurs === after.data().aConfierAuxSoeurs) return;
+  if (before?.exists && after?.exists && before.data().aConfierAuxSoeurs === after.data().aConfierAuxSoeurs) return;
   await recomputeAtharBuilding(event.params.buildingId);
 });

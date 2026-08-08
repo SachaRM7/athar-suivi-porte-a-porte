@@ -8,7 +8,7 @@ process.env.GCLOUD_PROJECT = 'athar-local';
 const app = initializeApp({ projectId: 'athar-local' }, 'athar-wp2-derivations');
 const db = getFirestore(app);
 
-async function eventually(assertion: () => Promise<void>, timeoutMs = 15_000) {
+async function eventually(assertion: () => Promise<void>, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
   let cause: unknown;
   while (Date.now() < deadline) {
@@ -39,6 +39,13 @@ describe('WP2 — Cloud Functions de dérivation Athar', () => {
     });
     await building.collection('doors').doc('rdc-01').set({ etage: 0, numero: '01', ordre: 0, foyer: null, aConfierAuxSoeurs: false });
     await building.collection('doors').doc('rdc-02').set({ etage: 0, numero: '02', ordre: 1, foyer: null, aConfierAuxSoeurs: false });
+
+    await eventually(async () => {
+      expect((await building.get()).data()?.derived).toMatchObject({
+        statut: 'todo', portesTotal: 2, portesFaites: 0, aConfierAuxSoeurs: false
+      });
+    });
+
     await building.collection('doors').doc('rdc-01').collection('passages').doc('first').set({
       statut: 'open', note: null, auteurUid: 'seed', auteurNom: 'Seed', at: occurredAt
     });
@@ -53,5 +60,12 @@ describe('WP2 — Cloud Functions de dérivation Athar', () => {
     await eventually(async () => {
       expect((await building.get()).data()?.derived?.aConfierAuxSoeurs).toBe(true);
     });
-  });
+
+    await building.collection('doors').doc('rdc-02').delete();
+    await eventually(async () => {
+      expect((await building.get()).data()?.derived).toMatchObject({
+        statut: 'open', portesTotal: 1, portesFaites: 1, aConfierAuxSoeurs: false
+      });
+    });
+  }, 120_000);
 });

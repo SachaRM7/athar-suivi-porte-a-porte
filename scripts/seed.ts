@@ -19,7 +19,13 @@ await db.doc(`zones/${zoneId}`).set({
   couleur: '#16324F',
   polygon: {
     type: 'Polygon',
-    coordinates: [[[1.439, 43.600], [1.451, 43.600], [1.451, 43.608], [1.439, 43.600]]]
+    // HYPOTHÈSE: WP2 ne stocke que l’anneau extérieur ; Firestore interdit les tableaux imbriqués du GeoJSON brut.
+    vertices: [
+      new GeoPoint(43.600, 1.439),
+      new GeoPoint(43.600, 1.451),
+      new GeoPoint(43.608, 1.451),
+      new GeoPoint(43.600, 1.439)
+    ]
   },
   createdBy: 'seed-wp2',
   createdAt,

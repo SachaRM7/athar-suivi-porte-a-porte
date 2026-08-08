@@ -22,7 +22,12 @@ service cloud.firestore {
         data.keys().hasOnly(['nom', 'couleur', 'polygon', 'createdBy', 'createdAt', 'stats']) &&
         data.nom is string && data.nom.size() >= 1 && data.nom.size() <= 80 &&
         data.couleur is string && data.couleur.matches('^#[0-9A-Fa-f]{6}$') &&
-        data.polygon is map && data.createdBy is string && data.createdAt is timestamp && data.stats is map;
+        data.polygon is map && data.polygon.keys().hasOnly(['type', 'vertices']) &&
+        data.polygon.type == 'Polygon' && data.polygon.vertices is list &&
+        data.polygon.vertices.size() >= 4 && data.polygon.vertices.size() <= 500 &&
+        data.polygon.vertices[0] is latlng &&
+        data.polygon.vertices[data.polygon.vertices.size() - 1] == data.polygon.vertices[0] &&
+        data.createdBy is string && data.createdAt is timestamp && data.stats is map;
     }
 
     function atharValidBuilding() {
@@ -55,9 +60,13 @@ service cloud.firestore {
         data.auteurNom.size() <= 80 && data.at is timestamp;
     }
 
-    function atharUnchangedDerived() {
-      return !request.resource.data.keys().hasAny(['derived']) ||
-        (resource.data.keys().hasAny(['derived']) && request.resource.data.derived == resource.data.derived);
+    function atharDerivedUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['derived']);
+    }
+
+    function atharBuildingIdentityUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['rnbId', 'source', 'createdBy', 'createdAt']);
     }
 
     function memberPath(workspaceId, uid) {
@@ -253,7 +262,10 @@ service cloud.firestore {
     // temporairement avec /workspaces, qui appartient au socle antérieur.
     match /zones/{zoneId} {
       allow read: if estMembre();
-      allow create, update: if estCoordinateur() && atharValidZone();
+      allow create: if estCoordinateur() && atharValidZone() &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update: if estCoordinateur() && atharValidZone() &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdBy', 'createdAt']);
       allow delete: if estCoordinateur();
     }
 
@@ -261,21 +273,27 @@ service cloud.firestore {
       allow read: if estMembre();
       allow create: if estMembre() &&
         request.resource.data.createdBy == request.auth.uid && atharValidBuilding() &&
+        request.resource.data.rnbId == buildingId &&
+        exists(/databases/$(database)/documents/zones/$(request.resource.data.zoneId)) &&
         !request.resource.data.keys().hasAny(['derived']);
-      allow update: if estMembre() && atharValidBuilding() && atharUnchangedDerived();
+      allow update: if estMembre() && atharValidBuilding() &&
+        atharDerivedUnchanged() && atharBuildingIdentityUnchanged();
       allow delete: if estCoordinateur();
 
       match /doors/{doorId} {
         allow read: if estMembre();
         allow create: if estMembre() && atharValidDoor() &&
+          exists(/databases/$(database)/documents/buildings/$(buildingId)) &&
           !request.resource.data.keys().hasAny(['derived']);
-        allow update: if estMembre() && atharValidDoor() && atharUnchangedDerived();
+        allow update: if estMembre() && atharValidDoor() && atharDerivedUnchanged();
         allow delete: if estCoordinateur();
 
         match /passages/{passageId} {
           allow read: if estMembre();
           // Seule barrière qui compte : on écrit sous son propre nom, et jamais deux fois.
           allow create: if estMembre() && atharValidPassage() &&
+            exists(/databases/$(database)/documents/buildings/$(buildingId)) &&
+            exists(/databases/$(database)/documents/buildings/$(buildingId)/doors/$(doorId)) &&
             request.resource.data.auteurUid == request.auth.uid;
           allow update, delete: if false;
         }

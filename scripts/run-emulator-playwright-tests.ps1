@@ -1,3 +1,6 @@
+$ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\select-node22.ps1"
+
 $jdkHome = Get-ChildItem -LiteralPath 'tools\jdk-21' -Directory | Select-Object -First 1 -ExpandProperty FullName
 if (-not $jdkHome) {
   throw 'JDK 21 introuvable dans tools/jdk-21. Lance la preparation locale 2B-A.'

@@ -10,6 +10,9 @@ playwright-report/
 tools/jdk-21/
 tools/temurin-21.zip
 tools/pmtiles/
+tools/node-22.23.2/
+tools/node-v22.23.2-win-x64.zip
+tools/node-22.23.2-SHASUMS256.txt
 functions/node_modules/
 firestore-debug.log
 firebase-debug.log

@@ -22,7 +22,7 @@ préfixé `local_` et on stocke le point saisi manuellement.
 
 ```
 zones/{zoneId}
-  nom, couleur, polygon (GeoJSON), createdBy, createdAt
+  nom, couleur, polygon: { type: 'Polygon', vertices: GeoPoint[] }, createdBy, createdAt
   stats: { batimentsDetectes, batimentsTouches, portesFaites, portesTotal, majAt }
 
 buildings/{rnbId}            # créé au premier passage seulement
@@ -48,6 +48,10 @@ buildings/{rnbId}/doors/{doorId}/passages/{passageId}   # append-only
   auteurUid, auteurNom
   at: Timestamp
 ```
+
+Firestore interdit les tableaux imbriqués d'un `coordinates` GeoJSON brut. `polygon.vertices` contient donc
+l'anneau extérieur fermé sous forme de `GeoPoint[]`. Le codec cartographique doit reconstruire le GeoJSON à la lecture.
+Les trous et multipolygones ne sont pas nécessaires aux zones WP0 → WP8 ; leur ajout demandera un encodage dédié.
 
 ## Règles de dérivation
 

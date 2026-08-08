@@ -71,6 +71,13 @@ Toulouse puis pour une montee en charge geographique progressive.
 
 ## Acces local fonctionnel
 
+Le projet sélectionne Node 22.23.2 pour ses commandes Firebase. Si cette version
+n'est pas déjà installée, préparez une copie portable locale, ignorée par Git :
+
+```powershell
+npm run prepare:node22
+```
+
 Depuis la racine du projet, une seule commande demarre Auth, Firestore,
 Functions, injecte uniquement la fixture `pilote-minimal`, puis lance
 l'application :

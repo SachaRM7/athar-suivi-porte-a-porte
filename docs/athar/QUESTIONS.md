@@ -54,6 +54,13 @@ changer à sa forme. Question : l'ajouter à cette mutation, ou attendre un lot 
 
 ## Tranchées
 
+### 2026-08-08 — WP2 · Encodage Firestore des polygones
+
+Firestore refuse les tableaux imbriqués de `coordinates` dans un GeoJSON `Polygon`. Le seed WP2 était donc
+inexécutable malgré des tests de règles verts, car ceux-ci utilisaient un tableau vide. Pour WP0 → WP8, les zones
+sont enregistrées sous la forme `{ type: 'Polygon', vertices: GeoPoint[] }`, avec un anneau extérieur fermé.
+Le codec cartographique devra reconstruire le GeoJSON à la lecture. Les trous et multipolygones restent hors périmètre.
+
 ### 2026-08-08 — `FirestoreBuildingStructureGateway` écrivait `sisters` : confirmé sur le terrain, corrigé
 
 L'hypothèse était juste, et le symptôme est apparu en préversion : « Missing or insufficient permissions »
