@@ -48,3 +48,17 @@ Le script produit `public/tiles/batiments-31.pmtiles`, hors Git, avec un zoom d'
 16, garde `rnb_id` dans les propriétés et lui dérive un identifiant MVT numérique stable (`tile_id`), puis lance
 `pmtiles verify` avant de remplacer l'archive. Vérifier manuellement 20 emprises avant de publier : garages et
 locaux commerciaux doivent être écartés.
+
+## 5. Échantillon versionné
+
+Le tuileset départemental pèse 72 Mo et reste hors de Git. Sans lui, la carte n'aurait aucune emprise en
+développement ni en test. `scripts/carto/fixture_carmes.geojsonl` décrit sept emprises autour de la zone de
+démonstration « Carmes » — une suivie, plusieurs détectées sans document, une hors zone — et se compile avec les
+mêmes réglages que le tuileset réel :
+
+```bash
+bash scripts/carto/build_fixture_tiles.sh
+```
+
+La sortie `public/fixtures/batiments-carmes.pmtiles` (2 Ko) est versionnée. `MapPreview` (route
+`/technical-map`) ne consomme qu'elle ; l'écran terrain essaie d'abord le tuileset départemental.

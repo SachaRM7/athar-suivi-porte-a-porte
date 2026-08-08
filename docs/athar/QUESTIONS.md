@@ -5,7 +5,24 @@ Une question résolue est déplacée dans « Tranchées » avec la décision.
 
 ---
 
-_(aucune)_
+### 2026-08-08 — WP7 · Le marqueur « à confier aux sœurs » n'est persisté nulle part
+
+`03-CARTO.md` prescrit la couche 6 `batiments-soeurs`, et `02-DATA-MODEL.md` place
+`aConfierAuxSoeurs` sur la porte puis le dérive sur le bâtiment. Or l'interrupteur de la fiche porte
+(WP4) ne vit qu'en état de composant : ni `Door`, ni les codecs Firestore, ni la file d'attente ne
+portent ce champ. La couche est donc en place et lit `feature-state.sisters`, mais ce drapeau vaut
+toujours `false`.
+
+Ce qui manque : `Door.sisters` dans le modèle, les codecs et les règles, plus un chemin d'écriture —
+la file d'attente hors ligne ne transporte aujourd'hui qu'un changement de statut. C'est un trou de
+WP4, pas de WP7. Question : le rattacher à un correctif de clôture de WP4, ou attendre le lot qui
+traitera l'écriture des attributs de porte ?
+
+### 2026-08-08 — HYPOTHÈSE WP7 · Étiquette d'une emprise sans document
+
+Le tuileset ne porte aucune adresse : `03-CARTO.md` écarte explicitement le géocodage, et l'adresse
+est une étiquette saisie à la main. Une emprise ouverte avant toute description s'affiche donc sous
+`Bâtiment <ID-RNB>`. À remplacer par la saisie d'adresse quand elle existera dans la fiche.
 
 ---
 

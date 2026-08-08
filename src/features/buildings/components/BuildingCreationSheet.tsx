@@ -38,7 +38,8 @@ export function BuildingCreationSheet({ location, authorId, repositories, onCrea
       return;
     }
     const building: Building = {
-      id: `building-${crypto.randomUUID()}`,
+      // `02-DATA-MODEL.md` : un bâtiment absent du RNB reçoit un identifiant local préfixé.
+      id: `local_${crypto.randomUUID()}`,
       addressLabel: label,
       location: buildingLocation,
       geohash: geohashForLocation([buildingLocation.latitude, buildingLocation.longitude]),

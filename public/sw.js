@@ -129,6 +129,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  /*
+   * Les autres archives PMTiles (emprises WP6, echantillon de demonstration) sont lues par
+   * plages d'octets. Une reponse 206 ne peut pas entrer dans le Cache Storage : la mettre en
+   * cache leve, et la requete d'emprise echouerait. On passe donc directement au reseau.
+   */
+  if (url.pathname.endsWith('.pmtiles') || request.headers.has('range')) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(() => matchShell(withBasePath('/index.html'))));
     return;

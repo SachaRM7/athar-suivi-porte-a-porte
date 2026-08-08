@@ -1,25 +1,37 @@
-import { Map as MapLibreMap, NavigationControl, addProtocol, type GeoJSONSource, type Map } from 'maplibre-gl';
+import { Map as MapLibreMap, NavigationControl, addProtocol, type GeoJSONFeature, type GeoJSONSource, type Map as MapInstance } from 'maplibre-gl';
 import { PMTiles, Protocol, type Source } from 'pmtiles';
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode, type GeoJSONStoreFeatures } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
+import { geohashForLocation } from 'geofire-common';
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import type { FeatureCollection, Point, Polygon } from 'geojson';
 import { withBasePath } from '../../../app/config/public-paths';
-import type { Building, GeoPoint, Zone, ZoneGeometry } from '../../../domain/workspace/models';
+import type { Building, GeoPoint, Status, Zone, ZoneGeometry } from '../../../domain/workspace/models';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
 import { assertZone } from '../../../domain/workspace/invariants';
 import { boundingBoxForPolygon, buildingsAttachedToZone, closePolygon } from '../../zones/model/zone-geometry';
 import {
+  ATHAR_LAYERS,
+  CLICKABLE_FOOTPRINT_LAYERS,
+  createAtharLayers,
+  FOOTPRINT_MIN_ZOOM,
+} from '../config/athar-layers';
+import {
+  ATHAR_LIGHT_MAP_PALETTE,
   createBasemapLayers,
-  hatchPattern,
   MAP_STYLE_CONFIG,
   moveBasemapLabelsAboveOverlay,
   stripBasemap,
-  targetColor,
-  targetRadius,
-  targetStroke,
-  TOWNCENTER_MAP_PALETTE,
 } from '../config/map-style';
+import {
+  centerOfRing,
+  doorsByBuilding as groupDoorsByBuilding,
+  dominantStatusId,
+  footprintState,
+  squareAround,
+  zoneProgressLabel,
+  type FootprintContext,
+} from '../model/footprints';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 class LocalPackageSource implements Source {
@@ -47,6 +59,21 @@ addProtocol('pmtiles', protocol.tile);
 // Glyphs are bundled locally so street labels remain available after PWA preparation.
 const DEFAULT_ZONE_COLOR = '#16835F';
 
+/**
+ * Tuileset d'emprises du lot WP6. Il pèse 72 Mo et vit hors de Git ; l'échantillon versionné
+ * `batiments-carmes.pmtiles` prend le relais pour que la carte reste vérifiable sans lui.
+ */
+export const TOULOUSE_FOOTPRINT_ARCHIVE = '/tiles/batiments-31.pmtiles';
+export const DEMO_FOOTPRINT_ARCHIVE = '/fixtures/batiments-carmes.pmtiles';
+const DEFAULT_FOOTPRINT_ARCHIVES = [TOULOUSE_FOOTPRINT_ARCHIVE, DEMO_FOOTPRINT_ARCHIVE] as const;
+const FOOTPRINT_SOURCE = 'athar-batiments';
+const FOOTPRINT_SOURCE_LAYER = 'batiments';
+const ZONE_SOURCE = 'athar-zones';
+const LOCAL_BUILDING_SOURCE = 'athar-batiments-poses';
+const POSITION_SOURCE = 'athar-position';
+/** Jeton `--foot-todo` : un bâtiment décrit mais sans passage reste gris. */
+const UNTOUCHED_COLOR = '#CDD3CD';
+
 const localMapStyle = {
   version: 8 as const,
   glyphs: withBasePath('/fonts/{fontstack}/{range}.pbf'),
@@ -54,42 +81,68 @@ const localMapStyle = {
   layers: []
 };
 
+const EMPTY_FEATURES = { type: 'FeatureCollection' as const, features: [] };
+
 type WorkspaceMapProps = {
   repositories: WorkspaceRepositories;
+  authorId: string;
   canEditZones: boolean;
   canCreateBuildings?: boolean;
-  onBuildingSelect?: (building: Building) => void;
+  /** Archives PMTiles essayées dans l'ordre ; la première disponible fournit les emprises. */
+  footprintArchives?: readonly string[];
+  onBuildingSelect?: (building: Building, options: { persisted: boolean }) => void;
   onBuildingLocationSelect?: (location: GeoPoint) => void;
 };
 
-function zoneFeatures(zones: readonly Zone[]): FeatureCollection<Polygon> {
+async function firstAvailableArchive(urls: readonly string[]): Promise<string | null> {
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { headers: { Range: 'bytes=0-15' } });
+      if (response.ok || response.status === 206) return url;
+    } catch {
+      // Archive suivante : l'absence du tuileset n'est pas une erreur de carte.
+    }
+  }
+  return null;
+}
+
+function zoneFeatures(zones: readonly Zone[], progressLabels: ReadonlyMap<string, string>): FeatureCollection<Polygon> {
   return {
     type: 'FeatureCollection' as const,
     features: zones.map((zone) => ({
       type: 'Feature' as const,
-      properties: { id: zone.id, name: zone.name, surveyed: zone.coverageState === 'complete' },
+      properties: { id: zone.id, name: zone.name, progressLabel: progressLabels.get(zone.id) ?? zone.name },
       geometry: { type: 'Polygon' as const, coordinates: [zone.geometry.coordinates.map(([longitude, latitude]) => [longitude, latitude])] }
     }))
   };
 }
 
-function buildingFeatures(buildings: Awaited<ReturnType<WorkspaceRepositories['buildings']['listByViewport']>>): FeatureCollection<Point> {
+/** Emprises de repli pour les bâtiments posés à la main, absents du référentiel. */
+function localBuildingFeatures(buildings: readonly Building[], context: FootprintContext): FeatureCollection<Polygon> {
   return {
     type: 'FeatureCollection' as const,
-    features: buildings.map((building) => ({
-      type: 'Feature' as const,
-      properties: {
-        id: building.id,
-        label: building.addressLabel,
-        zoneId: building.zoneId,
-        diameter: 14,
-        rank: 3,
-        state: 'active',
-        selected: false,
-      },
-      geometry: { type: 'Point' as const, coordinates: [building.location.longitude, building.location.latitude] }
-    }))
+    features: buildings.map((building) => {
+      const statusId = dominantStatusId(context.doorsByBuilding.get(building.id) ?? []);
+      return {
+        type: 'Feature' as const,
+        properties: {
+          id: building.id,
+          label: building.addressLabel,
+          color: (statusId ? context.statuses.get(statusId)?.color : undefined) ?? UNTOUCHED_COLOR
+        },
+        geometry: { type: 'Polygon' as const, coordinates: [squareAround(building.location.longitude, building.location.latitude)] }
+      };
+    })
   };
+}
+
+function outerRing(feature: GeoJSONFeature): readonly [number, number][] | null {
+  const geometry = feature.geometry;
+  const ring = geometry.type === 'Polygon' ? geometry.coordinates[0]
+    : geometry.type === 'MultiPolygon' ? geometry.coordinates[0]?.[0]
+      : null;
+  if (!ring || ring.length === 0) return null;
+  return ring.map(([longitude, latitude]) => [longitude, latitude] as [number, number]);
 }
 
 function geometryFromFeature(feature: GeoJSONStoreFeatures): ZoneGeometry | null {
@@ -99,19 +152,22 @@ function geometryFromFeature(feature: GeoJSONStoreFeatures): ZoneGeometry | null
   return closePolygon(coordinates.map(([longitude, latitude]) => [longitude, latitude] as [number, number]));
 }
 
-export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = false, onBuildingSelect, onBuildingLocationSelect }: WorkspaceMapProps): ReactElement {
+export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect, onBuildingLocationSelect }: WorkspaceMapProps): ReactElement {
   const element = useRef<HTMLDivElement>(null);
-  const map = useRef<Map | null>(null);
+  const map = useRef<MapInstance | null>(null);
   const draw = useRef<TerraDraw | null>(null);
   const viewportRequest = useRef<AbortController | null>(null);
   const placingBuilding = useRef(false);
   const zones = useRef<readonly Zone[]>([]);
+  const selectedZoneRef = useRef<string | null>(null);
+  const footprintContext = useRef<FootprintContext>({ zone: null, buildings: new Map(), doorsByBuilding: new Map(), statuses: new Map(), untouchedColor: UNTOUCHED_COLOR });
   const [zoneList, setZoneList] = useState<readonly Zone[]>([]);
   const [visibleBuildings, setVisibleBuildings] = useState<readonly Building[]>([]);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [visibleBuildingCount, setVisibleBuildingCount] = useState(0);
   const [attachedBuildingCount, setAttachedBuildingCount] = useState<number | null>(null);
   const [editing, setEditing] = useState<'drawing' | 'editing' | null>(null);
+  const [placing, setPlacing] = useState(false);
   /**
    * `null` signifie « pas encore touché » : les champs reflètent alors la zone sélectionnée.
    * Les brouillons sont dérivés au rendu plutôt que recopiés par un effet, sinon chaque
@@ -130,6 +186,39 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
     setZoneDraft(null);
   };
 
+  useEffect(() => { selectedZoneRef.current = selectedZoneId; }, [selectedZoneId]);
+
+  /**
+   * Alimente `feature-state` depuis Firestore. Une emprise sans document reste grise :
+   * aucune écriture n'est déclenchée ici, ni au survol, ni à l'appui.
+   */
+  const paintFootprints = useCallback(() => {
+    const instance = map.current;
+    if (!instance) return;
+    const context = footprintContext.current;
+    const tiled = new Set<string>();
+    try {
+      if (instance.getSource(FOOTPRINT_SOURCE)) {
+        for (const feature of instance.querySourceFeatures(FOOTPRINT_SOURCE, { sourceLayer: FOOTPRINT_SOURCE_LAYER })) {
+          const rnbId = feature.properties?.rnb_id;
+          if (typeof rnbId !== 'string' || tiled.has(rnbId)) continue;
+          const ring = outerRing(feature);
+          if (!ring) continue;
+          tiled.add(rnbId);
+          instance.setFeatureState(
+            { source: FOOTPRINT_SOURCE, sourceLayer: FOOTPRINT_SOURCE_LAYER, id: rnbId },
+            footprintState(rnbId, centerOfRing(ring), context)
+          );
+        }
+      }
+    } catch {
+      // Tuiles pas encore chargées : le prochain « sourcedata » repassera.
+    }
+    const untiled = [...context.buildings.values()].filter((building) => !tiled.has(building.id));
+    (instance.getSource(LOCAL_BUILDING_SOURCE) as GeoJSONSource | undefined)?.setData(localBuildingFeatures(untiled, context));
+    element.current?.setAttribute('data-footprints', String(tiled.size));
+  }, []);
+
   const refreshViewport = useCallback(async () => {
     const instance = map.current;
     if (!instance) return;
@@ -139,22 +228,68 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
     const bounds = instance.getBounds();
     const viewport = { north: bounds.getNorth(), south: bounds.getSouth(), east: bounds.getEast(), west: bounds.getWest() };
     element.current?.setAttribute('data-viewport', JSON.stringify(viewport));
-    const [nextZones, buildings] = await Promise.all([repositories.zones.list(), repositories.buildings.listByViewport(viewport, { signal: controller.signal })]);
+    const [nextZones, buildings, doors, statuses] = await Promise.all([
+      repositories.zones.list(),
+      repositories.buildings.listByViewport(viewport, { signal: controller.signal }),
+      repositories.doors.listByViewport(viewport, { signal: controller.signal }),
+      repositories.statuses.list()
+    ]);
     if (controller.signal.aborted || viewportRequest.current !== controller) return;
+    const stats = await Promise.all(nextZones.map(async (zone) => [zone.id, zoneProgressLabel(zone, await repositories.zones.getStats(zone.id))] as const));
+    if (viewportRequest.current !== controller) return;
     zones.current = nextZones;
     setZoneList(nextZones);
-    (instance.getSource('athar-zones') as GeoJSONSource | undefined)?.setData(zoneFeatures(nextZones));
-    (instance.getSource('athar-buildings') as GeoJSONSource | undefined)?.setData(buildingFeatures(buildings));
+    const activeZoneId = selectedZoneRef.current ?? nextZones[0]?.id ?? null;
+    footprintContext.current = {
+      zone: nextZones.find((zone) => zone.id === activeZoneId) ?? null,
+      buildings: new Map(buildings.map((building) => [building.id, building])),
+      doorsByBuilding: groupDoorsByBuilding(doors),
+      statuses: new Map<string, Status>(statuses.map((status) => [status.id, status])),
+      untouchedColor: UNTOUCHED_COLOR
+    };
+    (instance.getSource(ZONE_SOURCE) as GeoJSONSource | undefined)?.setData(zoneFeatures(nextZones, new Map(stats)));
     setVisibleBuildingCount(buildings.length);
     setVisibleBuildings(buildings);
     setSelectedZoneId((current) => current ?? nextZones[0]?.id ?? null);
-  }, [repositories]);
+    paintFootprints();
+  }, [paintFootprints, repositories]);
+
+  /**
+   * Un appui sur une emprise ouvre la vue bâtiment, jamais un formulaire de création :
+   * l'emprise existe déjà. Sans document Firestore, la fiche s'ouvre sur l'état vide et
+   * le bâtiment n'est matérialisé qu'au moment où quelqu'un décrit sa structure.
+   */
+  const openFootprint = useCallback(async (feature: GeoJSONFeature) => {
+    const identifier = feature.properties?.rnb_id ?? feature.properties?.id;
+    if (typeof identifier !== 'string') return;
+    const existing = await repositories.buildings.get(identifier);
+    if (existing) {
+      onBuildingSelect?.(existing, { persisted: true });
+      return;
+    }
+    const zone = footprintContext.current.zone;
+    const ring = outerRing(feature);
+    if (!zone || !ring) return;
+    const [longitude, latitude] = centerOfRing(ring);
+    onBuildingSelect?.({
+      id: identifier,
+      // HYPOTHÈSE: le tuileset ne porte aucune adresse — `03-CARTO.md` écarte le géocodage.
+      // L'ID-RNB tient lieu d'étiquette tant que personne n'a saisi l'adresse.
+      addressLabel: `Bâtiment ${identifier}`,
+      location: { latitude, longitude },
+      geohash: geohashForLocation([latitude, longitude]),
+      zoneId: zone.id,
+      createdBy: authorId,
+      structureRevision: 0
+    }, { persisted: false });
+  }, [authorId, onBuildingSelect, repositories.buildings]);
 
   useEffect(() => {
     if (!element.current || map.current) return;
     const instance = new MapLibreMap({
       container: element.current,
-      center: [1.4468, 43.6064], zoom: 15.2, pitch: 48, bearing: -12,
+      // Zoom 16 minimum : en dessous, `03-CARTO.md` n'affiche plus les emprises individuelles.
+      center: [1.4468, 43.6064], zoom: 16.1, pitch: 0, bearing: 0,
       attributionControl: { compact: true },
       style: localMapStyle
     });
@@ -162,7 +297,7 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
     element.current.dataset.basemap = 'local-pmtiles';
     instance.on('error', (event) => console.error('Workspace map error', event.error));
     const initializeWorkspaceLayers = async () => {
-      if (instance.getSource('athar-zones')) return;
+      if (instance.getSource(ZONE_SOURCE)) return;
       {
         const header = await archive.getHeader();
         instance.addSource('protomaps', {
@@ -176,76 +311,72 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
           minzoom: header.minZoom, maxzoom: Math.min(header.maxZoom, MAP_STYLE_CONFIG.buildingTileMaxZoom),
           bounds: [header.minLon, header.minLat, header.maxLon, header.maxLat]
         });
-        createBasemapLayers('protomaps', 'protomaps-buildings').forEach((layer) => instance.addLayer(layer));
-        stripBasemap(instance, TOWNCENTER_MAP_PALETTE);
+        createBasemapLayers('protomaps', 'protomaps-buildings', { palette: ATHAR_LIGHT_MAP_PALETTE, flat: true })
+          .forEach((layer) => instance.addLayer(layer));
+        stripBasemap(instance, ATHAR_LIGHT_MAP_PALETTE);
       }
-        const zoneHatch = hatchPattern(TOWNCENTER_MAP_PALETTE.text3);
-        if (zoneHatch) instance.addImage('athar-zone-hatch', zoneHatch);
-        instance.addSource('athar-zones', { type: 'geojson', data: zoneFeatures([]) });
-        instance.addLayer({
-          id: 'athar-zones-fill', type: 'fill', source: 'athar-zones',
-          filter: ['==', ['get', 'surveyed'], true],
-          paint: { 'fill-color': TOWNCENTER_MAP_PALETTE.accentMark, 'fill-opacity': 0.06 },
+
+      instance.addSource(ZONE_SOURCE, { type: 'geojson', data: zoneFeatures([], new Map()) });
+      instance.addSource(LOCAL_BUILDING_SOURCE, { type: 'geojson', data: EMPTY_FEATURES });
+      instance.addSource(POSITION_SOURCE, { type: 'geojson', data: EMPTY_FEATURES });
+
+      const footprintArchiveUrl = await firstAvailableArchive(footprintArchives.map((path) => withBasePath(path as `/${string}`)));
+      if (footprintArchiveUrl) {
+        const footprints = new PMTiles(footprintArchiveUrl);
+        protocol.add(footprints);
+        const header = await footprints.getHeader();
+        instance.addSource(FOOTPRINT_SOURCE, {
+          type: 'vector',
+          tiles: [`pmtiles://${footprintArchiveUrl}/{z}/{x}/{y}`],
+          minzoom: header.minZoom, maxzoom: header.maxZoom,
+          bounds: [header.minLon, header.minLat, header.maxLon, header.maxLat],
+          // L'ID-RNB devient l'identifiant MapLibre : c'est la clé de `feature-state`.
+          promoteId: { [FOOTPRINT_SOURCE_LAYER]: 'rnb_id' }
         });
-        instance.addLayer({
-          id: 'athar-zones-hatch', type: 'fill', source: 'athar-zones',
-          filter: ['==', ['get', 'surveyed'], false],
-          paint: { 'fill-pattern': 'athar-zone-hatch', 'fill-opacity': 0.55 },
-        });
-        instance.addLayer({
-          id: 'athar-zones-line', type: 'line', source: 'athar-zones',
-          paint: {
-            'line-color': ['case', ['==', ['get', 'surveyed'], true], TOWNCENTER_MAP_PALETTE.accentMark, TOWNCENTER_MAP_PALETTE.text3],
-            'line-width': 1.5,
-            'line-opacity': 0.75,
-          },
-        });
-        instance.addSource('athar-buildings', { type: 'geojson', data: buildingFeatures([]) });
-        instance.addLayer({
-          id: 'athar-buildings-glow', type: 'circle', source: 'athar-buildings',
-          paint: {
-            'circle-radius': [
-              'interpolate', ['linear'], ['zoom'],
-              10, ['+', targetRadius(0.55), 9],
-              14, ['+', targetRadius(1), 11],
-              18, ['+', targetRadius(1.3), 14],
-            ],
-            'circle-color': MAP_STYLE_CONFIG.pointGlow.color,
-            'circle-opacity': MAP_STYLE_CONFIG.pointGlow.opacity,
-            'circle-blur': MAP_STYLE_CONFIG.pointGlow.blur,
-            'circle-stroke-width': 0,
-          },
-        });
-        instance.addLayer({
-          id: 'athar-buildings-circle', type: 'circle', source: 'athar-buildings',
-          paint: {
-            'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, targetRadius(0.55), 14, targetRadius(1), 18, targetRadius(1.3)],
-            'circle-color': targetColor(TOWNCENTER_MAP_PALETTE),
-            'circle-opacity': ['match', ['get', 'state'], 'withdrawn', 0.3, 'dismissed', 0.18, 'taken', 0.95, 0.9],
-            'circle-stroke-width': ['case', ['==', ['get', 'state'], 'withdrawn'], 1.5, ['==', ['get', 'selected'], true], 2.5, 1.5],
-            'circle-stroke-color': targetStroke(TOWNCENTER_MAP_PALETTE),
-            'circle-stroke-opacity': 1,
-          },
-        });
-        instance.moveLayer('buildings-3d', 'athar-buildings-glow');
-        moveBasemapLabelsAboveOverlay(instance, 'athar-buildings-glow');
-        instance.on('mouseenter', 'athar-buildings-circle', () => { instance.getCanvas().style.cursor = 'pointer'; });
-        instance.on('mouseleave', 'athar-buildings-circle', () => { instance.getCanvas().style.cursor = ''; });
-        instance.on('click', 'athar-buildings-circle', async (event) => {
-          const id = event.features?.[0]?.properties?.id;
-          if (typeof id !== 'string') return;
-          const building = await repositories.buildings.get(id);
-          if (building) onBuildingSelect?.(building);
-        });
-        instance.on('click', (event) => {
-          if (!placingBuilding.current) return;
+      }
+
+      createAtharLayers({
+        zones: ZONE_SOURCE,
+        footprints: footprintArchiveUrl ? FOOTPRINT_SOURCE : null,
+        footprintSourceLayer: FOOTPRINT_SOURCE_LAYER,
+        localBuildings: LOCAL_BUILDING_SOURCE,
+        position: POSITION_SOURCE
+      }).forEach((layer) => instance.addLayer(layer));
+      // Les libellés du fond passent au-dessus des emprises, mais sous la progression de zone.
+      moveBasemapLabelsAboveOverlay(instance, ATHAR_LAYERS.zoneProgress);
+      if (!footprintArchiveUrl) {
+        setMessage('Emprises indisponibles : generez public/tiles/batiments-31.pmtiles (voir scripts/carto/README.md).');
+      }
+
+      for (const layerId of CLICKABLE_FOOTPRINT_LAYERS) {
+        if (!instance.getLayer(layerId)) continue;
+        instance.on('mouseenter', layerId, () => { if (!placingBuilding.current) instance.getCanvas().style.cursor = 'pointer'; });
+        instance.on('mouseleave', layerId, () => { if (!placingBuilding.current) instance.getCanvas().style.cursor = ''; });
+      }
+
+      instance.on('click', (event) => {
+        if (placingBuilding.current) {
           placingBuilding.current = false;
+          setPlacing(false);
+          instance.getCanvas().style.cursor = '';
           onBuildingLocationSelect?.({ latitude: event.lngLat.lat, longitude: event.lngLat.lng });
           setMessage('Emplacement choisi. Completez la fiche du batiment.');
-        });
-        instance.addControl(new NavigationControl({ showCompass: false }), 'top-right');
-        setMessage('Fond Toulouse local pret.');
-        void refreshViewport().catch((error) => { if (!(error instanceof Error) || error.name !== 'ReadAbortedError') setMessage(error instanceof Error ? error.message : 'Lecture de carte indisponible.'); });
+          return;
+        }
+        const layers = CLICKABLE_FOOTPRINT_LAYERS.filter((layerId) => instance.getLayer(layerId));
+        const hit = instance.queryRenderedFeatures(event.point, { layers })
+          // Les emprises hors zone sont inertes : elles partagent la source mais pas l'appui.
+          .find((feature) => feature.source === LOCAL_BUILDING_SOURCE || feature.state?.inZone === true);
+        // Appui dans le vide : aucune création, aucune écriture.
+        if (!hit) return;
+        void openFootprint(hit);
+      });
+
+      instance.on('idle', paintFootprints);
+      instance.on('sourcedata', (event) => { if (event.sourceId === FOOTPRINT_SOURCE && event.isSourceLoaded) paintFootprints(); });
+      instance.addControl(new NavigationControl({ showCompass: false }), 'top-right');
+      setMessage((current) => current.startsWith('Emprises indisponibles') ? current : 'Fond Toulouse local pret.');
+      void refreshViewport().catch((error) => { if (!(error instanceof Error) || error.name !== 'ReadAbortedError') setMessage(error instanceof Error ? error.message : 'Lecture de carte indisponible.'); });
     };
     const initializeAfterStyleLoad = () => {
       void initializeWorkspaceLayers().catch((error: unknown) => {
@@ -256,7 +387,28 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
     else instance.once('style.load', initializeAfterStyleLoad);
     instance.on('moveend', () => { void refreshViewport().catch((error) => { if (!(error instanceof Error) || error.name !== 'ReadAbortedError') setMessage(error instanceof Error ? error.message : 'Lecture de carte indisponible.'); }); });
     return () => { viewportRequest.current?.abort(); draw.current?.stop(); draw.current = null; map.current?.remove(); map.current = null; };
-  }, [onBuildingLocationSelect, onBuildingSelect, refreshViewport, repositories.buildings]);
+  }, [footprintArchives, onBuildingLocationSelect, openFootprint, paintFootprints, refreshViewport]);
+
+  /** Couche 7 de `03-CARTO.md` : la position réelle, seul autre usage du safran. */
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition((position) => {
+      const data: FeatureCollection<Point> = {
+        type: 'FeatureCollection',
+        features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [position.coords.longitude, position.coords.latitude] } }]
+      };
+      (map.current?.getSource(POSITION_SOURCE) as GeoJSONSource | undefined)?.setData(data);
+    }, undefined, { enableHighAccuracy: true });
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  /** Le changement de zone active redéfinit ce qui est « dans la zone ». */
+  useEffect(() => {
+    const zone = zones.current.find((candidate) => candidate.id === selectedZoneId) ?? null;
+    if (footprintContext.current.zone?.id === zone?.id) return;
+    footprintContext.current = { ...footprintContext.current, zone };
+    paintFootprints();
+  }, [paintFootprints, selectedZoneId, zoneList]);
 
   const startDrawing = () => {
     const instance = map.current;
@@ -279,7 +431,18 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
   const startBuildingPlacement = () => {
     if (!canCreateBuildings) return;
     placingBuilding.current = true;
-    setMessage('Touchez la carte a l emplacement du batiment.');
+    setPlacing(true);
+    const canvas = map.current?.getCanvas();
+    if (canvas) canvas.style.cursor = 'crosshair';
+    setMessage('Touchez la carte a l emplacement exact du batiment.');
+  };
+
+  const cancelBuildingPlacement = () => {
+    placingBuilding.current = false;
+    setPlacing(false);
+    const canvas = map.current?.getCanvas();
+    if (canvas) canvas.style.cursor = '';
+    setMessage('Pose annulee. Rien n a ete cree.');
   };
 
   const startEditing = () => {
@@ -387,9 +550,9 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
         {canEditZones && <button className="secondary-action map-tool" disabled={editing !== null || savingZone} onClick={startDrawing} type="button">Créer une zone</button>}
         {canEditZones && <button className="secondary-action map-tool" disabled={editing !== null || !selectedZoneId} onClick={startEditing} type="button">Modifier la zone</button>}
         {canEditZones && selectedZone && <button className="secondary-action map-tool danger-action" disabled={editing !== null || savingZone} onClick={() => void deleteSelectedZone()} type="button">Supprimer la zone</button>}
-        {canCreateBuildings && <button className="secondary-action map-tool" disabled={editing !== null} onClick={startBuildingPlacement} type="button">Ajouter un batiment</button>}
+        {canCreateBuildings && <button className="secondary-action map-tool" disabled={editing !== null || placing} onClick={startBuildingPlacement} type="button">Ajouter un bâtiment</button>}
         {editing && <button className="primary-action map-tool" disabled={savingZone} onClick={() => void saveZone()} type="button">Enregistrer la zone</button>}
-        <button aria-label="Revenir à la vue de dessus" className="secondary-action map-tool map-2d-control" onClick={() => map.current?.easeTo({ pitch: 0, bearing: 0, duration: 450 })} type="button">Vue 2D</button>
+        <button aria-label="Cadrer sur les emprises" className="secondary-action map-tool" onClick={() => map.current?.easeTo({ zoom: FOOTPRINT_MIN_ZOOM + 0.4, duration: 450 })} type="button">Voir les emprises</button>
       </div>
       {canEditZones && (selectedZone || editing) && (
         <div className="zone-properties" aria-label="Proprietes de la zone">
@@ -401,13 +564,21 @@ export function WorkspaceMap({ repositories, canEditZones, canCreateBuildings = 
       {onBuildingSelect && (
         <div className="visible-building-list" aria-label="Batiments visibles">
           {visibleBuildings.map((building) => (
-            <button className="building-chip" key={building.id} onClick={() => onBuildingSelect(building)} type="button">
+            <button className="building-chip" key={building.id} onClick={() => onBuildingSelect(building, { persisted: true })} type="button">
               {building.addressLabel}
             </button>
           ))}
         </div>
       )}
-      <div aria-label="Carte MapLibre des zones" className="workspace-map" ref={element} />
+      <div className="workspace-map-stage">
+        {placing && (
+          <p className="hint" role="status">
+            Touche la carte à l’emplacement exact du bâtiment
+            <button onClick={cancelBuildingPlacement} type="button">Annuler</button>
+          </p>
+        )}
+        <div aria-label="Carte MapLibre des zones" className={placing ? 'workspace-map placing' : 'workspace-map'} ref={element} />
+      </div>
       <p className="workspace-map-message" role="status">{message}</p>
     </section>
   );

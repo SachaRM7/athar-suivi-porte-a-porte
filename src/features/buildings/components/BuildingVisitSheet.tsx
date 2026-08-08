@@ -16,6 +16,12 @@ type BuildingVisitSheetProps = {
   outbox: Outbox;
   repositories: WorkspaceRepositories;
   sync?: FieldVisitSync;
+  /**
+   * Matérialise le document Firestore d'un bâtiment détecté mais jamais visité.
+   * Appelé au tout dernier moment : tant que personne ne décrit la structure,
+   * une emprise grise ne doit produire aucune écriture (cf. `02-DATA-MODEL.md`).
+   */
+  ensureBuildingExists?(): Promise<void>;
   onBuildingChange(building: Building): void;
   onClose(): void;
 };
@@ -56,7 +62,7 @@ function manualTargetLine(target: DoorStructureTarget): string {
   return `${target.floor} | ${target.label} | ${identity}`;
 }
 
-export function BuildingVisitSheet({ authorId, building, canEditStructure, outbox, repositories, sync, onBuildingChange, onClose }: BuildingVisitSheetProps): ReactElement | null {
+export function BuildingVisitSheet({ authorId, building, canEditStructure, outbox, repositories, sync, ensureBuildingExists, onBuildingChange, onClose }: BuildingVisitSheetProps): ReactElement | null {
   const [doors, setDoors] = useState<readonly Door[]>([]);
   const [structureDoors, setStructureDoors] = useState<readonly Door[]>([]);
   const [statuses, setStatuses] = useState<readonly Status[]>([]);
@@ -218,6 +224,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, outbo
   }
 
   async function applyStructure(targets: readonly DoorStructureTarget[]): Promise<void> {
+    await ensureBuildingExists?.();
     let previewId = 0;
     const preview = buildBuildingStructureDiff({
       building: openedBuilding,

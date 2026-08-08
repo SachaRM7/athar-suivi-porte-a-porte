@@ -64,6 +64,37 @@ export const TOWNCENTER_MAP_PALETTE: MapPalette = {
   },
 };
 
+/**
+ * Fond clair du terrain, construit sur les jetons `--map-*` de `01-DESIGN-SYSTEM.md`.
+ * Le sombre reste réservé au laboratoire technique : dehors il est illisible.
+ */
+export const ATHAR_LIGHT_MAP_PALETTE: MapPalette = {
+  theme: 'light',
+  ranks: ['#16324F', '#16324F', '#16324F', '#16324F', '#16324F'],
+  acc: '#23517D',
+  accentMark: '#16324F',
+  success: '#1F7A5A',
+  failure: '#A93B2E',
+  text1: '#14181A',
+  text2: '#5C6663',
+  text3: '#9AA29E',
+  surface1: '#FCFCFB',
+  border1: '#DCE1DC',
+  border2: '#B4BCB4',
+  fond: '#E9ECE5',
+  map: {
+    water: '#C6D8E1',
+    buildings: '#DEE3DB',
+    green: '#D6E2CE',
+    street: '#FBFCFA',
+    streetEdge: '#E4E8E1',
+    rail: '#DCE1DC',
+    boundary: '#C9CFC8',
+    label: '#5C6663',
+    labelHalo: '#FCFCFB',
+  },
+};
+
 /** Single source of truth for the local basemap and preserved Athar extrusion. */
 export const MAP_STYLE_CONFIG = {
   theme: TOWNCENTER_MAP_PALETTE.theme,
@@ -78,7 +109,6 @@ export const MAP_STYLE_CONFIG = {
   pointGlow: { color: '#6eb5ff', opacity: 0.52, blur: 0.82 },
 } as const;
 
-const protomapsFlavor: Flavor = namedFlavor(MAP_STYLE_CONFIG.theme);
 const buildingHeight: ExpressionSpecification = [
   'case',
   ['has', 'height'], ['to-number', ['get', 'height']],
@@ -87,21 +117,33 @@ const buildingHeight: ExpressionSpecification = [
 ];
 const buildingBase: ExpressionSpecification = ['coalesce', ['to-number', ['get', 'min_height']], 0];
 
+export type BasemapOptions = {
+  palette?: MapPalette;
+  /**
+   * Vue de dessus : la coupe verticale des bâtiments extrudés masquerait les emprises
+   * de statut, qui sont le sujet de la carte terrain.
+   */
+  flat?: boolean;
+};
+
 /**
  * Builds the local Protomaps layers. Towncenter's repaint is applied afterwards;
  * the Athar building layers are the only intentional extension.
  */
-export function createBasemapLayers(source = 'protomaps', buildingSource = source): LayerSpecification[] {
-  return layers(source, protomapsFlavor, { lang: MAP_STYLE_CONFIG.language }).flatMap((layer) => {
+export function createBasemapLayers(source = 'protomaps', buildingSource = source, options: BasemapOptions = {}): LayerSpecification[] {
+  const palette = options.palette ?? MAP_STYLE_CONFIG.palette;
+  const flavor: Flavor = namedFlavor(palette.theme);
+  return layers(source, flavor, { lang: MAP_STYLE_CONFIG.language }).flatMap((layer) => {
     if (layer.id !== 'buildings') return [layer];
+    const flatBuildings = {
+      ...layer,
+      id: 'buildings-2d',
+      source: buildingSource,
+      paint: { ...layer.paint, 'fill-color': palette.map.buildings, 'fill-opacity': 0.96 },
+    } as unknown as LayerSpecification;
+    if (options.flat) return [flatBuildings];
     return [
-      {
-        ...layer,
-        id: 'buildings-2d',
-        source: buildingSource,
-        maxzoom: MAP_STYLE_CONFIG.buildingMinZoom,
-        paint: { ...layer.paint, 'fill-color': MAP_STYLE_CONFIG.palette.map.buildings, 'fill-opacity': 0.96 },
-      } as unknown as LayerSpecification,
+      { ...flatBuildings, maxzoom: MAP_STYLE_CONFIG.buildingMinZoom } as unknown as LayerSpecification,
       {
         id: 'buildings-3d',
         type: 'fill-extrusion',

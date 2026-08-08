@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState, type ReactElement } from 'react';
+import { lazy, Suspense, useCallback, useMemo, useState, type ReactElement } from 'react';
 import { useAuth } from '../../../app/providers/auth-context';
 import { environment } from '../../../app/config/environment';
 import type { Building, WorkspaceMember } from '../../../domain/workspace/models';
@@ -14,6 +14,7 @@ import { createFirestoreWorkspaceReadRepositories } from '../../../infrastructur
 import { createTerrainSessionRepositories } from '../../../infrastructure/firestore/terrain-session-repositories';
 import { IndexedDbOutbox } from '../../../infrastructure/outbox/indexeddb-outbox';
 import { useFieldVisitSync } from '../../visits/model/use-field-visit-sync';
+import { useOpenedBuilding } from '../model/use-opened-building';
 
 const WorkspaceMap = lazy(async () => ({ default: (await import('./WorkspaceMap')).WorkspaceMap }));
 
@@ -25,7 +26,6 @@ export function MapPage(): ReactElement {
 }
 
 function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignOut(): Promise<void> }): ReactElement {
-  const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
   const [newBuildingLocation, setNewBuildingLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const outbox = useMemo(() => new IndexedDbOutbox(member.id), [member.id]);
@@ -53,6 +53,8 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
     });
   }, [member, outbox]);
   const sync = useFieldVisitSync(member.id, outbox, repositories);
+  const opened = useOpenedBuilding(repositories);
+  const changeBuilding = useCallback((building: Building) => opened.select(building, { persisted: true }), [opened]);
   const initialAdmin = useMemo(() => {
     const client = getFirebaseClient();
     return (code: string) => claimInitialAdminWithFunction(client.functions, client.auth.currentUser, code);
@@ -62,19 +64,20 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
       <button aria-label="Reglages" className="map-settings secondary-action" onClick={() => setSettingsOpen(true)} type="button">Reglages</button>
       <button className="map-sign-out secondary-action" onClick={() => void onSignOut()} type="button">Se deconnecter</button>
       <Suspense fallback={<div className="workspace-map-loading" aria-label="Chargement de la carte" />}>
-        <WorkspaceMap canCreateBuildings canEditZones={member.role === 'admin'} onBuildingLocationSelect={setNewBuildingLocation} onBuildingSelect={setSelectedBuilding} repositories={repositories} />
+        <WorkspaceMap authorId={member.id} canCreateBuildings canEditZones={member.role === 'admin'} onBuildingLocationSelect={setNewBuildingLocation} onBuildingSelect={opened.select} repositories={repositories} />
       </Suspense>
       <BuildingVisitSheet
         authorId={member.id}
-        building={selectedBuilding}
+        building={opened.building}
         canEditStructure
-        onBuildingChange={setSelectedBuilding}
-        onClose={() => setSelectedBuilding(null)}
+        ensureBuildingExists={opened.ensureExists}
+        onBuildingChange={changeBuilding}
+        onClose={opened.close}
         outbox={outbox}
         repositories={repositories}
         sync={sync}
       />
-      <BuildingCreationSheet authorId={member.id} location={newBuildingLocation} onClose={() => setNewBuildingLocation(null)} onCreated={setSelectedBuilding} repositories={repositories} />
+      <BuildingCreationSheet authorId={member.id} location={newBuildingLocation} onClose={() => setNewBuildingLocation(null)} onCreated={changeBuilding} repositories={repositories} />
       {settingsOpen && <InitialAdminSettings member={member} onActivate={initialAdmin} onClose={() => setSettingsOpen(false)} />}
     </main>
   );
