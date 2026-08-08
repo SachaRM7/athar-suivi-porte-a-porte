@@ -32,7 +32,7 @@ async function clickOnMap(page: Page, target: { longitude: number; latitude: num
 
 async function openFieldMap(page: Page): Promise<void> {
   await page.goto('/technical-map');
-  await expect.poll(() => page.getByText('2 batiment(s) visibles').isVisible(), { timeout: 15_000 }).toBe(true);
+  await expect(page.getByText('2 batiment(s) visibles')).toBeVisible({ timeout: 15_000 });
   // Les sept emprises de l'échantillon doivent être tuilées avant tout appui sur la carte.
   await expect.poll(
     async () => Number((await page.getByLabel('Carte MapLibre des zones').getAttribute('data-footprints')) ?? '0'),
@@ -40,14 +40,22 @@ async function openFieldMap(page: Page): Promise<void> {
   ).toBe(7);
 }
 
+async function enterEdition(page: Page): Promise<void> {
+  const desktopSwitch = page.getByRole('button', { name: 'Édition' });
+  if (await desktopSwitch.isVisible()) await desktopSwitch.click();
+  else await page.getByRole('button', { name: 'Passer en mode Édition' }).click();
+}
+
 test('draws and saves an editable local zone over the prepared MapLibre package', async ({ page }) => {
   await page.goto('/technical-map');
   await expect(page.getByRole('heading', { name: 'Zones de Toulouse' })).toBeVisible();
   await expect(page.getByLabel('Carte MapLibre des zones')).toBeVisible();
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
-  await expect.poll(() => page.getByText('2 batiment(s) visibles').isVisible(), { timeout: 15_000 }).toBe(true);
+  await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 15_000 });
 
-  await page.getByRole('button', { name: 'Modifier la zone' }).click();
+  await expect(page.getByLabel('Outils de zone')).toBeHidden();
+  await enterEdition(page);
+  await page.getByRole('button', { name: 'Redessiner' }).click();
   await expect(page.getByText('Edition de Carmes. Ajustez le contour, le nom ou la couleur.')).toBeVisible();
   await page.getByRole('textbox', { name: 'Nom de la zone' }).fill('Carmes centre');
   await page.getByLabel('Couleur de la zone').fill('#D8A200');
@@ -85,7 +93,7 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
 test('opens the building detail as a constrained desktop dialog', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.goto('/technical-map');
-  await expect.poll(() => page.getByText('2 batiment(s) visibles').isVisible(), { timeout: 15_000 }).toBe(true);
+  await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 15_000 });
   const mapBounds = await page.getByLabel('Carte MapLibre des zones').boundingBox();
   // WP8 ajoute la bande de filtres et de tri au-dessus de la carte dans cette coquille
   // technique empilée. La liste ne défile jamais au-delà de deux lignes pour que la carte
@@ -108,7 +116,7 @@ test('opens a detected building that has no Firestore document on its empty stat
   await expect(dialog).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Bâtiment PG31CARMES002' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Bâtiment non décrit' })).toBeVisible();
-  await expect(page.getByText('2 batiment(s) visibles')).toBeVisible();
+  await expect(page.locator('.building-row')).toHaveCount(2);
 
   await page.getByRole('button', { name: 'Fermer le detail du batiment' }).click();
   await expect(dialog).toBeHidden();
@@ -134,7 +142,7 @@ test('creates nothing on an empty press or on a footprint outside the zone', asy
 
   await clickOnMap(page, FOOTPRINTS.horsZone);
   await expect(dialog).toBeHidden();
-  await expect(page.getByText('2 batiment(s) visibles')).toBeVisible();
+  await expect(page.locator('.building-row')).toHaveCount(2);
   await page.close();
 });
 
@@ -157,6 +165,7 @@ test('announces the manual placement mode and cancels without creating anything'
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openFieldMap(page);
 
+  await enterEdition(page);
   await page.getByRole('button', { name: 'Ajouter un bâtiment' }).click();
   const hint = page.getByText('Touche la carte à l’emplacement exact du bâtiment');
   await expect(hint).toBeVisible();
@@ -171,11 +180,34 @@ test('announces the manual placement mode and cancels without creating anything'
   await page.close();
 });
 
+test('keeps the map full-frame and moves the mobile controls with the bottom sheet', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto('/technical-map');
+  await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 15_000 });
+  await expect.poll(
+    async () => Number((await page.getByLabel('Carte MapLibre des zones').getAttribute('data-footprints')) ?? '0'),
+    { timeout: 20_000 }
+  ).toBeGreaterThan(0);
+
+  const map = await page.getByLabel('Carte MapLibre des zones').boundingBox();
+  const panelBefore = await page.getByLabel('Batiments visibles').boundingBox();
+  const fabBefore = await page.getByRole('button', { name: 'Cadrer sur les emprises' }).boundingBox();
+  expect(map).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
+  expect(panelBefore?.height).toBeCloseTo(306, 0);
+
+  await page.getByRole('button', { name: 'Agrandir le panneau' }).click();
+  const panelAfter = await page.getByLabel('Batiments visibles').boundingBox();
+  const fabAfter = await page.getByRole('button', { name: 'Cadrer sur les emprises' }).boundingBox();
+  expect(panelAfter?.height).toBeCloseTo(620, 0);
+  expect(fabAfter?.y ?? 0).toBeLessThan(fabBefore?.y ?? 0);
+  await page.close();
+});
+
 test('keeps the sisters marker on the door across reopenings, without touching its status', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   // Ce parcours passe par la fiche, pas par la carte : inutile d'attendre les emprises.
   await page.goto('/technical-map');
-  await expect.poll(() => page.getByText('2 batiment(s) visibles').isVisible(), { timeout: 45_000 }).toBe(true);
+  await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 45_000 });
 
   await page.getByRole('button', { name: '7 rue des Filatiers, Toulouse' }).click();
   await page.getByRole('button', { name: 'Porte 12, Pas visite' }).click();
@@ -198,7 +230,7 @@ test('keeps the sisters marker on the door across reopenings, without touching i
 test('reads the ancienneté column, its ninety-day alert and its two filters', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await page.goto('/technical-map');
-  await expect.poll(() => page.getByText('2 batiment(s) visibles').isVisible(), { timeout: 45_000 }).toBe(true);
+  await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 45_000 });
   const rows = page.locator('.building-row');
 
   // Le jeu de démonstration oppose un passage récent à un passage de plus de trois mois.

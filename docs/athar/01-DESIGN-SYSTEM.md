@@ -3,10 +3,6 @@
 Registre visuel : **relevé de terrain**. Instrument technique, pas application décorative.
 Ce qui est explicitement écarté : le fond crème + serif à fort contraste + accent terracotta (illisible dehors, et devenu générique).
 
-Le thème clair est le seul thème spécifié pour WP0 → WP8. Ne pas ajouter de bloc `[data-theme="nuit"]` ni
-suivre `prefers-color-scheme` pendant ces lots. Un éventuel mode nuit demandera un lot dédié et une validation
-en conditions de terrain ; il restera un choix manuel.
-
 ## Jetons
 
 ```css
@@ -67,10 +63,6 @@ S'il apparaît ailleurs, c'est une erreur.
 
 Une adresse **est** une donnée : toujours en mono. C'est ce qui la rend scannable.
 
-Les quatre familles sont **auto-hébergées en WOFF2** et servies depuis `public/fonts/` : Space Grotesk 600,
-IBM Plex Sans 400/500/600, IBM Plex Mono 500/600 et Noto Kufi Arabic 600. Elles font partie du shell hors ligne.
-Aucun appel à Google Fonts ou à un autre fournisseur tiers n'est autorisé au runtime.
-
 Micro-libellé (`.microlabel`) : Plex Mono 10px, `letter-spacing:.12em`, majuscules, `--ink-soft`.
 
 Échelle : 10 / 11.5 / 12.5 / 13.5 / 15 / 17 / 19 px. Pas d'autres tailles.
@@ -105,7 +97,7 @@ C'est le seul endroit où l'interface se permet de l'audace. Tout le reste reste
 
 **Dialogue** — centré sur desktop (max 400px, rayon 16px), en sheet sur mobile (rayon 20px en haut). Fond `rgba(10,14,16,.42)` + `backdrop-filter: blur(2px)`.
 
-**Stepper** — bordure 1.5px, boutons 46×46 sur `--sunk`, valeur centrale en mono 15px 600 suivie d'une glose en 12.5px `--ink-soft` qui explique la conséquence du réglage (ex. « étages · RDC compris = 4 niveaux »).
+**Stepper** — bordure 1.5px, boutons 46×46 sur `--sunk`, valeur centrale en mono 15px 600 suivie d'une glose en 12px `--ink-soft` qui explique la conséquence du réglage (ex. « étages · RDC compris = 4 niveaux »).
 
 **Bandeau de consigne** (`.hint`) — pastille `--brand` flottante en haut de carte pendant un mode de pose, avec un bouton Annuler intégré.
 

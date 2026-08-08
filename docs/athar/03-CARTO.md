@@ -49,25 +49,6 @@ confirmation humaine.
 > La nomenclature diffère selon le format de livraison (GPKG / Shapefile) et la version de la BD TOPO.
 > Étape obligatoire : `ogrinfo -so` sur la couche bâtiment, et consigner les noms observés dans ce fichier.
 
-### Schéma observé — BD TOPO 3.5, Haute-Garonne, édition 2026-06-15
-
-Inspection réalisée avec `ogrinfo -ro -so … batiment` sur
-`BDT_3-5_GPKG_LAMB93_D031-ED2026-06-15.gpkg`.
-
-- couche : `batiment` ; géométrie : `geometrie` (`3D Multi Polygon`) ; projection : `EPSG:2154` ;
-- identifiant BD TOPO : `cleabs` ;
-- filtre résidentiel : `usage_1`, `construction_legere` (entier booléen) ;
-- pré-remplissage : `nombre_d_etages`, `nombre_de_logements`, `hauteur` ;
-- identifiant RNB déjà fourni par la livraison : `identifiants_rnb`.
-
-Les autres champs observés sont : `nature`, `usage_2`, `etat_de_l_objet`, `date_creation`,
-`date_modification`, `date_d_apparition`, `date_de_confirmation`, `sources`,
-`identifiants_sources`, `methode_d_acquisition_planimetrique`,
-`methode_d_acquisition_altimetrique`, `precision_planimetrique`, `precision_altimetrique`,
-`materiaux_des_murs`, `materiaux_de_la_toiture`, `altitude_minimale_sol`,
-`altitude_minimale_toit`, `altitude_maximale_toit`, `altitude_maximale_sol`,
-`origine_du_batiment`, `appariement_fichiers_fonciers`.
-
 ```bash
 # 1. Récupérer la BD TOPO Haute-Garonne (31) depuis geoservices.ign.fr, couche bâtiment.
 
@@ -90,15 +71,11 @@ ogr2ogr -f GeoJSONSeq batiments_filtres.geojsonl BDTOPO.gpkg batiment \
 #    Écrire ce script en Python (geopandas) : scripts/carto/join_rnb.py
 
 # 5. Générer le tuileset
-# tippecanoe produit un MBTiles ; le convertir explicitement en PMTiles.
-tippecanoe -o batiments-31.mbtiles \
-  --minimum-zoom=16 --maximum-zoom=16 \
+tippecanoe -o public/tiles/batiments-31.pmtiles \
+  --minimum-zoom=14 --maximum-zoom=16 \
   --drop-densest-as-needed \
   --layer=batiments \
-  --use-attribute-for-id=tile_id \
   batiments_avec_rnb.geojsonl
-pmtiles convert batiments-31.mbtiles public/tiles/batiments-31.pmtiles
-pmtiles verify public/tiles/batiments-31.pmtiles
 ```
 
 Contrainte à respecter : **zoom minimal 16** pour l'affichage individuel des bâtiments. Ce n'est pas gênant,

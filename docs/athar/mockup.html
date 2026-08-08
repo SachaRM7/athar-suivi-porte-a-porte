@@ -20,11 +20,9 @@
   --st-open:#1F7A5A;
   --st-away:#C87A0A;
   --st-linked:#2456A6;
-  --st-dnd:#A93B2E;
+  --st-no:#A93B2E;
   --st-locked:#6B5AA8;
   --st-sisters:#C25B7C;
-
-  --on-accent:#20180A;
 
   --shadow:0 1px 2px rgba(20,24,26,.06), 0 8px 24px -8px rgba(20,24,26,.18);
   --shadow-lg:0 2px 4px rgba(20,24,26,.06), 0 20px 48px -12px rgba(20,24,26,.28);
@@ -133,7 +131,7 @@ body{
 .bitem .last.never{color:#B4BAB5}
 
 .fab{border:0;border-radius:999px;cursor:pointer;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:9px;font:600 14px/1 "IBM Plex Sans"}
-.fab-primary{background:var(--accent);color:var(--on-accent);padding:15px 20px}
+.fab-primary{background:var(--accent);color:#20180A;padding:15px 20px}
 .fab-ghost{background:var(--paper);color:var(--ink);width:46px;height:46px;justify-content:center;padding:0}
 
 .legend{background:rgba(252,252,251,.94);backdrop-filter:blur(8px);border:1px solid var(--hairline);border-radius:12px;padding:10px 12px;box-shadow:var(--shadow)}
@@ -206,17 +204,17 @@ body{
 .floorbtn{border:0;background:none;font:500 11px/1 "IBM Plex Sans";color:var(--brand-lift);cursor:pointer;padding:0}
 
 .bldg.editing .doors{padding-top:9px}
-.door .del{position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:var(--st-dnd);color:#fff;display:grid;place-items:center;font:600 13px/1 "IBM Plex Sans";border:2px solid var(--paper);cursor:pointer;z-index:3}
-.door.confirm{border-color:var(--st-dnd)!important;background:rgba(169,59,46,.12)!important;align-items:center;justify-content:center;padding:4px}
+.door .del{position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:var(--st-no);color:#fff;display:grid;place-items:center;font:600 13px/1 "IBM Plex Sans";border:2px solid var(--paper);cursor:pointer;z-index:3}
+.door.confirm{border-color:var(--st-no)!important;background:rgba(169,59,46,.12)!important;align-items:center;justify-content:center;padding:4px}
 .door.confirm .num,.door.confirm .bar,.door.confirm .del{display:none}
 .door .ask{display:none;flex-direction:column;align-items:center;gap:5px}
 .door.confirm .ask{display:flex}
-.door .ask b{font:600 8.5px/1.1 "IBM Plex Mono";color:var(--st-dnd);text-align:center;letter-spacing:-.02em}
+.door .ask b{font:600 8.5px/1.1 "IBM Plex Mono";color:var(--st-no);text-align:center;letter-spacing:-.02em}
 .door .ask span{display:flex;gap:4px}
 .door .ask i{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-style:normal;font:600 11px/1 "IBM Plex Sans"}
-.door .ask .y{background:var(--st-dnd);color:#fff}
+.door .ask .y{background:var(--st-no);color:#fff}
 .door .ask .n{background:var(--paper);border:1px solid var(--hairline);color:var(--ink-soft)}
-.floorbtn.del{color:var(--st-dnd)}
+.floorbtn.del{color:var(--st-no)}
 .addfloor{width:100%;border:1.5px dashed var(--hairline);background:none;border-radius:10px;padding:11px;margin:0 0 14px 46px;width:calc(100% - 46px);font:500 12px "IBM Plex Sans";color:var(--ink-soft);cursor:pointer}
 .addfloor:hover{border-color:var(--brand-lift);color:var(--brand-lift)}
 .editbar{position:sticky;bottom:0;background:var(--paper);border-top:1px solid var(--hairline);padding:11px 0 2px;margin-top:6px;display:flex;gap:8px;align-items:center}
@@ -258,8 +256,7 @@ body{
 .pf .cells{display:flex;gap:3px;flex-wrap:wrap}
 .pf .c{font:500 9.5px/1 "IBM Plex Mono";background:var(--paper);border:1px solid var(--hairline);border-radius:4px;padding:5px 5px;color:var(--ink-soft)}
 .pf .grd{height:1.5px;background:repeating-linear-gradient(45deg,#C4CAC5 0 3px,transparent 3px 6px);flex:1;margin-left:49px}
-/* action primaire = safran, jamais bleu d'encre. Une seule par écran. */
-.btn-primary{width:100%;border:0;border-radius:12px;background:var(--accent);color:var(--on-accent);font:600 14px "IBM Plex Sans";padding:15px;cursor:pointer}
+.btn-primary{width:100%;border:0;border-radius:12px;background:var(--brand);color:#fff;font:600 14px "IBM Plex Sans";padding:15px;cursor:pointer}
 .btn-ghost{width:100%;border:1.5px solid var(--hairline);border-radius:12px;background:none;font:500 13px "IBM Plex Sans";padding:12px;cursor:pointer;margin-top:8px;color:var(--ink-soft)}
 .headbtn{border:1.5px solid var(--hairline);background:var(--paper);border-radius:9px;padding:7px 11px;font:500 11.5px/1 "IBM Plex Sans";color:var(--ink-soft);cursor:pointer}
 .headbtn:hover{border-color:var(--ink-soft);color:var(--ink)}
@@ -331,8 +328,8 @@ body{
       <div class="d-panel-scroll">
         <div class="filters" style="padding:13px 0 4px">
           <button aria-pressed="true">Tous <b>148</b></button>
-          <button><span class="dot" style="background:var(--st-todo)"></span>Pas encore fait <b>56</b></button>
-          <button><span class="dot" style="background:var(--st-away)"></span>Pas vu &gt; 3 mois <b>19</b></button>
+          <button><span class="dot" style="background:var(--st-todo)"></span>À faire <b>56</b></button>
+          <button><span class="dot" style="background:var(--st-linked)"></span>À revoir <b>19</b></button>
           <button><span class="dot flag"></span>Sœurs <b>11</b></button>
           <button><span class="dot" style="background:var(--st-locked)"></span>Bloqués <b>7</b></button>
         </div>
@@ -384,7 +381,7 @@ body{
         <div class="row"><i style="background:var(--st-open)"></i>Contact établi</div>
         <div class="row"><i style="background:var(--st-away)"></i>Absent</div>
         <div class="row"><i style="background:var(--st-linked)"></i>Attaché à l'effort</div>
-        <div class="row"><i style="background:var(--st-dnd)"></i>Ne pas déranger</div>
+        <div class="row"><i style="background:var(--st-no)"></i>Refus</div>
         <div class="row"><i style="background:var(--st-locked)"></i>Accès bloqué</div>
         <div class="row"><i style="background:#CDD3CD;border:1px solid #B4BCB4"></i>Détecté, pas encore fait</div>
         <div class="sub"><div class="row"><i class="flag"></i>À confier aux sœurs</div></div>
@@ -453,8 +450,8 @@ body{
               <div class="trace" id="traceM" style="margin-bottom:12px"></div>
               <div class="filters">
                 <button aria-pressed="true">Près de moi</button>
-                <button><span class="dot" style="background:var(--st-todo)"></span>Pas encore fait <b>56</b></button>
-                <button><span class="dot" style="background:var(--st-away)"></span>Pas vu &gt; 3 mois <b>19</b></button>
+                <button><span class="dot" style="background:var(--st-todo)"></span>À faire <b>56</b></button>
+                <button><span class="dot" style="background:var(--st-linked)"></span>À revoir <b>19</b></button>
                 <button><span class="dot flag"></span>Sœurs <b>11</b></button>
           <button><span class="dot" style="background:var(--st-locked)"></span>Bloqués <b>7</b></button>
               </div>
@@ -493,7 +490,7 @@ body{
               <button class="detailback" id="mBack">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 5l-7 7 7 7"/></svg> 78 chemin de l'Église de Lalande
               </button>
-              <div style="font-family:'IBM Plex Mono';font-size:17px;font-weight:600;letter-spacing:-.02em;margin:11px 0 4px" id="doorTitle">Porte 12 · 1er</div>
+              <div style="font-family:'IBM Plex Mono';font-size:17px;font-weight:600;letter-spacing:-.02em;margin:11px 0 4px" id="doorTitle">Porte 12 · R+1</div>
               <div style="font-size:12.5px;color:var(--ink-soft)">Bâtiment C · porte gauche en sortant de l'ascenseur</div>
               <div style="font:500 11.5px/1 'IBM Plex Mono';color:var(--st-away);margin-top:7px">Dernier passage il y a 26 jours</div>
             </div>
@@ -502,7 +499,7 @@ body{
               <div class="statusgrid">
                 <button><i style="background:var(--st-open)"></i>Contact établi</button>
                 <button><i style="background:var(--st-away)"></i>Absent</button>
-                <button><i style="background:var(--st-dnd)"></i>Ne pas déranger</button>
+                <button><i style="background:var(--st-no)"></i>Refus</button>
                 <button class="wide"><i style="background:var(--st-linked)"></i>Attaché à l'effort — plus à revisiter</button>
                 <button class="wide"><i style="background:var(--st-locked)"></i>Accès bloqué (interphone / code)</button>
               </div>
@@ -543,8 +540,8 @@ body{
 <p class="note">Fond cartographique simulé — les tuiles réelles viendront de MapLibre / IGN.</p>
 
 <script>
-const ST={todo:'#8B948F',open:'#1F7A5A',away:'#C87A0A',linked:'#2456A6',dnd:'#A93B2E',locked:'#6B5AA8'};
-const LBL={todo:'Pas encore fait',open:'Contact établi',away:'Absent',linked:"Attaché à l'effort",dnd:'Ne pas déranger',locked:'Accès bloqué'};
+const ST={todo:'#8B948F',open:'#1F7A5A',away:'#C87A0A',linked:'#2456A6',no:'#A93B2E',locked:'#6B5AA8'};
+const LBL={todo:'Pas encore fait',open:'Contact établi',away:'Absent',linked:"Attaché à l'effort",no:'Refus',locked:'Accès bloqué'};
 
 function hexa(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`}
 
@@ -561,7 +558,7 @@ function mapSVG(){
   for(let r=0;r<10;r++) roads+=`<line x1="0" y1="${r*92}" x2="1240" y2="${r*92+18}" stroke="#FBFCFA" stroke-width="${r%3===0?10:5}"/>`;
 
   seed=7;
-  const pool=['open','open','open','away','away','linked','dnd','locked','todo','todo','todo','todo'];
+  const pool=['open','open','open','away','away','linked','no','locked','todo','todo','todo','todo'];
   let foots='';
   for(let r=0;r<10;r++)for(let c=0;c<14;c++){
     const bx=c*96+12+((r%2)*9), by=r*92+10;
@@ -605,10 +602,10 @@ mapD.querySelectorAll('.mfoot').forEach((g,i)=>g.addEventListener('click',()=>op
 mapM.querySelectorAll('.mfoot').forEach((g,i)=>g.addEventListener('click',()=>openBuilding(items[i%items.length],true)));
 
 /* ---- trace bar (signature) ---- */
-const seq=['open','open','away','linked','open','open','locked','open','away','open','open','dnd','open','linked'];
+const seq=['open','open','away','linked','open','open','locked','open','away','open','open','no','open','linked'];
 function trace(el){
   el.innerHTML=seq.map((s,i)=>{
-    const h=s==='linked'?26:s==='open'?21:s==='away'?13:s==='dnd'?10:11;
+    const h=s==='linked'?26:s==='open'?21:s==='away'?13:s==='no'?10:11;
     return (i===7?'<i class="gap"></i>':'')+`<i style="height:${h}px;background:${ST[s]}"></i>`;
   }).join('');
 }
@@ -644,7 +641,7 @@ const items=[
   {a:"31 avenue des Mazades",m:"Bât. A · 24 portes",s:'away',d:'160 m',n:'',f:0,j:118},
   {a:"9 rue du Faubourg Bonnefoy",m:"2 étages · 6 portes",s:'locked',d:'210 m',n:'Digicode',f:0,j:64},
   {a:"144 route d'Albi",m:"Bât. B · 30 portes",s:'linked',d:'240 m',n:'',f:0,j:4},
-  {a:"22 rue de Périole",m:"Pavillon",s:'dnd',d:'290 m',n:'',f:0,j:203},
+  {a:"22 rue de Périole",m:"Pavillon",s:'no',d:'290 m',n:'',f:0,j:203},
   {a:"3 allée de Barcelone",m:"structure non décrite",s:'todo',d:'340 m',n:'',f:0,j:null,cfg:0}
 ];
 function age(j){
@@ -721,7 +718,7 @@ function fLabel(i){return i===0?'RDC':i===1?'1er':i+'ème'}
 /* index 0 = RDC, on affiche du haut vers le bas */
 let building=[
  {doors:[['01','linked'],['02','open'],['03','todo'],['04','locked']]},
- {doors:[['11','open'],['12','away'],['13','dnd'],['14','open',1]]},
+ {doors:[['11','open'],['12','away'],['13','no'],['14','open',1]]},
  {doors:[['21','open'],['22','open'],['23','away',1],['24','todo'],['25','todo']]},
  {doors:[['31','open'],['32','away'],['33','linked'],['34','todo'],['35','todo']]}
 ];

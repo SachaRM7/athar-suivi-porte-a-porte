@@ -3,7 +3,7 @@ import { PMTiles, Protocol, type Source } from 'pmtiles';
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode, type GeoJSONStoreFeatures } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { geohashForLocation } from 'geofire-common';
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import type { FeatureCollection, Point, Polygon } from 'geojson';
 import { withBasePath } from '../../../app/config/public-paths';
 import type { Building, GeoPoint, Status, Zone, ZoneGeometry } from '../../../domain/workspace/models';
@@ -42,7 +42,9 @@ import {
 } from '../../buildings/model/building-staleness';
 import { cadastralSuggestion, type CadastralSuggestion } from '../../buildings/model/cadastral-structure';
 import type { SelectBuildingOptions } from '../model/use-opened-building';
+import { TraceBar, type TraceEntry } from '../../../design/components';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import './terrain-shell.css';
 
 class LocalPackageSource implements Source {
   private readonly archive: Promise<ArrayBuffer>;
@@ -68,6 +70,12 @@ protocol.add(archive);
 addProtocol('pmtiles', protocol.tile);
 // Glyphs are bundled locally so street labels remain available after PWA preparation.
 const DEFAULT_ZONE_COLOR = '#16835F';
+
+const TERRAIN_TRACE: readonly TraceEntry[] = [
+  'open', 'open', 'away', 'linked', 'open', 'open', 'locked',
+  'pause',
+  'open', 'away', 'open', 'dnd', 'open', 'linked',
+];
 
 /**
  * Tuileset d'emprises du lot WP6. Il pèse 72 Mo et vit hors de Git ; l'échantillon versionné
@@ -180,6 +188,7 @@ function geometryFromFeature(feature: GeoJSONStoreFeatures): ZoneGeometry | null
 
 export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect, onBuildingLocationSelect }: WorkspaceMapProps): ReactElement {
   const element = useRef<HTMLDivElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   const map = useRef<MapInstance | null>(null);
   const draw = useRef<TerraDraw | null>(null);
   const viewportRequest = useRef<AbortController | null>(null);
@@ -193,6 +202,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
   const [visibleBuildings, setVisibleBuildings] = useState<readonly BuildingListEntry[]>([]);
   const [listFilter, setListFilter] = useState<BuildingListFilter>('all');
   const [listSort, setListSort] = useState<BuildingListSort>('staleness');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [mode, setMode] = useState<'terrain' | 'edition'>('terrain');
+  const [panelHeight, setPanelHeight] = useState<'peek' | 'full'>('peek');
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [visibleBuildingCount, setVisibleBuildingCount] = useState(0);
   const [attachedBuildingCount, setAttachedBuildingCount] = useState<number | null>(null);
@@ -208,7 +220,14 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
   const [message, setMessage] = useState('Fond Toulouse local pret.');
 
   const selectedZone = zoneList.find((zone) => zone.id === selectedZoneId) ?? null;
-  const listedBuildings = sortBuildingList(visibleBuildings.filter((entry) => matchesBuildingListFilter(entry, listFilter)), listSort);
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase('fr-FR');
+  const listedBuildings = sortBuildingList(
+    visibleBuildings.filter((entry) => (
+      matchesBuildingListFilter(entry, listFilter)
+      && (normalizedSearch.length === 0 || entry.building.addressLabel.toLocaleLowerCase('fr-FR').includes(normalizedSearch))
+    )),
+    listSort
+  );
   const draftZoneName = zoneDraft?.name ?? selectedZone?.name ?? '';
   const draftZoneColor = zoneDraft?.color ?? selectedZone?.color ?? DEFAULT_ZONE_COLOR;
 
@@ -573,67 +592,17 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
     }
   };
 
+  const coveredBuildingCount = visibleBuildings.filter((entry) => entry.treatedCount > 0).length;
+  const coveragePercent = visibleBuildingCount === 0 ? 0 : Math.round((coveredBuildingCount / visibleBuildingCount) * 100);
+  const todoCount = visibleBuildings.filter((entry) => entry.staleness.days === null).length;
+  const staleCount = visibleBuildings.filter((entry) => entry.staleness.alert).length;
+  const zoneName = selectedZone?.name ?? 'Zone à choisir';
+
   return (
-    <section className="workspace-map-shell" aria-label="Carte des zones et batiments">
-      <header className="workspace-map-header">
-        <div><p className="eyebrow">Athar / carte locale</p><h1>Zones de Toulouse</h1></div>
-        <div className="workspace-map-metrics"><span>{visibleBuildingCount} batiment(s) visibles</span>{attachedBuildingCount !== null && <span>{attachedBuildingCount} rattache(s)</span>}</div>
-      </header>
-      <div className="workspace-map-tools" aria-label="Outils de zone">
-        <select aria-label="Zone a modifier" value={selectedZoneId ?? ''} onChange={(event) => selectZone(event.target.value || null)}>
-          {!selectedZoneId && <option value="">Choisir une zone</option>}
-          {zoneList.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
-        </select>
-        {canEditZones && <button className="secondary-action map-tool" disabled={editing !== null || savingZone} onClick={startDrawing} type="button">Créer une zone</button>}
-        {canEditZones && <button className="secondary-action map-tool" disabled={editing !== null || !selectedZoneId} onClick={startEditing} type="button">Modifier la zone</button>}
-        {canEditZones && selectedZone && <button className="secondary-action map-tool danger-action" disabled={editing !== null || savingZone} onClick={() => void deleteSelectedZone()} type="button">Supprimer la zone</button>}
-        {canCreateBuildings && <button className="secondary-action map-tool" disabled={editing !== null || placing} onClick={startBuildingPlacement} type="button">Ajouter un bâtiment</button>}
-        {editing && <button className="primary-action map-tool" disabled={savingZone} onClick={() => void saveZone()} type="button">Enregistrer la zone</button>}
-        <button aria-label="Cadrer sur les emprises" className="secondary-action map-tool" onClick={() => map.current?.easeTo({ zoom: FOOTPRINT_MIN_ZOOM + 0.4, duration: motionDuration(450) })} type="button">Voir les emprises</button>
-      </div>
-      {canEditZones && (selectedZone || editing) && (
-        <div className="zone-properties" aria-label="Proprietes de la zone">
-          <label>Nom de la zone<input aria-label="Nom de la zone" maxLength={80} onChange={(event) => setZoneDraft({ name: event.target.value, color: draftZoneColor })} value={draftZoneName} /></label>
-          <label className="zone-color-field">Couleur<input aria-label="Couleur de la zone" onChange={(event) => setZoneDraft({ name: draftZoneName, color: event.target.value })} type="color" value={draftZoneColor} /></label>
-          {!editing && <button className="secondary-action map-tool" disabled={savingZone} onClick={() => void saveZoneProperties()} type="button">Enregistrer les propriétés</button>}
-        </div>
-      )}
-      {onBuildingSelect && (
-        <section className="building-list" aria-label="Batiments visibles">
-          <div className="building-list-controls">
-            <div className="building-list-filters" role="group" aria-label="Filtrer les bâtiments">
-              {BUILDING_LIST_FILTERS.map((filter) => (
-                <button aria-pressed={listFilter === filter.id} className="building-list-filter" key={filter.id} onClick={() => setListFilter(filter.id)} type="button">{filter.label}</button>
-              ))}
-            </div>
-            <label className="building-list-sort">Trier par
-              <select aria-label="Trier les bâtiments" onChange={(event) => setListSort(event.target.value as BuildingListSort)} value={listSort}>
-                <option value="staleness">Ancienneté</option>
-                <option value="address">Adresse</option>
-              </select>
-            </label>
-          </div>
-          {listedBuildings.length === 0
-            ? <p className="building-list-empty">{listFilter === 'stale' ? 'Aucun bâtiment vu il y a plus de trois mois. Tout est à jour ici.' : 'Aucun bâtiment décrit dans ce cadrage. Touche une emprise pour commencer.'}</p>
-            : <ul className="building-list-rows">
-              {listedBuildings.map((entry) => (
-                <li key={entry.building.id}>
-                  <button
-                    className="building-row"
-                    onClick={() => onBuildingSelect(entry.building, { persisted: true, suggestion: footprintSuggestions.current.get(entry.building.id) ?? null })}
-                    type="button"
-                  >
-                    <span className="building-row-address">{entry.building.addressLabel}</span>
-                    <span className="building-row-progress">{entry.treatedCount}/{entry.doorCount}</span>
-                    {/* Colonne d'ancienneté : ambre au-delà du seuil de 90 jours. */}
-                    <span className={entry.staleness.alert ? 'building-row-age alert' : 'building-row-age'}>{entry.staleness.label}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>}
-        </section>
-      )}
-      <div className="workspace-map-stage">
+    <section className="terrain-shell" data-mode={mode} data-panel={panelHeight} aria-label="Carte des zones et batiments">
+      <h1 className="terrain-sr-only">Zones de Toulouse</h1>
+
+      <div className="terrain-map-stage">
         {placing && (
           <p className="hint" role="status">
             Touche la carte à l’emplacement exact du bâtiment
@@ -642,7 +611,162 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
         )}
         <div aria-label="Carte MapLibre des zones" className={placing ? 'workspace-map placing' : 'workspace-map'} ref={element} />
       </div>
-      <p className="workspace-map-message" role="status">{message}</p>
+
+      <header className="terrain-topbar">
+        <div className="terrain-brand" aria-label="Athar">
+          <span className="terrain-wordmark-ar">أثر</span>
+          <span className="terrain-wordmark-rule" />
+          <span className="terrain-wordmark-la">Athar</span>
+        </div>
+
+        <button className="terrain-zonechip" onClick={() => setPanelHeight('full')} type="button">
+          <span className="terrain-zone-ring" style={{ '--terrain-progress': `${coveragePercent}` } as CSSProperties}>
+            <svg viewBox="0 0 36 36" aria-hidden="true">
+              <circle className="terrain-zone-ring-track" cx="18" cy="18" r="15" />
+              <circle className="terrain-zone-ring-value" cx="18" cy="18" r="15" pathLength="100" />
+            </svg>
+            <b>{coveragePercent}</b>
+          </span>
+          <span className="terrain-zone-copy">
+            <strong>{zoneName}</strong>
+            <span>{visibleBuildingCount} bât. · {coveredBuildingCount} faits</span>
+          </span>
+          <span className="terrain-zone-caret" aria-hidden="true">⌄</span>
+        </button>
+
+        <div className="terrain-topbar-spacer" />
+
+        {canEditZones && (
+          <div className="terrain-modes" role="group" aria-label="Mode de la carte">
+            <button aria-pressed={mode === 'terrain'} disabled={editing !== null || placing} onClick={() => setMode('terrain')} type="button">Terrain</button>
+            <button aria-pressed={mode === 'edition'} onClick={() => setMode('edition')} type="button">Édition</button>
+          </div>
+        )}
+
+        <button aria-label="Chercher une adresse" className="terrain-mobile-action terrain-search-action" onClick={() => {
+          setPanelHeight('full');
+          window.setTimeout(() => searchInput.current?.focus(), 0);
+        }} type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></svg>
+        </button>
+        <button
+          aria-label={canEditZones ? (mode === 'terrain' ? 'Passer en mode Édition' : 'Revenir en mode Terrain') : (panelHeight === 'full' ? 'Réduire la liste' : 'Afficher la liste complète')}
+          className="terrain-mobile-action"
+          disabled={canEditZones && (editing !== null || placing)}
+          onClick={() => canEditZones ? setMode((current) => current === 'terrain' ? 'edition' : 'terrain') : setPanelHeight((height) => height === 'full' ? 'peek' : 'full')}
+          type="button"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <div className="terrain-avatar" aria-label="Compte terrain">SM</div>
+      </header>
+
+      {onBuildingSelect && (
+        <section className="terrain-panel" aria-label="Batiments visibles">
+          <button aria-expanded={panelHeight === 'full'} aria-label={panelHeight === 'full' ? 'Réduire le panneau' : 'Agrandir le panneau'} className="terrain-panel-grip" onClick={() => setPanelHeight((height) => height === 'full' ? 'peek' : 'full')} type="button"><i /></button>
+
+          <div className="terrain-panel-head">
+            <div className="terrain-session-line">
+              <span className="ds-microlabel">Sortie du jour</span>
+              <span>14 marqués · 1 h 05</span>
+            </div>
+            <TraceBar entries={TERRAIN_TRACE} />
+            <label className="terrain-search">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></svg>
+              <span className="terrain-sr-only">Chercher une adresse</span>
+              <input ref={searchInput} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Chercher une adresse" value={searchQuery} />
+            </label>
+          </div>
+
+          <div className="terrain-panel-scroll">
+            <div className="building-list-controls">
+              <div className="building-list-filters" role="group" aria-label="Filtrer les bâtiments">
+                {BUILDING_LIST_FILTERS.map((filter) => (
+                  <button aria-pressed={listFilter === filter.id} className="building-list-filter" key={filter.id} onClick={() => setListFilter(filter.id)} type="button">
+                    {filter.label}<b>{filter.id === 'all' ? visibleBuildingCount : filter.id === 'todo' ? todoCount : staleCount}</b>
+                  </button>
+                ))}
+              </div>
+              <label className="building-list-sort">Trier par
+                <select aria-label="Trier les bâtiments" onChange={(event) => setListSort(event.target.value as BuildingListSort)} value={listSort}>
+                  <option value="staleness">Ancienneté</option>
+                  <option value="address">Adresse</option>
+                </select>
+              </label>
+            </div>
+            {listedBuildings.length === 0
+              ? <p className="building-list-empty">{listFilter === 'stale' ? 'Aucun bâtiment vu il y a plus de trois mois. Tout est à jour ici.' : 'Aucun bâtiment décrit dans ce cadrage. Touche une emprise pour commencer.'}</p>
+              : <ul className="building-list-rows">
+                {listedBuildings.map((entry) => (
+                  <li key={entry.building.id}>
+                    <button className="building-row" onClick={() => onBuildingSelect(entry.building, { persisted: true, suggestion: footprintSuggestions.current.get(entry.building.id) ?? null })} type="button">
+                      <span className={`terrain-building-pin terrain-building-pin--${entry.treatedCount === 0 ? 'todo' : entry.staleness.alert ? 'away' : 'open'}`} />
+                      <span className="terrain-building-copy">
+                        <span className="building-row-address">{entry.building.addressLabel}</span>
+                        <span className="building-row-progress">{entry.doorCount} portes · {entry.treatedCount} faites</span>
+                      </span>
+                      <span className={entry.staleness.alert ? 'building-row-age alert' : 'building-row-age'}>{entry.staleness.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>}
+            <span className="terrain-visible-count">
+              {visibleBuildingCount} batiment(s) visibles
+              {attachedBuildingCount !== null && <> · {attachedBuildingCount} rattache(s)</>}
+            </span>
+          </div>
+
+          <footer className="terrain-panel-foot">
+            <span className="ds-microlabel">Couverture de la zone</span>
+            <span className="terrain-coverage"><i style={{ width: `${coveragePercent}%` }} /></span>
+          </footer>
+        </section>
+      )}
+
+      <aside className="terrain-legend" aria-label="Légende des statuts">
+        <span className="ds-microlabel">Statut des bâtiments</span>
+        <span><i className="terrain-building-pin terrain-building-pin--open" />Contact établi</span>
+        <span><i className="terrain-building-pin terrain-building-pin--away" />Absent</span>
+        <span><i className="terrain-building-pin terrain-building-pin--linked" />Attaché à l’effort</span>
+        <span><i className="terrain-building-pin terrain-building-pin--dnd" />Ne pas déranger</span>
+        <span><i className="terrain-building-pin terrain-building-pin--locked" />Accès bloqué</span>
+        <span><i className="terrain-building-pin terrain-building-pin--todo" />Pas encore fait</span>
+        <span className="terrain-legend-sisters"><i />À confier aux sœurs</span>
+      </aside>
+
+      {mode === 'edition' && (
+        <div className="terrain-editbar" aria-label="Outils de zone">
+          <select aria-label="Zone a modifier" value={selectedZoneId ?? ''} onChange={(event) => selectZone(event.target.value || null)}>
+            {!selectedZoneId && <option value="">Choisir une zone</option>}
+            {zoneList.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+          </select>
+          {canEditZones && <button disabled={editing !== null || savingZone} onClick={startDrawing} type="button">Créer une zone</button>}
+          {canEditZones && <button disabled={editing !== null || !selectedZoneId} onClick={startEditing} type="button">Redessiner</button>}
+          {canCreateBuildings && <button disabled={editing !== null || placing} onClick={startBuildingPlacement} type="button">Ajouter un bâtiment</button>}
+          {canEditZones && selectedZone && <button className="terrain-editbar-danger" disabled={editing !== null || savingZone} onClick={() => void deleteSelectedZone()} type="button">Supprimer</button>}
+          {editing && <button className="terrain-editbar-save" disabled={savingZone} onClick={() => void saveZone()} type="button">Enregistrer la zone</button>}
+        </div>
+      )}
+
+      {mode === 'edition' && canEditZones && !placing && (selectedZone || editing) && (
+        <div className="terrain-zone-properties" aria-label="Proprietes de la zone">
+          <label>Nom de la zone<input aria-label="Nom de la zone" maxLength={80} onChange={(event) => setZoneDraft({ name: event.target.value, color: draftZoneColor })} value={draftZoneName} /></label>
+          <label>Couleur<input aria-label="Couleur de la zone" onChange={(event) => setZoneDraft({ name: draftZoneName, color: event.target.value })} type="color" value={draftZoneColor} /></label>
+          {!editing && <button disabled={savingZone} onClick={() => void saveZoneProperties()} type="button">Enregistrer les propriétés</button>}
+        </div>
+      )}
+
+      <div className="terrain-fabs">
+        <button aria-label="Cadrer sur les emprises" className="terrain-fab terrain-fab-ghost" onClick={() => map.current?.easeTo({ zoom: FOOTPRINT_MIN_ZOOM + 0.4, duration: motionDuration(450) })} type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5" /><circle cx="12" cy="12" r="8" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3" /></svg>
+        </button>
+        <button className="terrain-fab terrain-fab-primary" onClick={() => setPanelHeight('full')} type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+          Marquer une porte
+        </button>
+      </div>
+
+      <p className="terrain-status" role="status">{message}</p>
     </section>
   );
 }
