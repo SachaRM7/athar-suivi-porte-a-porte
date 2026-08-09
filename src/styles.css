@@ -47,19 +47,9 @@ h2 { font-size: 22px; }
 .sync-button { background: #143d36; border: 0; color: white; cursor: pointer; margin-top: 12px; min-height: 44px; padding: 9px 12px; width: 100%; }
 
 .auth-shell { align-items: center; background: var(--map-bg); color: var(--ink); display: flex; font-family: var(--font-ui); inset: 0; min-height: 100dvh; overflow: hidden auto; padding: 32px clamp(28px, 6vw, 74px); position: fixed; }
-.auth-map { height: 100%; inset: 0; position: absolute; width: 100%; }
-.auth-map-ground { fill: var(--map-bg); }
-.auth-map-park { fill: var(--map-park); }
-.auth-map-water { fill: var(--map-water); }
-.auth-map-road { stroke: var(--map-road); stroke-width: 8; }
-.auth-map-footprint { fill-opacity: .58; stroke-width: 1.5; }
-.auth-map-footprint--todo { fill: var(--foot-todo); stroke: var(--foot-todo-line); }
-.auth-map-footprint--open { fill: var(--st-open); stroke: var(--st-open); }
-.auth-map-footprint--away { fill: var(--st-away); stroke: var(--st-away); }
-.auth-map-footprint--linked { fill: var(--st-linked); stroke: var(--st-linked); }
-.auth-map-footprint--dnd { fill: var(--st-dnd); stroke: var(--st-dnd); }
-.auth-map-footprint--locked { fill: var(--st-locked); stroke: var(--st-locked); }
-.auth-map-veil { background: linear-gradient(105deg, color-mix(in srgb, var(--paper) 96%, transparent) 0%, color-mix(in srgb, var(--paper) 78%, transparent) 46%, color-mix(in srgb, var(--paper) 28%, transparent) 100%); inset: 0; position: absolute; }
+.auth-map { inset: 0; pointer-events: none; position: absolute; }
+.auth-map > svg { display: block; height: 100%; inset: 0; pointer-events: none; position: absolute; width: 100%; }
+.auth-map-veil { background: linear-gradient(105deg, rgba(250,251,248,.94) 0%, rgba(250,251,248,.72) 46%, rgba(250,251,248,.28) 100%); inset: 0; pointer-events: none; position: absolute; }
 .auth-card { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-sheet); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; padding: 30px 28px 26px; position: relative; width: min(430px, 100%); z-index: 2; }
 .auth-wordmark { align-items: center; display: flex; gap: 10px; }
 .auth-wordmark span { color: var(--brand); font: 600 21px/1 var(--font-ar); }
@@ -407,7 +397,7 @@ h2 { font-size: 22px; }
 
 @media (max-width: 760px) {
   .auth-shell { align-items: flex-end; min-height: 100dvh; padding: 230px 14px 14px; }
-  .auth-map-veil { background: linear-gradient(to bottom, color-mix(in srgb, var(--paper) 48%, transparent) 0%, color-mix(in srgb, var(--paper) 86%, transparent) 34%, var(--paper) 68%); }
+  .auth-map-veil { background: linear-gradient(to bottom, rgba(250,251,248,.55) 0%, rgba(250,251,248,.88) 38%, rgba(250,251,248,.97) 62%); }
   .auth-card { border-radius: var(--r-sheet-m); padding: 24px 20px 22px; width: 100%; }
   .auth-wordmark--card { display: none; }
   .auth-wordmark--mobile { display: flex; left: 26px; position: absolute; top: 56px; z-index: 2; }
