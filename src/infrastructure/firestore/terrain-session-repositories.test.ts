@@ -68,6 +68,18 @@ describe('terrain session repositories', () => {
     expect(serverDoor).toMatchObject({ currentStatusId: 'unvisited', revision: 0, lastVisitId: null });
   });
 
+  it('keeps server doors visible when the local outbox cannot be read', async () => {
+    const remote = createMemoryWorkspaceRepositories(demoWorkspace);
+    const brokenOutbox = new MemoryOutbox();
+    vi.spyOn(brokenOutbox, 'all').mockRejectedValue(new Error('Internal error.'));
+    const { repositories } = setup(remote, brokenOutbox);
+
+    const doors = await repositories.doors.listByBuilding('building-dalbad');
+
+    expect(doors).toHaveLength((await remote.doors.listByBuilding('building-dalbad')).length);
+    expect(doors.map((door) => door.id)).toContain('door-dalbad-02');
+  });
+
   it('does not expose another UID outbox and does not overwrite a newer local revision', async () => {
     const remote = createMemoryWorkspaceRepositories(demoWorkspace);
     const otherOutbox = new MemoryOutbox();

@@ -86,9 +86,9 @@ export function createTerrainSessionRepositories(input: {
     return values.map((value) => ({ ...value, location: { ...value.location } }));
   };
 
-  async function projectDoor(serverDoor: Door): Promise<Door> {
+  function projectDoor(serverDoor: Door, outboxEntries: Awaited<ReturnType<Outbox['all']>>): Door {
     let projected = { ...serverDoor, location: { ...serverDoor.location } };
-    const pending = (await input.outbox.all())
+    const pending = outboxEntries
       .filter((entry) => entry.doorId === serverDoor.id && entry.state === 'pending')
       .sort((left, right) => left.expectedRevision - right.expectedRevision || left.createdAt.localeCompare(right.createdAt));
     for (const entry of pending) {
@@ -105,7 +105,11 @@ export function createTerrainSessionRepositories(input: {
   }
 
   async function cacheDoors(values: readonly Door[]): Promise<readonly Door[]> {
-    const projected = await Promise.all(values.map(projectDoor));
+    // La file de passages locale enrichit l'affichage, mais elle ne fait pas foi sur la
+    // structure. Si IndexedDB est endommagé, les portes Firestore doivent rester visibles
+    // au lieu d'être remplacées par un faux état « Bâtiment non décrit ».
+    const outboxEntries = await input.outbox.all().catch(() => []);
+    const projected = values.map((door) => projectDoor(door, outboxEntries));
     for (const value of projected) doors.set(value.id, value);
     return sortedDoors(projected).map((value) => ({ ...value, location: { ...value.location } }));
   }
