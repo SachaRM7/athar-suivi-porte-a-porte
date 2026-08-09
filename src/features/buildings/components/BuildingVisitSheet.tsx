@@ -268,11 +268,11 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     setAutoSisters(automatic);
     try {
       await markDoorForSisters(repositories, markers, { doorId: door.id, sisters: next, authorId });
-      await refresh();
       await sync?.synchronize();
     } catch (error) {
       setSisters(!next);
       setAutoSisters(false);
+      await refresh().catch(() => undefined);
       setMessage(error instanceof Error ? error.message : 'Le marqueur n a pas pu etre enregistre.');
     }
   }
@@ -291,12 +291,12 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     setAutoSisters(value === 'femme' && !sisters);
     try {
       await updateDoorProfile(repositories, markers, { doorId: door.id, foyer: value, sisters: nextSisters, authorId });
-      await refresh();
       await sync?.synchronize();
     } catch (error) {
       setFoyer(previousFoyer);
       setSisters(previousSisters);
       setAutoSisters(false);
+      await refresh().catch(() => undefined);
       setMessage(error instanceof Error ? error.message : 'La composition du foyer n a pas pu etre enregistree.');
     }
   }

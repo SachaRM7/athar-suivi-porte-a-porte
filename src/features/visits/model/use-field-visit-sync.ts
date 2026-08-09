@@ -75,7 +75,10 @@ export function useFieldVisitSync(
       const entriesBeforeFlush = await outbox.all();
       // Les marqueurs partent dans la même passe, mais par leur propre chemin : ils
       // n'entrent ni dans la chaîne de révisions, ni dans la résolution de conflits.
-      await flushDoorMarkers(markers, markerWriter);
+      const markerResult = await flushDoorMarkers(markers, markerWriter);
+      if (markerResult.failed.length > 0) {
+        throw new Error(markerResult.failed[0]?.reason ?? 'Le profil de la porte ne peut pas être synchronisé.');
+      }
       const events = await sync.flush();
       const refreshedDoors = await Promise.all(events.map(async (event) => {
         if (event.type !== 'rejected') {
