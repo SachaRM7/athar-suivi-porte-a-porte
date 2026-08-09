@@ -89,6 +89,7 @@ type WorkspaceMapProps = {
   repositories: WorkspaceRepositories;
   authorId: string;
   canEditZones: boolean;
+  initialZoneId?: string | null;
   canCreateBuildings?: boolean;
   /** Archives PMTiles essayées dans l'ordre ; la première disponible fournit les emprises. */
   footprintArchives?: readonly string[];
@@ -169,7 +170,7 @@ function geometryFromFeature(feature: GeoJSONStoreFeatures): ZoneGeometry | null
   return closePolygon(coordinates.map(([longitude, latitude]) => [longitude, latitude] as [number, number]));
 }
 
-export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect }: WorkspaceMapProps): ReactElement {
+export function WorkspaceMap({ repositories, authorId, canEditZones, initialZoneId = null, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect }: WorkspaceMapProps): ReactElement {
   const element = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const map = useRef<MapInstance | null>(null);
@@ -177,7 +178,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
   const viewportRequest = useRef<AbortController | null>(null);
   const placingBuilding = useRef(false);
   const zones = useRef<readonly Zone[]>([]);
-  const selectedZoneRef = useRef<string | null>(null);
+  const selectedZoneRef = useRef<string | null>(initialZoneId);
   const footprintContext = useRef<FootprintContext>({ zone: null, buildings: new Map(), doorsByBuilding: new Map(), statuses: new Map(), untouchedColor: UNTOUCHED_COLOR });
   /** Bâtiments posés pendant cette session, encore absents de Firestore. */
   const pendingLocalBuildings = useRef(new Map<string, Building>());
@@ -190,7 +191,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
   const [searchQuery, setSearchQuery] = useState('');
   const [mode, setMode] = useState<'terrain' | 'edition'>('terrain');
   const [panelHeight, setPanelHeight] = useState<'peek' | 'full'>('peek');
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(initialZoneId);
   const [visibleBuildingCount, setVisibleBuildingCount] = useState(0);
   const [attachedBuildingCount, setAttachedBuildingCount] = useState<number | null>(null);
   const [editing, setEditing] = useState<'drawing' | 'editing' | null>(null);
@@ -274,11 +275,23 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
       repositories.statuses.list()
     ]);
     if (controller.signal.aborted || viewportRequest.current !== controller) return;
-    const stats = await Promise.all(nextZones.map(async (zone) => [zone.id, zoneProgressLabel(zone, await repositories.zones.getStats(zone.id))] as const));
+    const stats = await Promise.all(nextZones.map(async (zone) => {
+      try {
+        return [zone.id, zoneProgressLabel(zone, await repositories.zones.getStats(zone.id))] as const;
+      } catch {
+        // Une projection absente ou ancienne ne doit jamais empêcher l'entrée sur la carte.
+        return [zone.id, zone.name] as const;
+      }
+    }));
     if (viewportRequest.current !== controller) return;
     zones.current = nextZones;
     setZoneList(nextZones);
-    const activeZoneId = selectedZoneRef.current ?? nextZones[0]?.id ?? null;
+    const requestedZoneId = selectedZoneRef.current;
+    const activeZoneId = nextZones.some((zone) => zone.id === requestedZoneId) ? requestedZoneId : nextZones[0]?.id ?? null;
+    if (activeZoneId !== selectedZoneRef.current) {
+      selectedZoneRef.current = activeZoneId;
+      setSelectedZoneId(activeZoneId);
+    }
     const grouped = groupDoorsByBuilding(doors);
     footprintContext.current = {
       zone: nextZones.find((zone) => zone.id === activeZoneId) ?? null,

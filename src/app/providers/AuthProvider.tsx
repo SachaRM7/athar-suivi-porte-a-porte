@@ -20,29 +20,12 @@ export function AuthProvider({ children }: PropsWithChildren): ReactElement {
     return () => { active = false; unsubscribe?.(); };
   }, []);
 
-  const signIn = useCallback(async (username: string, password: string) => {
+  const signIn = useCallback(async (identifier: string, password: string) => {
     const [clientModule, authModule] = await Promise.all([
       import('../../infrastructure/firebase/client'),
       import('../../infrastructure/firebase/username-auth-gateway')
     ]);
-    await authModule.signInToFirebaseWithUsername(clientModule.getFirebaseClient().auth, username, password);
-  }, []);
-
-  const registerMember = useCallback(async (username: string, displayName: string, password: string) => {
-    const [clientModule, onboardingModule] = await Promise.all([
-      import('../../infrastructure/firebase/client'),
-      import('../../infrastructure/firebase/onboarding-gateway')
-    ]);
-    const client = clientModule.getFirebaseClient();
-    await onboardingModule.registerMemberWithPassword(client.auth, client.functions, { username, displayName, password });
-  }, []);
-
-  const finalizeMemberRegistration = useCallback(async (username: string, displayName: string) => {
-    const [clientModule, onboardingModule] = await Promise.all([
-      import('../../infrastructure/firebase/client'),
-      import('../../infrastructure/firebase/onboarding-gateway')
-    ]);
-    await onboardingModule.finalizeMemberRegistration(clientModule.getFirebaseClient().functions, { username, displayName });
+    await authModule.signInToFirebaseWithIdentifier(clientModule.getFirebaseClient().auth, identifier, password);
   }, []);
 
   const signOut = useCallback(async () => {
@@ -66,6 +49,6 @@ export function AuthProvider({ children }: PropsWithChildren): ReactElement {
     }
   }, [state]);
 
-  const value = useMemo(() => ({ state, signIn, registerMember, finalizeMemberRegistration, signOut }), [state, signIn, registerMember, finalizeMemberRegistration, signOut]);
+  const value = useMemo(() => ({ state, signIn, signOut }), [state, signIn, signOut]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 async function signIn(page: import('@playwright/test').Page, username: string): Promise<void> {
   await page.goto('/login');
-  await page.getByLabel('Identifiant').fill(username);
+  await page.getByLabel('Adresse e-mail ou identifiant').fill(username);
   await page.getByLabel('Mot de passe').fill('Temporary-password-123');
   await page.getByRole('button', { name: 'Se connecter' }).click();
   await expect(page.getByRole('heading', { name: 'Zones de Toulouse' })).toBeVisible({ timeout: 20_000 });
@@ -162,7 +162,7 @@ test('an untrusted sign-out purges the UID outbox and prior persistent Firestore
       page.waitForEvent('load'),
       page.getByRole('button', { name: 'Se deconnecter' }).click()
     ]);
-    await expect(page.getByRole('heading', { name: 'Connexion' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Reprendre là où la zone s’est arrêtée.' })).toBeVisible({ timeout: 15_000 });
 
     await expect.poll(async () => page.evaluate(async () => {
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -191,7 +191,7 @@ test('the desktop dashboard is reserved to admins and reads a selected zone from
   try {
     await signIn(member, 'terrain.31');
     await member.goto('/admin');
-    await expect(member.getByRole('heading', { name: 'Acces reserve' })).toBeVisible();
+    await expect(member.getByRole('heading', { name: 'Accès réservé' })).toBeVisible();
   } finally {
     await memberContext.close();
   }

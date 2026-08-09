@@ -1,17 +1,17 @@
 import { signInWithEmailAndPassword, type Auth } from 'firebase/auth';
-import { signInWithUsername } from '../../domain/auth/username';
+import { signInWithIdentifier } from '../../domain/auth/username';
 
 /** Client-side sign-in only. Account creation remains a privileged backend action. */
-export async function signInToFirebaseWithUsername(
+export async function signInToFirebaseWithIdentifier(
   auth: Auth,
-  username: string,
+  identifier: string,
   password: string
 ): Promise<void> {
-  await signInWithUsername(
+  await signInWithIdentifier(
     async (email, candidatePassword) => {
       await signInWithEmailAndPassword(auth, email, candidatePassword);
     },
-    username,
+    identifier,
     password
   );
 }

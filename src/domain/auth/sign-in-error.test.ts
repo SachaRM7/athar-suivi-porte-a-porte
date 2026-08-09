@@ -11,8 +11,8 @@ function firebaseError(code: string): Error & { code: string } {
 
 describe('signInErrorMessage', () => {
   it('blames the credentials only when the server rejected them', () => {
-    expect(signInErrorMessage(firebaseError('auth/invalid-credential'), cloud)).toBe('Identifiant ou mot de passe incorrect.');
-    expect(signInErrorMessage(firebaseError('auth/user-not-found'), cloud)).toBe('Identifiant ou mot de passe incorrect.');
+    expect(signInErrorMessage(firebaseError('auth/invalid-credential'), cloud)).toBe('E-mail, identifiant ou mot de passe incorrect.');
+    expect(signInErrorMessage(firebaseError('auth/user-not-found'), cloud)).toBe('E-mail, identifiant ou mot de passe incorrect.');
   });
 
   it('points at the local emulators when they are the unreachable service', () => {
@@ -21,7 +21,7 @@ describe('signInErrorMessage', () => {
 
   it('points at the network when the environment talks to a real project', () => {
     const message = signInErrorMessage(firebaseError('auth/network-request-failed'), cloud);
-    expect(message).toContain('injoignable');
+    expect(message).toContain('Pas de connexion');
     expect(message).not.toContain('npm run dev:local');
   });
 
@@ -38,6 +38,6 @@ describe('signInErrorMessage', () => {
   });
 
   it('falls back on the credentials wording for an unknown failure', () => {
-    expect(signInErrorMessage(new Error('boom'), cloud)).toBe('Identifiant ou mot de passe incorrect.');
+    expect(signInErrorMessage(new Error('boom'), cloud)).toBe('E-mail, identifiant ou mot de passe incorrect.');
   });
 });

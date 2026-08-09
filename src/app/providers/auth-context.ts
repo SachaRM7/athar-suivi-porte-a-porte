@@ -5,9 +5,7 @@ export type ApplicationAuthState = AuthSessionSnapshot | { status: 'unconfigured
 
 export type AuthContextValue = {
   state: ApplicationAuthState;
-  signIn(username: string, password: string): Promise<void>;
-  registerMember(username: string, displayName: string, password: string): Promise<void>;
-  finalizeMemberRegistration(username: string, displayName: string): Promise<void>;
+  signIn(identifier: string, password: string): Promise<void>;
   signOut(): Promise<void>;
 };
 

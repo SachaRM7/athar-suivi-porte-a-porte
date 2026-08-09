@@ -70,6 +70,8 @@
   --t-15: 15px;
   --t-17: 17px;
   --t-19: 19px;
+  /* Écran d'authentification — valeur fixée par 08-REFONTE-CONNEXION.md. */
+  --t-auth-title: 25px;
 
   /* ---- rayons des composants ---- */
   --r-door: 10px;     /* case de porte */

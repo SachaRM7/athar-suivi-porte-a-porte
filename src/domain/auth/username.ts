@@ -22,11 +22,19 @@ export function technicalEmailForUsername(username: string): string {
   return `${normalizeUsername(username)}@auth.athar.invalid`;
 }
 
-export async function signInWithUsername(
-  signIn: PasswordSignIn,
-  username: string,
-  password: string
-): Promise<void> {
-  await signIn(technicalEmailForUsername(username), password);
+export function emailForIdentifier(identifier: string): string {
+  const normalized = identifier.trim().toLowerCase();
+  if (normalized.includes('@')) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) throw new InvalidUsernameError();
+    return normalized;
+  }
+  return technicalEmailForUsername(normalized);
 }
 
+export async function signInWithIdentifier(
+  signIn: PasswordSignIn,
+  identifier: string,
+  password: string
+): Promise<void> {
+  await signIn(emailForIdentifier(identifier), password);
+}

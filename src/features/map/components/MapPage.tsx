@@ -26,6 +26,7 @@ export function MapPage(): ReactElement {
 
 function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignOut(): Promise<void> }): ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const initialZoneId = useMemo(() => new URLSearchParams(window.location.search).get('zone'), []);
   const outbox = useMemo(() => new IndexedDbOutbox(member.id), [member.id]);
   const markers = useMemo(() => new IndexedDbDoorMarkerOutbox(member.id), [member.id]);
   const repositories = useMemo(() => {
@@ -64,7 +65,7 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
       <button aria-label="Reglages" className="map-settings secondary-action" onClick={() => setSettingsOpen(true)} type="button">Reglages</button>
       <button className="map-sign-out secondary-action" onClick={() => void onSignOut()} type="button">Se deconnecter</button>
       <Suspense fallback={<div className="workspace-map-loading" aria-label="Chargement de la carte" />}>
-        <WorkspaceMap authorId={member.id} canCreateBuildings canEditZones={member.role === 'admin'} onBuildingSelect={opened.select} repositories={repositories} />
+        <WorkspaceMap authorId={member.id} canCreateBuildings canEditZones={member.role === 'admin'} initialZoneId={initialZoneId} onBuildingSelect={opened.select} repositories={repositories} />
       </Suspense>
       <BuildingVisitSheet
         authorId={member.id}

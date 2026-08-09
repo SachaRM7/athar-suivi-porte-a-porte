@@ -8,7 +8,7 @@ import { InvalidUsernameError } from './username';
  * réparation ; les confondre envoie chercher au mauvais endroit.
  */
 
-const WRONG_CREDENTIALS = 'Identifiant ou mot de passe incorrect.';
+const WRONG_CREDENTIALS = 'E-mail, identifiant ou mot de passe incorrect.';
 
 export type SignInFailureContext = {
   /** En développement, le service visé est l'émulateur local, pas le projet Firebase. */
@@ -23,7 +23,7 @@ function firebaseErrorCode(cause: unknown): string | null {
 
 export function signInErrorMessage(cause: unknown, context: SignInFailureContext): string {
   if (cause instanceof InvalidUsernameError) {
-    return 'Un identifiant contient 3 à 32 caractères : minuscules, chiffres, point, tiret ou souligné.';
+    return 'Saisis une adresse e-mail valide ou un identifiant de 3 à 32 caractères.';
   }
 
   switch (firebaseErrorCode(cause)) {
@@ -36,9 +36,9 @@ export function signInErrorMessage(cause: unknown, context: SignInFailureContext
     case 'auth/network-request-failed':
       return context.useEmulators
         ? 'Le service d’authentification local ne répond pas. Démarrez les émulateurs avec « npm run dev:local », puis réessayez.'
-        : 'Le service d’authentification est injoignable. Vérifiez votre connexion, puis réessayez.';
+        : 'Pas de connexion. La connexion initiale nécessite du réseau ; ensuite l’app fonctionne hors ligne.';
     case 'auth/too-many-requests':
-      return 'Trop de tentatives depuis cet appareil. Attendez quelques minutes avant de réessayer.';
+      return 'Trop de tentatives. Réessaie dans quelques minutes.';
     case 'auth/user-disabled':
       return 'Ce compte est désactivé. Demandez sa réactivation à un coordinateur.';
     case 'auth/operation-not-allowed':

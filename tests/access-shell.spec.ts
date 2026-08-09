@@ -4,8 +4,8 @@ async function expectAccessShell(page: import('@playwright/test').Page): Promise
   await expect(page.locator('main')).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'Configuration requise' })
-      .or(page.getByRole('heading', { name: 'Connexion' }))
-      .or(page.getByRole('heading', { name: 'Verification en cours' }))
+      .or(page.getByRole('heading', { name: 'Reprendre là où la zone s’est arrêtée.' }))
+      .or(page.getByRole('heading', { name: 'Vérification en cours' }))
   ).toBeVisible();
 }
 
