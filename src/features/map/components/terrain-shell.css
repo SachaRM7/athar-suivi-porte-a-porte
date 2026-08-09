@@ -220,6 +220,8 @@
   cursor: default;
 }
 
+.terrain-account { position: relative; flex: none; }
+
 .terrain-avatar {
   display: grid;
   width: 38px;
@@ -230,8 +232,54 @@
   border-radius: 50%;
   background: var(--brand);
   color: var(--paper);
+  cursor: pointer;
   font: 600 var(--t-115)/1 var(--font-data);
 }
+
+.terrain-account-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  min-width: 190px;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-dialog);
+  background: var(--paper);
+  box-shadow: var(--shadow-lg);
+}
+
+.terrain-account-menu button {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch);
+  gap: 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  font: 500 var(--t-125)/1 var(--font-ui);
+  text-align: left;
+}
+
+.terrain-account-menu button:hover {
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+}
+
+.terrain-account-menu svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.terrain-account-signout { color: var(--ink-soft); }
 
 .terrain-mobile-action {
   display: none;
@@ -709,9 +757,9 @@
     gap: 8px;
   }
 
+  /* Le compte reste visible : il porte désormais les réglages et la déconnexion. */
   .terrain-brand,
-  .terrain-modes,
-  .terrain-avatar { display: none; }
+  .terrain-modes { display: none; }
 
   .terrain-zonechip {
     min-width: 0;

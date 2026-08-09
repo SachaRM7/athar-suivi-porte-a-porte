@@ -56,16 +56,26 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
   const opened = useOpenedBuilding(repositories);
   // La structure vient d'être écrite : la suggestion cadastrale n'a plus rien à proposer.
   const changeBuilding = useCallback((building: Building) => opened.select(building, { persisted: true, suggestion: null }), [opened]);
+  const account = useMemo(
+    () => ({ displayName: member.displayName, onOpenSettings: () => setSettingsOpen(true), onSignOut: () => void onSignOut() }),
+    [member.displayName, onSignOut]
+  );
   const initialAdmin = useMemo(() => {
     const client = getFirebaseClient();
     return (code: string) => claimInitialAdminWithFunction(client.functions, client.auth.currentUser, code);
   }, []);
   return (
     <main className="map-page">
-      <button aria-label="Reglages" className="map-settings secondary-action" onClick={() => setSettingsOpen(true)} type="button">Reglages</button>
-      <button className="map-sign-out secondary-action" onClick={() => void onSignOut()} type="button">Se deconnecter</button>
       <Suspense fallback={<div className="workspace-map-loading" aria-label="Chargement de la carte" />}>
-        <WorkspaceMap authorId={member.id} canCreateBuildings canEditZones={member.role === 'admin'} initialZoneId={initialZoneId} onBuildingSelect={opened.select} repositories={repositories} />
+        <WorkspaceMap
+          account={account}
+          authorId={member.id}
+          canCreateBuildings
+          canEditZones={member.role === 'admin'}
+          initialZoneId={initialZoneId}
+          onBuildingSelect={opened.select}
+          repositories={repositories}
+        />
       </Suspense>
       <BuildingVisitSheet
         authorId={member.id}

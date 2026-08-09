@@ -163,8 +163,6 @@ h2 { font-size: 22px; }
 .dashboard-pagination span { color: #59645d; font-size: 12px; text-align: center; }
 
 .map-page { background: #f4f1e8; min-height: 100vh; }
-.map-sign-out { position: fixed; right: 12px; top: 12px; z-index: 20; }
-.map-settings { left: 12px; position: fixed; top: 12px; z-index: 20; }
 .workspace-map-shell { display: grid; grid-template-areas: 'header' 'tools' 'properties' 'buildings' 'map' 'message'; grid-template-rows: auto auto auto auto minmax(440px, calc(100vh - 220px)) auto; min-height: 100vh; }
 .workspace-map-header { align-items: end; border-bottom: 1px solid var(--hairline); display: flex; gap: 24px; grid-area: header; justify-content: space-between; padding: 13px clamp(18px, 4vw, 56px); }
 .workspace-map-header h1 { font: 600 var(--t-19) var(--font-title); }

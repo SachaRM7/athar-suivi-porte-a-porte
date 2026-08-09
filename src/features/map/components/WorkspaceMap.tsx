@@ -42,6 +42,7 @@ import {
   type BuildingListSort,
 } from '../../buildings/model/building-staleness';
 import { cadastralSuggestion, type CadastralSuggestion } from '../../buildings/model/cadastral-structure';
+import { AccountMenu } from './AccountMenu';
 import type { SelectBuildingOptions } from '../model/use-opened-building';
 import { LocalPmtilesSource } from '../infrastructure/local-pmtiles-source';
 import { TraceBar, type TraceEntry } from '../../../design/components';
@@ -94,6 +95,8 @@ type WorkspaceMapProps = {
   /** Archives PMTiles essayées dans l'ordre ; la première disponible fournit les emprises. */
   footprintArchives?: readonly string[];
   onBuildingSelect?: (building: Building, options: SelectBuildingOptions) => void;
+  /** Absent hors session : la maquette et le laboratoire affichent la carte sans compte. */
+  account?: { displayName: string; onOpenSettings(): void; onSignOut(): void };
 };
 
 /**
@@ -170,7 +173,7 @@ function geometryFromFeature(feature: GeoJSONStoreFeatures): ZoneGeometry | null
   return closePolygon(coordinates.map(([longitude, latitude]) => [longitude, latitude] as [number, number]));
 }
 
-export function WorkspaceMap({ repositories, authorId, canEditZones, initialZoneId = null, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect }: WorkspaceMapProps): ReactElement {
+export function WorkspaceMap({ repositories, authorId, canEditZones, initialZoneId = null, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect, account }: WorkspaceMapProps): ReactElement {
   const element = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const map = useRef<MapInstance | null>(null);
@@ -682,7 +685,13 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         >
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
         </button>
-        <div className="terrain-avatar" aria-label="Compte terrain">SM</div>
+        {account && (
+          <AccountMenu
+            displayName={account.displayName}
+            onOpenSettings={account.onOpenSettings}
+            onSignOut={account.onSignOut}
+          />
+        )}
       </header>
 
       {onBuildingSelect && (

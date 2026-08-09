@@ -158,9 +158,10 @@ test('an untrusted sign-out purges the UID outbox and prior persistent Firestore
       database.close();
     });
 
+    await page.getByRole('button', { name: /^Compte de / }).click();
     await Promise.all([
       page.waitForEvent('load'),
-      page.getByRole('button', { name: 'Se deconnecter' }).click()
+      page.getByRole('menuitem', { name: 'Se déconnecter' }).click()
     ]);
     await expect(page.getByRole('heading', { name: 'Reprendre là où la zone s’est arrêtée.' })).toBeVisible({ timeout: 15_000 });
 
