@@ -53,7 +53,7 @@ export function buildingStaleness(lastVisitAt: string | null, now: Date = new Da
     return { lastVisitAt: null, days: null, label: 'jamais vu', alert: false };
   }
   const days = elapsedDays(lastVisitAt, now);
-  return { lastVisitAt, days, label: stalenessLabel(days), alert: days >= STALE_ALERT_DAYS };
+  return { lastVisitAt, days, label: stalenessLabel(days), alert: days > STALE_ALERT_DAYS };
 }
 
 export type BuildingListEntry = {

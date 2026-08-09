@@ -22,6 +22,8 @@ describe('cadastralSuggestion', () => {
     expect(cadastralSuggestion({ nombre_d_etages: 0, nombre_de_logements: 4 })).toBeNull();
     expect(cadastralSuggestion({ nombre_d_etages: 3, nombre_de_logements: -1 })).toBeNull();
     expect(cadastralSuggestion({ nombre_d_etages: 400, nombre_de_logements: 400 })).toBeNull();
+    expect(cadastralSuggestion({ nombre_d_etages: 22, nombre_de_logements: 44 })).toBeNull();
+    expect(cadastralSuggestion({ nombre_d_etages: 2, nombre_de_logements: 102 })).toBeNull();
   });
 
   it('never proposes an empty floor', () => {

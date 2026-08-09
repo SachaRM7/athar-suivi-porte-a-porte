@@ -351,6 +351,7 @@ test('updates the structure preview live and protects a visited door from one-cl
 
   await page.getByRole('button', { name: 'Configurer le batiment' }).click();
   await expect(page.getByRole('heading', { name: 'Structure du bâtiment' })).toBeVisible();
+  await expect(page.getByText('suggestion d’après le cadastre — à confirmer')).toBeHidden();
   await page.getByRole('button', { name: 'Augmenter — Étages au-dessus du rez-de-chaussée' }).click();
   await expect(page.getByRole('region', { name: 'Aperçu vivant' }).getByText('2ème')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Créer 6 portes' })).toBeVisible();

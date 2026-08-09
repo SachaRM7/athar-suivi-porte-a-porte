@@ -101,6 +101,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
    * appartient pour qu'ouvrir un autre immeuble reparte de sa propre suggestion.
    */
   const [structureDraft, setStructureDraft] = useState<{ buildingId: string; floorCount: string; doorsPerFloor: string } | null>(null);
+  const [structureLoadedBuildingId, setStructureLoadedBuildingId] = useState<string | null>(null);
   const [manualPlan, setManualPlan] = useState('');
   const [showManual, setShowManual] = useState(false);
   const [numbering, setNumbering] = useState<'floor' | 'hundreds' | 'serial'>('floor');
@@ -111,6 +112,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
 
   const refresh = useCallback(async () => {
     if (!building) return;
+    setStructureLoadedBuildingId(null);
     const [nextDoors, allStructureDoors, nextStatuses, entries] = await Promise.all([
       repositories.doors.listByBuilding(building.id),
       canEditStructure ? repositories.doors.listStructureByBuilding(building.id) : Promise.resolve([]),
@@ -120,6 +122,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     const sorted = [...nextDoors].sort((left, right) => left.floor - right.floor || compareDoorsForFloor(left, right));
     setDoors(sorted);
     setStructureDoors([...allStructureDoors].sort((left, right) => left.floor - right.floor || compareDoorsForFloor(left, right)));
+    setStructureLoadedBuildingId(building.id);
     setStatuses(nextStatuses.filter((status) => status.active));
     setPendingCount(entries.filter((entry) => entry.state === 'pending').length);
     setFloor((current) => sorted.some((door) => door.floor === current) ? current : (floorProgress(sorted)[0]?.floor ?? 0));
@@ -159,10 +162,29 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
    */
   const openedBuildingId = building?.id ?? null;
   const draft = structureDraft?.buildingId === openedBuildingId ? structureDraft : null;
-  const floorCount = draft?.floorCount ?? (structureSuggestion ? String(structureSuggestion.floorsAboveGround) : '2');
-  const doorsPerFloor = draft?.doorsPerFloor ?? (structureSuggestion ? String(structureSuggestion.doorsPerFloor) : '4');
+  const describedStructure = useMemo(() => {
+    const activeStructureDoors = structureDoors.filter((door) => door.active);
+    const activeDoors = activeStructureDoors.length > 0 ? activeStructureDoors : doors.filter((door) => door.active);
+    const floorCounts = new Map<number, number>();
+    for (const door of activeDoors) floorCounts.set(door.floor, (floorCounts.get(door.floor) ?? 0) + 1);
+    return {
+      present: activeDoors.length > 0,
+      floorsAboveGround: activeDoors.reduce((highest, door) => Math.max(highest, door.floor), 0),
+      doorsPerFloor: Math.max(1, ...floorCounts.values())
+    };
+  }, [doors, structureDoors]);
+  const hasDescribedStructure = describedStructure.present;
+  const applicableStructureSuggestion = structureLoadedBuildingId === openedBuildingId && !hasDescribedStructure ? structureSuggestion : null;
+  const initialFloorCount = hasDescribedStructure
+    ? String(describedStructure.floorsAboveGround)
+    : String(applicableStructureSuggestion?.floorsAboveGround ?? 2);
+  const initialDoorsPerFloor = hasDescribedStructure
+    ? String(describedStructure.doorsPerFloor)
+    : String(applicableStructureSuggestion?.doorsPerFloor ?? 4);
+  const floorCount = draft?.floorCount ?? initialFloorCount;
+  const doorsPerFloor = draft?.doorsPerFloor ?? initialDoorsPerFloor;
   // La mention disparaît dès que quelqu'un ajuste un réglage : ce n'est plus le cadastre.
-  const showsCadastralNotice = structureSuggestion !== null && draft === null;
+  const showsCadastralNotice = applicableStructureSuggestion !== null && draft === null;
   const editStructureDraft = (changes: Partial<{ floorCount: string; doorsPerFloor: string }>) => {
     setStructureDraft({ buildingId: openedBuildingId ?? '', floorCount, doorsPerFloor, ...changes });
   };

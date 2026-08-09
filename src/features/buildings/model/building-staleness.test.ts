@@ -61,8 +61,9 @@ describe('buildingStaleness', () => {
     expect(recent.alert).toBe(false);
   });
 
-  it('raises the alert once the threshold is reached', () => {
-    expect(buildingStaleness(daysAgo(STALE_ALERT_DAYS), now).alert).toBe(true);
+  it('raises the alert only beyond the ninety-day threshold', () => {
+    expect(buildingStaleness(daysAgo(STALE_ALERT_DAYS), now).alert).toBe(false);
+    expect(buildingStaleness(daysAgo(STALE_ALERT_DAYS + 1), now).alert).toBe(true);
     expect(buildingStaleness(daysAgo(200), now)).toMatchObject({ label: 'il y a 6 mois', alert: true });
   });
 

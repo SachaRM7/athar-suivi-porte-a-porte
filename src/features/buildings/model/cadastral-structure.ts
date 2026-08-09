@@ -15,6 +15,10 @@ export type CadastralSuggestion = {
 /** Mention imposée par `03-CARTO.md` et `04-SCREENS.md`. Ne pas la reformuler. */
 export const CADASTRAL_SUGGESTION_NOTICE = 'suggestion d’après le cadastre — à confirmer';
 
+/** Limites des deux steppers du dialogue de structure. */
+const MAX_FLOORS_ABOVE_GROUND = 20;
+const MAX_DOORS_PER_FLOOR = 50;
+
 function positiveInteger(value: unknown): number | null {
   const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
   if (!Number.isFinite(parsed) || parsed < 1) return null;
@@ -31,9 +35,11 @@ export function cadastralSuggestion(properties: Readonly<Record<string, unknown>
   const levels = positiveInteger(properties.nombre_d_etages);
   const dwellings = positiveInteger(properties.nombre_de_logements);
   if (levels === null || dwellings === null) return null;
-  if (levels > 51) return null;
+  if (levels > MAX_FLOORS_ABOVE_GROUND + 1) return null;
+  const doorsPerFloor = Math.max(1, Math.round(dwellings / levels));
+  if (doorsPerFloor > MAX_DOORS_PER_FLOOR) return null;
   return {
     floorsAboveGround: levels - 1,
-    doorsPerFloor: Math.max(1, Math.min(100, Math.round(dwellings / levels)))
+    doorsPerFloor
   };
 }
