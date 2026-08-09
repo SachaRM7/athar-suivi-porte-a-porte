@@ -30,5 +30,6 @@ export function firestoreWriteErrorMessage(error: unknown, fallback: string): st
   if (code === 'unauthenticated') return 'La session Firebase a expiré. Reconnecte-toi, puis réessaie.';
   if (code === 'unavailable') return 'Firebase est momentanément indisponible. Vérifie la connexion, puis réessaie.';
   if (code === 'aborted' || code === 'failed-precondition') return 'Les données ont changé sur un autre appareil. Recharge le bâtiment, puis réessaie.';
-  return fallback;
+  const detail = errorMessage(error).trim();
+  return detail ? `${fallback} Détail technique : ${detail}` : fallback;
 }

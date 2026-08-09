@@ -120,7 +120,9 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       repositories.doors.listByBuilding(building.id),
       canEditStructure ? repositories.doors.listStructureByBuilding(building.id) : Promise.resolve([]),
       repositories.statuses.list(),
-      outbox.all()
+      // Une file locale IndexedDB indisponible ne doit jamais masquer la structure
+      // qui vient du serveur. Le compteur repasse temporairement à zéro.
+      outbox.all().catch(() => [])
     ]);
     const sorted = [...nextDoors].sort((left, right) => left.floor - right.floor || compareDoorsForFloor(left, right));
     setDoors(sorted);
@@ -344,10 +346,12 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       return false;
     }
     const affectedDoorIds = new Set([...preview.updated.map((update) => update.doorId), ...preview.archivedDoorIds]);
-    const entries = await outbox.all();
-    if (entries.some((entry) => affectedDoorIds.has(entry.doorId))) {
-      reportStructure('Structure bloquée : synchronise ou résous les passages locaux des portes concernées.');
-      return false;
+    if (affectedDoorIds.size > 0) {
+      const entries = await outbox.all();
+      if (entries.some((entry) => affectedDoorIds.has(entry.doorId))) {
+        reportStructure('Structure bloquée : synchronise ou résous les passages locaux des portes concernées.');
+        return false;
+      }
     }
     const diff = await repositories.applyBuildingStructure({
       buildingId: openedBuilding.id,
@@ -358,8 +362,20 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     });
     onBuildingChange(diff.building);
     setAmbiguities([]);
+    const updates = new Map(diff.updated.map((update) => [update.doorId, update]));
+    const archived = new Set(diff.archivedDoorIds);
+    const nextStructureDoors = [
+      ...structureDoors.map((door) => updates.has(door.id)
+        ? { ...door, ...updates.get(door.id)! }
+        : archived.has(door.id) ? { ...door, active: false } : door),
+      ...diff.created
+    ].sort((left, right) => left.floor - right.floor || compareDoorsForFloor(left, right));
+    setStructureDoors(nextStructureDoors);
+    setDoors(nextStructureDoors.filter((door) => door.active));
     reportStructure(`Structure enregistrée : ${diff.created.length} ajoutée(s), ${diff.updated.length} ajustée(s), ${diff.archivedDoorIds.length} archivée(s).`);
-    await refresh();
+    // La réponse du commit suffit pour rendre la coupe immédiatement. Une relecture
+    // locale défaillante ne transforme pas une écriture serveur réussie en faux échec.
+    await refresh().catch(() => undefined);
     return true;
   }
 

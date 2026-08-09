@@ -17,6 +17,7 @@ describe('Firestore write errors', () => {
     expect(firestoreWriteErrorMessage({ code: 'firestore/permission-denied' }, 'fallback')).toContain('droits du workspace');
     expect(firestoreWriteErrorMessage({ code: 'unavailable' }, 'fallback')).toContain('connexion');
     expect(firestoreWriteErrorMessage({ code: 'failed-precondition' }, 'fallback')).toContain('Recharge le bâtiment');
-    expect(firestoreWriteErrorMessage(new Error('unknown'), 'fallback')).toBe('fallback');
+    expect(firestoreWriteErrorMessage(new Error('unknown'), 'fallback')).toBe('fallback Détail technique : unknown');
+    expect(firestoreWriteErrorMessage(null, 'fallback')).toBe('fallback');
   });
 });
