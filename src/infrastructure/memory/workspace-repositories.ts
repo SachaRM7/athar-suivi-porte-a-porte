@@ -46,7 +46,13 @@ export function createMemoryWorkspaceRepositories(snapshot: WorkspaceSnapshot): 
       async list() { return [...zones.values()].map(copy); },
       async getStats(zoneId) { const stats = zoneStats.get(zoneId); return stats ? copy(stats) : null; },
       async save(zone) { zones.set(zone.id, copy(zone)); },
-      async delete(zoneId) { zones.delete(zoneId); zoneStats.delete(zoneId); }
+      async delete(zoneId) {
+        if ([...buildings.values()].some((building) => building.zoneId === zoneId)) {
+          throw new Error('Suppression impossible : des bâtiments sont encore rattachés à cette zone. Aucun bâtiment, aucune porte et aucun passage n’a été supprimé.');
+        }
+        zones.delete(zoneId);
+        zoneStats.delete(zoneId);
+      }
     },
     buildings: {
       async get(id) { const building = buildings.get(id); return building ? copy(building) : null; },

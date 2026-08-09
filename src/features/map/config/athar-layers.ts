@@ -25,6 +25,7 @@ const IN_ZONE: ExpressionSpecification = ['boolean', ['feature-state', 'inZone']
 const TRACKED: ExpressionSpecification = ['boolean', ['feature-state', 'tracked'], false];
 const SISTERS: ExpressionSpecification = ['boolean', ['feature-state', 'sisters'], false];
 const STATUS_COLOR: ExpressionSpecification = ['to-color', ['coalesce', ['feature-state', 'color'], TOKENS.footTodo]];
+const ZONE_COLOR: ExpressionSpecification = ['to-color', ['coalesce', ['get', 'color'], TOKENS.brand]];
 
 /**
  * `feature-state` est interdit dans un `filter` MapLibre : l'appartenance à la zone et la
@@ -78,11 +79,11 @@ export function createAtharLayers(sources: AtharLayerSources): LayerSpecificatio
     // 2 — polygone de la zone active.
     {
       id: ATHAR_LAYERS.zoneFill, type: 'fill', source: sources.zones,
-      paint: { 'fill-color': TOKENS.brand, 'fill-opacity': 0.04 }
+      paint: { 'fill-color': ZONE_COLOR, 'fill-opacity': 0.04 }
     },
     {
       id: ATHAR_LAYERS.zoneLine, type: 'line', source: sources.zones,
-      paint: { 'line-color': TOKENS.brand, 'line-width': 2.5, 'line-opacity': 0.5, 'line-dasharray': [10, 7] }
+      paint: { 'line-color': ZONE_COLOR, 'line-width': 2.5, 'line-opacity': 0.5, 'line-dasharray': [10, 7] }
     },
     // 3 — emprises hors zone : inertes, sans contour, non cliquables.
     ...footprint(ATHAR_LAYERS.outOfZone, {

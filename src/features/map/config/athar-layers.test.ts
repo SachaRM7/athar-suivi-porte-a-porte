@@ -35,6 +35,13 @@ describe('createAtharLayers', () => {
     expect(CLICKABLE_FOOTPRINT_LAYERS).not.toContain(ATHAR_LAYERS.outOfZone);
   });
 
+  it('paints every zone with its persisted color', () => {
+    const layers = createAtharLayers(sources);
+    const expected = ['to-color', ['coalesce', ['get', 'color'], '#16324F']];
+    expect(layers.find((layer) => layer.id === ATHAR_LAYERS.zoneFill)).toMatchObject({ paint: { 'fill-color': expected } });
+    expect(layers.find((layer) => layer.id === ATHAR_LAYERS.zoneLine)).toMatchObject({ paint: { 'line-color': expected } });
+  });
+
   it('omits the tileset layers when no footprint archive is available', () => {
     const ids = createAtharLayers({ ...sources, footprints: null }).map((layer) => layer.id);
     expect(ids).not.toContain(ATHAR_LAYERS.todo);

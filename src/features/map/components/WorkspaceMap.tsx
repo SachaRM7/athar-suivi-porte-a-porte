@@ -132,7 +132,7 @@ function zoneFeatures(zones: readonly Zone[], progressLabels: ReadonlyMap<string
     type: 'FeatureCollection' as const,
     features: zones.map((zone) => ({
       type: 'Feature' as const,
-      properties: { id: zone.id, name: zone.name, progressLabel: progressLabels.get(zone.id) ?? zone.name },
+      properties: { id: zone.id, name: zone.name, color: zone.color, progressLabel: progressLabels.get(zone.id) ?? zone.name },
       geometry: { type: 'Polygon' as const, coordinates: [zone.geometry.coordinates.map(([longitude, latitude]) => [longitude, latitude])] }
     }))
   };
@@ -599,18 +599,18 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
 
   const deleteSelectedZone = async () => {
     if (!selectedZone || editing !== null) return;
-    if (!window.confirm(`Supprimer la zone « ${selectedZone.name} » ?`)) return;
     try {
       setSavingZone(true);
       const buildings = await repositories.buildings.listByZone(selectedZone.id);
       if (buildings.length > 0) {
-        setMessage(`Suppression impossible : ${buildings.length} batiment(s) sont encore rattache(s) a cette zone.`);
+        setMessage(`Suppression impossible : ${buildings.length} bâtiment(s) sont encore rattaché(s) à cette zone. Aucun bâtiment, aucune porte et aucun passage n’a été supprimé.`);
         return;
       }
+      if (!window.confirm(`Supprimer la zone « ${selectedZone.name} » ? Aucun bâtiment, aucune porte et aucun passage ne sera supprimé.`)) return;
       await repositories.zones.delete(selectedZone.id);
       selectZone(null);
       setAttachedBuildingCount(null);
-      setMessage(`Zone « ${selectedZone.name} » supprimee.`);
+      setMessage(`Zone « ${selectedZone.name} » supprimée. Aucun bâtiment, aucune porte et aucun passage n’a été supprimé.`);
       await refreshViewport();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Suppression de la zone impossible.');

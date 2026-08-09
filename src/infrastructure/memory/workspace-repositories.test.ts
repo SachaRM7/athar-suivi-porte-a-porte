@@ -72,4 +72,12 @@ describe('memory workspace repositories', () => {
     await repositories.zones.delete(zone.id);
     await expect(repositories.zones.list()).resolves.not.toContainEqual(zone);
   });
+
+  it('keeps a zone when at least one building is still attached', async () => {
+    const repositories = createMemoryWorkspaceRepositories(demoWorkspace);
+    await expect(repositories.zones.delete('carmes')).rejects.toThrow('Aucun bâtiment, aucune porte et aucun passage n’a été supprimé.');
+    await expect(repositories.zones.list()).resolves.toContainEqual(expect.objectContaining({ id: 'carmes' }));
+    await expect(repositories.buildings.get('building-dalbad')).resolves.not.toBeNull();
+    await expect(repositories.doors.get('door-dalbad-01')).resolves.not.toBeNull();
+  });
 });

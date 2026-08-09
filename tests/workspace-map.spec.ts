@@ -96,6 +96,18 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await expect(page.getByText('5 portes')).toBeVisible();
 });
 
+test('refuses to delete a zone while its buildings and doors are still attached', async ({ page }) => {
+  await page.goto('/technical-map');
+  await expect(page.getByText('2 batiment(s) visibles')).toBeVisible({ timeout: 15_000 });
+  await enterEdition(page);
+  await page.getByRole('button', { name: 'Supprimer' }).click();
+  await expect(page.getByText(/Suppression impossible : 2 b.timent\(s\).*Aucun b.timent, aucune porte et aucun passage n.a .t. supprim./)).toBeVisible();
+  await expect(page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' })).toBeVisible();
+  await page.getByRole('button', { name: 'Terrain' }).click();
+  await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
+  await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeVisible();
+});
+
 test('opens the building cut in the desktop floating panel', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.goto('/technical-map');
