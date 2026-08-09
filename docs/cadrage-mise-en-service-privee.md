@@ -206,8 +206,8 @@ Configuration cible :
 - rewrite SPA `**` vers `/index.html` ;
 - build avec `VITE_BASE_PATH=/`, `VITE_WORKSPACE_ID=main`, configuration Web de
   `athar-dev31` et `VITE_USE_FIREBASE_EMULATORS` absent ou faux ;
-- `sw.js`, `index.html`, `manifest.webmanifest`, `assets/app.js` et
-  `assets/app.css` revalides a chaque mise en ligne ;
+- `sw.js`, `index.html`, `manifest.webmanifest` et les entrées versionnées
+  `assets/app-*.js` / `assets/app-*.css` revalidées à chaque mise en ligne ;
 - PMTiles servi avec un type binaire, requetes Range fonctionnelles et cache
   navigateur borne ;
 - en-tetes minimaux `X-Content-Type-Options`, `Referrer-Policy` et interdiction

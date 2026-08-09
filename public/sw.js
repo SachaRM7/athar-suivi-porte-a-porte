@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'athar-shell-v11';
+const SHELL_CACHE = 'athar-shell-v15';
 const BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 const withBasePath = (path) => `${BASE_PATH}${path}` || '/';
 
@@ -20,8 +20,8 @@ const UI_FONTS = [
 const SHELL_ASSETS = [
   withBasePath('/'),
   withBasePath('/index.html'),
-  withBasePath('/assets/app.js'),
-  withBasePath('/assets/app.css'),
+  withBasePath('/assets/app-v15.js'),
+  withBasePath('/assets/app-v15.css'),
   withBasePath('/manifest.webmanifest'),
   withBasePath('/icons/athar-mark.svg'),
   withBasePath('/icons/athar-180.png'),
@@ -31,7 +31,9 @@ const SHELL_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)));
+  // Une saturation du stockage hors ligne ne doit jamais empêcher la nouvelle
+  // version de s'installer : le réseau reste alors la source de repli.
+  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)).catch(() => undefined));
   self.skipWaiting();
 });
 
@@ -83,29 +85,43 @@ async function matchShell(request) {
 }
 
 async function cacheShellResponse(request) {
-  const cache = await caches.open(SHELL_CACHE);
-  const cached = await cache.match(request, { ignoreVary: true });
-  if (cached) return cached;
-  const response = await fetch(request);
-  if (response.ok && request.method === 'GET') {
-    await cache.put(request, response.clone());
+  try {
+    const cache = await caches.open(SHELL_CACHE);
+    const cached = await cache.match(request, { ignoreVary: true });
+    if (cached) return cached;
+    const response = await fetch(request);
+    if (response.ok && request.method === 'GET') {
+      await cache.put(request, response.clone()).catch(() => undefined);
+    }
+    return response;
+  } catch {
+    return fetch(request);
   }
-  return response;
 }
 
 async function refreshShellResponse(request) {
-  const cache = await caches.open(SHELL_CACHE);
   try {
     const response = await fetch(request);
-    if (response.ok) await cache.put(request, response.clone());
+    if (response.ok) {
+      await caches.open(SHELL_CACHE)
+        .then((cache) => cache.put(request, response.clone()))
+        .catch(() => undefined);
+    }
     return response;
   } catch {
-    return cache.match(request, { ignoreVary: true });
+    return matchShell(request)
+      .then((cached) => cached ?? Response.error())
+      .catch(() => Response.error());
   }
 }
 
 async function matchPmtilesRange(request) {
-  const cache = await caches.open(SHELL_CACHE);
+  let cache;
+  try {
+    cache = await caches.open(SHELL_CACHE);
+  } catch {
+    return fetch(request);
+  }
   const cached = await cache.match(withBasePath('/fixtures/toulouse.pmtiles'));
   if (!cached) return fetch(request);
   const range = request.headers.get('range');
@@ -148,7 +164,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname === withBasePath('/assets/app.js') || url.pathname === withBasePath('/assets/app.css')) {
+  if (url.pathname === withBasePath('/assets/app-v15.js') || url.pathname === withBasePath('/assets/app-v15.css')) {
     event.respondWith(refreshShellResponse(request));
     return;
   }
