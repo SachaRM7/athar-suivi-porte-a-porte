@@ -3,8 +3,10 @@ import {
   documentId,
   doc,
   getDoc,
+  getDocFromCache,
   getDocFromServer,
   getDocs,
+  getDocsFromCache,
   getDocsFromServer,
   limit,
   orderBy,
@@ -14,6 +16,9 @@ import {
   endAt,
   where,
   type DocumentData,
+  type DocumentReference,
+  type DocumentSnapshot,
+  type Query,
   type QuerySnapshot,
   type Firestore
 } from 'firebase/firestore';
@@ -46,8 +51,32 @@ export class ReadLimitExceededError extends Error {
 }
 
 export type FirestoreReadOptions = {
-  source?: 'server' | 'cache-aware';
+  source?: 'server' | 'cache-aware' | 'server-first';
 };
+
+async function serverFirstDoc<T extends DocumentData>(reference: DocumentReference<T>): Promise<DocumentSnapshot<T>> {
+  try {
+    return await getDocFromServer(reference);
+  } catch (serverError) {
+    try {
+      return await getDocFromCache(reference);
+    } catch {
+      throw serverError;
+    }
+  }
+}
+
+async function serverFirstDocs<T extends DocumentData>(reference: Query<T>): Promise<QuerySnapshot<T>> {
+  try {
+    return await getDocsFromServer(reference);
+  } catch (serverError) {
+    try {
+      return await getDocsFromCache(reference);
+    } catch {
+      throw serverError;
+    }
+  }
+}
 
 function boundedDocuments(snapshot: QuerySnapshot<DocumentData>, maximum: number, scope: string) {
   if (snapshot.size > maximum) throw new ReadLimitExceededError(scope, maximum);
@@ -98,8 +127,8 @@ function pageFromEntries<T extends { id: string }>(items: readonly T[], document
 export function createFirestoreWorkspaceReadRepositories(db: Firestore, workspaceId: string, options: FirestoreReadOptions = {}): WorkspaceReadRepositories {
   const workspace = `workspaces/${workspaceId}`;
   const path = (collectionName: string) => collection(db, `${workspace}/${collectionName}`);
-  const readDoc = options.source === 'cache-aware' ? getDoc : getDocFromServer;
-  const readDocs = options.source === 'cache-aware' ? getDocs : getDocsFromServer;
+  const readDoc = options.source === 'cache-aware' ? getDoc : options.source === 'server-first' ? serverFirstDoc : getDocFromServer;
+  const readDocs = options.source === 'cache-aware' ? getDocs : options.source === 'server-first' ? serverFirstDocs : getDocsFromServer;
 
   async function readBuilding(id: string): Promise<Building | null> {
     const snapshot = await readDoc(doc(db, `${workspace}/buildings/${id}`));

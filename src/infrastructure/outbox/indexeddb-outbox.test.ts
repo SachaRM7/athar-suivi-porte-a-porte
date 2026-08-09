@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
-import { afterEach, describe, expect, it } from 'vitest';
-import { clearIndexedDbOutboxForTests, clearIndexedDbOutboxForUser, IndexedDbOutbox } from './indexeddb-outbox';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { clearIndexedDbOutboxForTests, clearIndexedDbOutboxForUser, IndexedDbDoorMarkerOutbox, IndexedDbOutbox } from './indexeddb-outbox';
 import { MemoryDoorGateway, SyncLab } from '../../domain/sync/sync-service';
 
 const intent = {
@@ -14,6 +14,7 @@ const intent = {
 };
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await clearIndexedDbOutboxForTests();
 });
 
@@ -24,6 +25,22 @@ describe('IndexedDbOutbox', () => {
 
     const reloadedSession = new IndexedDbOutbox('member-a');
     await expect(reloadedSession.pending()).resolves.toEqual([expect.objectContaining(intent)]);
+  });
+
+  it('keeps visits and profiles usable in memory when IndexedDB is broken', async () => {
+    vi.stubGlobal('indexedDB', { open: () => { throw new Error('Internal error.'); } });
+    const outbox = new IndexedDbOutbox('member-a');
+    const markers = new IndexedDbDoorMarkerOutbox('member-a');
+
+    await expect(outbox.all()).resolves.toEqual([]);
+    await outbox.add(intent);
+    await markers.add({
+      commandId: 'marker-a', authorId: 'member-a', doorId: 'door-a', foyer: 'couple', sisters: true,
+      createdAt: '2026-08-09T20:02:00.000Z'
+    });
+
+    await expect(outbox.pending()).resolves.toMatchObject([{ commandId: intent.commandId }]);
+    await expect(markers.pending()).resolves.toMatchObject([{ doorId: 'door-a', foyer: 'couple', sisters: true }]);
   });
 
   it('partitions entries by user and refuses an intent from another user', async () => {

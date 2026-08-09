@@ -36,15 +36,27 @@ export function useFieldVisitSync(
   const [syncing, setSyncing] = useState(false);
   const sync = useMemo(() => {
     const client = getFirebaseClient();
+    const restAuth = {
+      projectId: client.app.options.projectId ?? '',
+      getIdToken: async () => client.auth.currentUser?.getIdToken() ?? null
+    };
     return new SyncLab(
-      new FirestoreDoorGateway(client.firestore, environment.workspaceId, () => client.auth.currentUser?.uid ?? null, browserOnline),
+      new FirestoreDoorGateway(client.firestore, environment.workspaceId, () => client.auth.currentUser?.uid ?? null, browserOnline, restAuth),
       outbox,
       authorId
     );
   }, [authorId, outbox]);
   const markerWriter = useMemo(() => {
     const client = getFirebaseClient();
-    return new FirestoreDoorMarkerGateway(client.firestore, environment.workspaceId, () => client.auth.currentUser?.uid ?? null);
+    return new FirestoreDoorMarkerGateway(
+      client.firestore,
+      environment.workspaceId,
+      () => client.auth.currentUser?.uid ?? null,
+      {
+        projectId: client.app.options.projectId ?? '',
+        getIdToken: async () => client.auth.currentUser?.getIdToken() ?? null
+      }
+    );
   }, []);
 
   const refresh = useCallback(async () => {

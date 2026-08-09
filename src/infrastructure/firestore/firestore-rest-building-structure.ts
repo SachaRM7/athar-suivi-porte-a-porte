@@ -5,6 +5,7 @@ import {
   type DoorStructureTarget
 } from '../../domain/workspace/building-structure';
 import type { Building, Door, DoorFoyer } from '../../domain/workspace/models';
+import type { FirestoreRestAuth } from './firestore-rest-auth';
 
 type RestValue = {
   stringValue?: string;
@@ -23,10 +24,7 @@ type RestDocument = {
 
 type RestErrorBody = { error?: { message?: string; status?: string } };
 
-export type FirestoreRestStructureAuth = {
-  projectId: string;
-  getIdToken(): Promise<string | null>;
-};
+export type FirestoreRestStructureAuth = FirestoreRestAuth;
 
 export type ApplyRestBuildingStructureInput = {
   workspaceId: string;

@@ -1,6 +1,8 @@
 import type { DoorMarkerIntent, DoorSnapshot, OutboxEntry, RejectionCategory, VisitIntent } from '../../domain/doors/contracts';
-import type { DoorMarkerOutbox } from '../../domain/sync/door-marker-outbox';
+import { MemoryDoorMarkerOutbox, type DoorMarkerOutbox } from '../../domain/sync/door-marker-outbox';
 import type { Outbox } from '../../domain/sync/outbox';
+import { MemoryOutbox } from '../../domain/sync/sync-service';
+import { isRecoverableFirestoreCacheError } from '../firebase/firestore-errors';
 
 const DATABASE_NAME = 'athar-prototype-outbox';
 const STORE_NAME = 'entries';
@@ -11,6 +13,12 @@ type StoredMarker = DoorMarkerIntent & { storageKey: string };
 
 function storageKey(authorId: string, commandId: string): string {
   return `${authorId}:${commandId}`;
+}
+
+function canUseMemoryFallback(error: unknown): boolean {
+  if (isRecoverableFirestoreCacheError(error)) return true;
+  const name = typeof error === 'object' && error !== null && 'name' in error ? String(error.name).toLowerCase() : '';
+  return ['aborterror', 'invalidstateerror', 'quotaexceedederror', 'unknownerror'].includes(name);
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -78,15 +86,33 @@ async function mutateUserEntries(
 }
 
 export class IndexedDbOutbox implements Outbox {
+  private fallback = false;
+  private readonly memory = new MemoryOutbox();
+
   constructor(private readonly authorId: string) {}
 
   async add(intent: VisitIntent): Promise<void> {
     if (intent.authorId !== this.authorId) throw new Error('Outbox user does not match intent author.');
-    await withStore('readwrite', (store) => store.add({ ...intent, state: 'pending', storageKey: storageKey(this.authorId, intent.commandId) }));
+    if (this.fallback) return this.memory.add(intent);
+    try {
+      await withStore('readwrite', (store) => store.add({ ...intent, state: 'pending', storageKey: storageKey(this.authorId, intent.commandId) }));
+    } catch (error) {
+      if (!canUseMemoryFallback(error)) throw error;
+      this.fallback = true;
+      await this.memory.add(intent);
+    }
   }
 
   async all(): Promise<OutboxEntry[]> {
-    const entries = await withStore('readonly', (store) => store.index('authorId').getAll(this.authorId)) as StoredEntry[];
+    if (this.fallback) return this.memory.all();
+    let entries: StoredEntry[];
+    try {
+      entries = await withStore('readonly', (store) => store.index('authorId').getAll(this.authorId)) as StoredEntry[];
+    } catch (error) {
+      if (!canUseMemoryFallback(error)) throw error;
+      this.fallback = true;
+      return this.memory.all();
+    }
     return entries
       .sort((left, right) => {
         if (left.doorId === right.doorId && left.expectedRevision !== right.expectedRevision) {
@@ -102,6 +128,7 @@ export class IndexedDbOutbox implements Outbox {
   }
 
   async markSynced(commandId: string): Promise<void> {
+    if (this.fallback) return this.memory.markSynced(commandId);
     await withStore('readwrite', (store) => store.delete(storageKey(this.authorId, commandId)));
   }
 
@@ -114,6 +141,7 @@ export class IndexedDbOutbox implements Outbox {
   }
 
   async reapplyConflict(commandId: string): Promise<void> {
+    if (this.fallback) return this.memory.reapplyConflict(commandId);
     await mutateUserEntries(this.authorId, (store, storedEntries) => {
       const entries = storedEntries.map(({ storageKey: _storageKey, ...entry }) => entry);
       const conflict = entries.find((entry) => entry.commandId === commandId);
@@ -139,6 +167,7 @@ export class IndexedDbOutbox implements Outbox {
   }
 
   async abandonConflict(commandId: string): Promise<void> {
+    if (this.fallback) return this.memory.abandonConflict(commandId);
     await mutateUserEntries(this.authorId, (store, storedEntries) => {
       const entries = storedEntries.map(({ storageKey: _storageKey, ...entry }) => entry);
       const conflict = entries.find((entry) => entry.commandId === commandId);
@@ -154,6 +183,14 @@ export class IndexedDbOutbox implements Outbox {
   }
 
   private async update(commandId: string, change: (entry: OutboxEntry) => OutboxEntry): Promise<void> {
+    if (this.fallback) {
+      const entry = (await this.memory.all()).find((candidate) => candidate.commandId === commandId);
+      if (!entry) throw new Error(`Unknown outbox entry: ${commandId}`);
+      const changed = change(entry);
+      if (changed.state === 'conflict' && changed.conflict) return this.memory.markConflict(commandId, changed.conflict);
+      if (changed.state === 'rejected' && changed.rejection) return this.memory.markRejected(commandId, changed.rejection);
+      return;
+    }
     await mutateUserEntries(this.authorId, (store, entries) => {
       const stored = entries.find((entry) => entry.commandId === commandId);
       if (!stored) throw new Error(`Unknown outbox entry: ${commandId}`);
@@ -168,29 +205,48 @@ export class IndexedDbOutbox implements Outbox {
  * remplace la précédente au lieu de s'empiler. Aucun passage n'est touché.
  */
 export class IndexedDbDoorMarkerOutbox implements DoorMarkerOutbox {
+  private fallback = false;
+  private readonly memory = new MemoryDoorMarkerOutbox();
+
   constructor(private readonly authorId: string) {}
 
   async add(intent: DoorMarkerIntent): Promise<void> {
     if (intent.authorId !== this.authorId) throw new Error('Outbox user does not match intent author.');
-    await withStore(
-      'readwrite',
-      (store) => store.put({ ...intent, storageKey: storageKey(this.authorId, intent.doorId) }),
-      MARKER_STORE_NAME
-    );
+    if (this.fallback) return this.memory.add(intent);
+    try {
+      await withStore(
+        'readwrite',
+        (store) => store.put({ ...intent, storageKey: storageKey(this.authorId, intent.doorId) }),
+        MARKER_STORE_NAME
+      );
+    } catch (error) {
+      if (!canUseMemoryFallback(error)) throw error;
+      this.fallback = true;
+      await this.memory.add(intent);
+    }
   }
 
   async pending(): Promise<DoorMarkerIntent[]> {
-    const stored = await withStore(
-      'readonly',
-      (store) => store.index('authorId').getAll(this.authorId),
-      MARKER_STORE_NAME
-    ) as StoredMarker[];
+    if (this.fallback) return this.memory.pending();
+    let stored: StoredMarker[];
+    try {
+      stored = await withStore(
+        'readonly',
+        (store) => store.index('authorId').getAll(this.authorId),
+        MARKER_STORE_NAME
+      ) as StoredMarker[];
+    } catch (error) {
+      if (!canUseMemoryFallback(error)) throw error;
+      this.fallback = true;
+      return this.memory.pending();
+    }
     return stored
       .map(({ storageKey: _storageKey, ...intent }) => intent)
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.doorId.localeCompare(right.doorId));
   }
 
   async markSynced(doorId: string): Promise<void> {
+    if (this.fallback) return this.memory.markSynced(doorId);
     await withStore('readwrite', (store) => store.delete(storageKey(this.authorId, doorId)), MARKER_STORE_NAME);
   }
 }

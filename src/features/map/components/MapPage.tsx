@@ -32,7 +32,9 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
   const repositories = useMemo(() => {
     const client = getFirebaseClient();
     return createTerrainSessionRepositories({
-      remote: createFirestoreWorkspaceReadRepositories(client.firestore, environment.workspaceId, { source: 'cache-aware' }),
+      // En ligne, le serveur fait foi immédiatement. Le cache n'est relu qu'en secours
+      // hors connexion, afin qu'un IndexedDB dégradé ne masque jamais Firebase.
+      remote: createFirestoreWorkspaceReadRepositories(client.firestore, environment.workspaceId, { source: 'server-first' }),
       member,
       outbox,
       structureWriter: new FirestoreBuildingStructureGateway(

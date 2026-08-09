@@ -9,13 +9,16 @@ import {
 } from 'firebase/firestore';
 import type { DoorSnapshot, VisitIntent } from '../../domain/doors/contracts';
 import { NetworkUnavailableError, RevisionConflictError, SyncRejectedError, type DoorWriteGateway } from '../../domain/sync/sync-service';
+import type { FirestoreRestAuth } from './firestore-rest-auth';
+import { commitVisitWithRest } from './firestore-rest-door-writes';
 
 export class FirestoreDoorGateway implements DoorWriteGateway {
   constructor(
     private readonly db: Firestore,
     private readonly workspaceId: string,
     private readonly currentUserId: () => string | null,
-    private readonly isNetworkAvailable: () => boolean = () => typeof navigator === 'undefined' || navigator.onLine !== false
+    private readonly isNetworkAvailable: () => boolean = () => typeof navigator === 'undefined' || navigator.onLine !== false,
+    private readonly restAuth?: FirestoreRestAuth
   ) {}
 
   async commit(intent: VisitIntent): Promise<DoorSnapshot> {
@@ -38,6 +41,10 @@ export class FirestoreDoorGateway implements DoorWriteGateway {
     ) {
       throw new SyncRejectedError('invalid-intent', 'The queued visit is invalid.');
     }
+
+    // En production, l'API REST authentifiée ne dépend pas du cache IndexedDB du SDK.
+    // L'écriture reste atomique et soumise aux mêmes règles Firestore.
+    if (this.restAuth) return commitVisitWithRest(this.restAuth, this.workspaceId, intent);
 
     const workspace = `workspaces/${this.workspaceId}`;
     const doorRef = doc(this.db, `${workspace}/doors/${intent.doorId}`);

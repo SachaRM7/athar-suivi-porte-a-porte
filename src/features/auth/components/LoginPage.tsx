@@ -38,7 +38,7 @@ function ActiveEntry(): ReactElement {
       import('../../../infrastructure/firestore/firestore-workspace-read-repositories')
     ]).then(async ([clientModule, repositoriesModule]) => {
       const client = clientModule.getFirebaseClient();
-      const repositories = repositoriesModule.createFirestoreWorkspaceReadRepositories(client.firestore, environment.workspaceId, { source: 'cache-aware' });
+      const repositories = repositoriesModule.createFirestoreWorkspaceReadRepositories(client.firestore, environment.workspaceId, { source: 'server-first' });
       const zones = await repositories.zones.list();
       const next = await Promise.all(zones.map(async (zone) => ({
         zone,
