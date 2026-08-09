@@ -28,6 +28,7 @@ import {
   doorsByBuilding as groupDoorsByBuilding,
   dominantStatusId,
   footprintState,
+  isInsideZone,
   squareAround,
   zoneProgressLabel,
   type FootprintContext,
@@ -109,7 +110,6 @@ type WorkspaceMapProps = {
   /** Archives PMTiles essayées dans l'ordre ; la première disponible fournit les emprises. */
   footprintArchives?: readonly string[];
   onBuildingSelect?: (building: Building, options: SelectBuildingOptions) => void;
-  onBuildingLocationSelect?: (location: GeoPoint) => void;
 };
 
 /**
@@ -186,7 +186,7 @@ function geometryFromFeature(feature: GeoJSONStoreFeatures): ZoneGeometry | null
   return closePolygon(coordinates.map(([longitude, latitude]) => [longitude, latitude] as [number, number]));
 }
 
-export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect, onBuildingLocationSelect }: WorkspaceMapProps): ReactElement {
+export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect }: WorkspaceMapProps): ReactElement {
   const element = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const map = useRef<MapInstance | null>(null);
@@ -196,6 +196,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
   const zones = useRef<readonly Zone[]>([]);
   const selectedZoneRef = useRef<string | null>(null);
   const footprintContext = useRef<FootprintContext>({ zone: null, buildings: new Map(), doorsByBuilding: new Map(), statuses: new Map(), untouchedColor: UNTOUCHED_COLOR });
+  /** Bâtiments posés pendant cette session, encore absents de Firestore. */
+  const pendingLocalBuildings = useRef(new Map<string, Building>());
   /** Suggestions cadastrales lues sur les tuiles, indexées par ID-RNB. Jamais appliquées seules. */
   const footprintSuggestions = useRef(new Map<string, CadastralSuggestion>());
   const [zoneList, setZoneList] = useState<readonly Zone[]>([]);
@@ -266,7 +268,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
     } catch {
       // Tuiles pas encore chargées : le prochain « sourcedata » repassera.
     }
-    const untiled = [...context.buildings.values()].filter((building) => !tiled.has(building.id));
+    const localCandidates = new Map(context.buildings);
+    for (const [id, building] of pendingLocalBuildings.current) localCandidates.set(id, building);
+    const untiled = [...localCandidates.values()].filter((building) => !tiled.has(building.id));
     (instance.getSource(LOCAL_BUILDING_SOURCE) as GeoJSONSource | undefined)?.setData(localBuildingFeatures(untiled, context));
     element.current?.setAttribute('data-footprints', String(tiled.size));
   }, []);
@@ -331,7 +335,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
       id: identifier,
       // Le tuileset ne porte aucune adresse et `03-CARTO.md` écarte le géocodage : l'ID-RNB
       // tient lieu d'étiquette jusqu'à ce que quelqu'un saisisse l'adresse dans la fiche.
-      addressLabel: `Bâtiment ${identifier}`,
+      addressLabel: typeof feature.properties?.label === 'string' ? feature.properties.label : `Bâtiment ${identifier}`,
       location: { latitude, longitude },
       geohash: geohashForLocation([latitude, longitude]),
       zoneId: zone.id,
@@ -415,10 +419,30 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
           placingBuilding.current = false;
           setPlacing(false);
           instance.getCanvas().style.cursor = '';
-          onBuildingLocationSelect?.({ latitude: event.lngLat.lat, longitude: event.lngLat.lng });
-          setMessage('Emplacement choisi. Completez la fiche du batiment.');
+          const zone = footprintContext.current.zone;
+          if (!zone) {
+            setMessage('Choisissez une zone avant de poser un bâtiment.');
+            return;
+          }
+          const location: GeoPoint = { latitude: event.lngLat.lat, longitude: event.lngLat.lng };
+          const building: Building = {
+            id: `local_${crypto.randomUUID()}`,
+            addressLabel: 'Bâtiment posé manuellement',
+            location,
+            geohash: geohashForLocation([location.latitude, location.longitude]),
+            zoneId: zone.id,
+            createdBy: authorId,
+            structureRevision: 0
+          };
+          pendingLocalBuildings.current.set(building.id, building);
+          paintFootprints();
+          setMode('terrain');
+          onBuildingSelect?.(building, { persisted: false, suggestion: null });
+          setMessage('Bâtiment local posé. Décris sa structure pour l’enregistrer.');
           return;
         }
+        const activeZone = footprintContext.current.zone;
+        if (!isInsideZone(activeZone, [event.lngLat.lng, event.lngLat.lat])) return;
         const layers = CLICKABLE_FOOTPRINT_LAYERS.filter((layerId) => instance.getLayer(layerId));
         const hit = instance.queryRenderedFeatures(event.point, { layers })
           // Les emprises hors zone sont inertes : elles partagent la source mais pas l'appui.
@@ -443,7 +467,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
     else instance.once('style.load', initializeAfterStyleLoad);
     instance.on('moveend', () => { void refreshViewport().catch((error) => { if (!(error instanceof Error) || error.name !== 'ReadAbortedError') setMessage(error instanceof Error ? error.message : 'Lecture de carte indisponible.'); }); });
     return () => { viewportRequest.current?.abort(); draw.current?.stop(); draw.current = null; map.current?.remove(); map.current = null; };
-  }, [footprintArchives, onBuildingLocationSelect, openFootprint, paintFootprints, refreshViewport]);
+  }, [authorId, footprintArchives, onBuildingSelect, openFootprint, paintFootprints, refreshViewport]);
 
   /** Couche 7 de `03-CARTO.md` : la position réelle, seul autre usage du safran. */
   useEffect(() => {
@@ -486,6 +510,10 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
 
   const startBuildingPlacement = () => {
     if (!canCreateBuildings) return;
+    if (!footprintContext.current.zone) {
+      setMessage('Choisissez une zone avant de poser un bâtiment.');
+      return;
+    }
     placingBuilding.current = true;
     setPlacing(true);
     const canvas = map.current?.getCanvas();

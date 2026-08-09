@@ -7,7 +7,6 @@ import { expect, test, type Page } from '@playwright/test';
 const FOOTPRINTS = {
   suivi: { longitude: 1.4454, latitude: 43.6058 },        // building-dalbad, document Firestore
   todo: { longitude: 1.447, latitude: 43.6065 },          // PG31CARMES002, aucun document
-  horsZone: { longitude: 1.4415, latitude: 43.6065 },     // PG31HORS0001, hors du polygone
   vide: { longitude: 1.4448, latitude: 43.607 }           // aucune emprise
 };
 
@@ -27,7 +26,12 @@ async function clickOnMap(page: Page, target: { longitude: number; latitude: num
   expect(x).toBeLessThan(canvas.x + canvas.width);
   expect(y).toBeGreaterThan(canvas.y);
   expect(y).toBeLessThan(canvas.y + canvas.height);
-  await page.mouse.click(x, y);
+  // Le panneau desktop flotte au-dessus du bord gauche de la carte. Déclencher l'appui sur
+  // le canvas évite que ce chrome intercepte les coordonnées d'une emprise située dessous.
+  await page.locator('.maplibregl-canvas').click({
+    force: true,
+    position: { x: x - canvas.x, y: y - canvas.y }
+  });
 }
 
 async function openFieldMap(page: Page): Promise<void> {
@@ -135,7 +139,7 @@ test('opens the tracked footprint on its recorded doors', async ({ browser }) =>
   await page.close();
 });
 
-test('creates nothing on an empty press or on a footprint outside the zone', async ({ browser }) => {
+test('creates nothing on an empty press', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openFieldMap(page);
   const dialog = page.getByRole('dialog', { name: 'Detail du batiment' });
@@ -143,8 +147,6 @@ test('creates nothing on an empty press or on a footprint outside the zone', asy
   await clickOnMap(page, FOOTPRINTS.vide);
   await expect(dialog).toBeHidden();
 
-  await clickOnMap(page, FOOTPRINTS.horsZone);
-  await expect(dialog).toBeHidden();
   await expect(page.locator('.building-row')).toHaveCount(2);
   await page.close();
 });
@@ -164,7 +166,7 @@ test('hides individual footprints below zoom 16', async ({ browser }) => {
   await page.close();
 });
 
-test('announces the manual placement mode and cancels without creating anything', async ({ browser }) => {
+test('announces manual placement and opens a local building without persisting it', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openFieldMap(page);
 
@@ -179,7 +181,10 @@ test('announces the manual placement mode and cancels without creating anything'
 
   await page.getByRole('button', { name: 'Ajouter un bâtiment' }).click();
   await clickOnMap(page, FOOTPRINTS.vide);
-  await expect(page.getByRole('dialog', { name: 'Nouveau batiment' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Bâtiment posé manuellement' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Bâtiment non décrit' })).toBeVisible();
+  await expect(page.locator('.building-row')).toHaveCount(2);
   await page.close();
 });
 

@@ -1,8 +1,7 @@
-import { lazy, Suspense, useCallback, useMemo, useState, type ReactElement } from 'react';
-import type { Building, GeoPoint } from '../../../domain/workspace/models';
+import { lazy, Suspense, useCallback, useMemo, type ReactElement } from 'react';
+import type { Building } from '../../../domain/workspace/models';
 import { MemoryOutbox } from '../../../domain/sync/sync-service';
 import { MemoryDoorMarkerOutbox } from '../../../domain/sync/door-marker-outbox';
-import { BuildingCreationSheet } from '../../buildings/components/BuildingCreationSheet';
 import { BuildingVisitSheet } from '../../buildings/components/BuildingVisitSheet';
 import { demoWorkspace } from '../../../infrastructure/demo/demo-workspace';
 import { createMemoryWorkspaceRepositories } from '../../../infrastructure/memory/workspace-repositories';
@@ -21,7 +20,6 @@ export function MapPreview(): ReactElement {
   const outbox = useMemo(() => new MemoryOutbox(), []);
   const markers = useMemo(() => new MemoryDoorMarkerOutbox(), []);
   const opened = useOpenedBuilding(repositories);
-  const [newBuildingLocation, setNewBuildingLocation] = useState<GeoPoint | null>(null);
   const changeBuilding = useCallback((building: Building) => opened.select(building, { persisted: true, suggestion: null }), [opened]);
   return (
     <>
@@ -31,7 +29,6 @@ export function MapPreview(): ReactElement {
           canCreateBuildings
           canEditZones
           footprintArchives={DEMO_ARCHIVES}
-          onBuildingLocationSelect={setNewBuildingLocation}
           onBuildingSelect={opened.select}
           repositories={repositories}
         />
@@ -49,7 +46,6 @@ export function MapPreview(): ReactElement {
         repositories={repositories}
         structureSuggestion={opened.suggestion}
       />
-      <BuildingCreationSheet authorId="member-1" location={newBuildingLocation} onClose={() => setNewBuildingLocation(null)} onCreated={changeBuilding} repositories={repositories} />
     </>
   );
 }
