@@ -356,6 +356,7 @@ h2 { font-size: 22px; }
 .structure-sheet header .eyebrow { color: var(--ink-soft); margin: 0 0 5px; }
 .structure-sheet h3 { color: var(--ink); font: var(--t-19) var(--font-title); }
 .structure-sheet-lead { color: var(--ink-soft); font: var(--t-125) var(--font-ui); line-height: 1.45; margin: 0; }
+.structure-sheet-message { background: var(--sunk); border: 1px solid var(--hairline); border-radius: var(--r-field); padding: 10px 12px; }
 .structure-panel { gap: 12px; padding: 0; }
 .structure-suggestion { background: var(--sunk); border-left: 2px solid var(--brand-lift); color: var(--ink-soft); font: var(--t-115) var(--font-ui); margin: 0; padding: 9px 11px; }
 .structure-fields { display: grid; gap: 12px; grid-template-columns: 1fr; }

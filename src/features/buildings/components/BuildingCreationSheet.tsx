@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { geohashForLocation } from 'geofire-common';
 import type { Building, GeoPoint, Zone } from '../../../domain/workspace/models';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
+import { prepareFirestoreCacheRecovery } from '../../../infrastructure/firebase/client';
+import { firestoreWriteErrorMessage } from '../../../infrastructure/firebase/firestore-errors';
 
 type BuildingCreationSheetProps = {
   location: GeoPoint | null;
@@ -16,6 +18,7 @@ export function BuildingCreationSheet({ location, authorId, repositories, onCrea
   const [zoneId, setZoneId] = useState('');
   const [addressLabel, setAddressLabel] = useState('');
   const [message, setMessage] = useState('');
+  const [pending, setPending] = useState(false);
 
   useEffect(() => {
     if (!location) return;
@@ -47,12 +50,21 @@ export function BuildingCreationSheet({ location, authorId, repositories, onCrea
       createdBy: authorId,
       structureRevision: 0
     };
+    setPending(true);
+    setMessage('Création du bâtiment en cours…');
     try {
       await repositories.buildings.create(building);
       onCreated(building);
       onClose();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Le batiment ne peut pas etre cree.');
+      if (await prepareFirestoreCacheRecovery(error)) {
+        setMessage('Le cache local Firebase était bloqué. Athar le répare et recharge l’application…');
+        window.setTimeout(() => window.location.reload(), 500);
+        return;
+      }
+      setMessage(firestoreWriteErrorMessage(error, 'Le bâtiment ne peut pas être créé. Réessaie, puis vérifie les droits Firebase si le problème continue.'));
+    } finally {
+      setPending(false);
     }
   }
 
@@ -62,7 +74,7 @@ export function BuildingCreationSheet({ location, authorId, repositories, onCrea
       <header><div><p className="eyebrow">Nouveau point</p><h3>Ajouter un batiment</h3></div><button aria-label="Annuler le nouveau batiment" className="icon-action" onClick={onClose} type="button">X</button></header>
       <p className="structure-sheet-lead">Le point est pose sur la carte. Ajoutez ensuite les portes depuis la fiche du batiment.</p>
       <div className="structure-fields"><label>Nom ou adresse<input aria-label="Nom ou adresse du batiment" autoFocus maxLength={160} onChange={(event) => setAddressLabel(event.target.value)} value={addressLabel} /></label><label>Zone<select aria-label="Zone du batiment" onChange={(event) => setZoneId(event.target.value)} value={zoneId}><option value="">Choisir une zone</option>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label></div>
-      <button className="primary-action" onClick={() => void createBuilding()} type="button">Creer le batiment</button>
+      <button className="primary-action" disabled={pending} onClick={() => void createBuilding()} type="button">{pending ? 'Création en cours…' : 'Créer le bâtiment'}</button>
       {message && <p className="workspace-map-message" role="status">{message}</p>}
     </section>
   </div>;

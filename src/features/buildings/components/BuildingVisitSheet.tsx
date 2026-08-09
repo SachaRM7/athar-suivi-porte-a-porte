@@ -13,6 +13,8 @@ import { isTrustedDevice, setTrustedDevice } from '../../../infrastructure/offli
 import { CADASTRAL_SUGGESTION_NOTICE, type CadastralSuggestion } from '../model/cadastral-structure';
 import { buildingStaleness } from '../model/building-staleness';
 import { Stepper } from '../../../design/components';
+import { prepareFirestoreCacheRecovery } from '../../../infrastructure/firebase/client';
+import { firestoreWriteErrorMessage } from '../../../infrastructure/firebase/firestore-errors';
 
 type BuildingVisitSheetProps = {
   authorId: string;
@@ -109,6 +111,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const [confirmDeletion, setConfirmDeletion] = useState<string | null>(null);
   const [confirmFloorDeletion, setConfirmFloorDeletion] = useState<number | null>(null);
   const [ambiguities, setAmbiguities] = useState<readonly StructureAmbiguity[]>([]);
+  const [structureMessage, setStructureMessage] = useState('');
+  const [structurePending, setStructurePending] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!building) return;
@@ -315,7 +319,24 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     }
   }
 
-  async function applyStructure(targets: readonly DoorStructureTarget[]): Promise<void> {
+  function openStructure(mode: 'quick-floor' | 'manage'): void {
+    setStructureMessage('');
+    setStructureMode(mode);
+  }
+
+  function reportStructure(messageText: string): void {
+    setMessage(messageText);
+    setStructureMessage(messageText);
+  }
+
+  async function recoverStructureCache(error: unknown): Promise<boolean> {
+    if (!await prepareFirestoreCacheRecovery(error)) return false;
+    reportStructure('Le cache local Firebase était bloqué. Athar le répare et recharge l’application…');
+    window.setTimeout(() => window.location.reload(), 500);
+    return true;
+  }
+
+  async function applyStructure(targets: readonly DoorStructureTarget[]): Promise<boolean> {
     await ensureBuildingExists?.();
     let previewId = 0;
     const preview = buildBuildingStructureDiff({
@@ -327,14 +348,14 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     });
     if (preview.ambiguities.length > 0) {
       setAmbiguities(preview.ambiguities);
-      setMessage('Des renommages sont ambigus: choisissez la porte historique a conserver.');
-      return;
+      reportStructure('Des renommages sont ambigus : choisis la porte historique à conserver.');
+      return false;
     }
     const affectedDoorIds = new Set([...preview.updated.map((update) => update.doorId), ...preview.archivedDoorIds]);
     const entries = await outbox.all();
     if (entries.some((entry) => affectedDoorIds.has(entry.doorId))) {
-      setMessage('Structure bloquee: synchronisez ou resolvez les passages locaux des portes concernees.');
-      return;
+      reportStructure('Structure bloquée : synchronise ou résous les passages locaux des portes concernées.');
+      return false;
     }
     const diff = await repositories.applyBuildingStructure({
       buildingId: openedBuilding.id,
@@ -345,8 +366,9 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     });
     onBuildingChange(diff.building);
     setAmbiguities([]);
-    setMessage(`Structure enregistree: ${diff.created.length} ajoutee(s), ${diff.updated.length} ajustee(s), ${diff.archivedDoorIds.length} archivee(s).`);
+    reportStructure(`Structure enregistrée : ${diff.created.length} ajoutée(s), ${diff.updated.length} ajustée(s), ${diff.archivedDoorIds.length} archivée(s).`);
     await refresh();
+    return true;
   }
 
   async function removeDoor(door: Door): Promise<void> {
@@ -389,14 +411,21 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     setFloor(floorNumber);
     setQuickDoorCount(String(defaultCount));
     setQuickFirstLabel(String(firstLabel).padStart(numbering === 'floor' ? 2 : 1, '0'));
-    setStructureMode('quick-floor');
+    openStructure('quick-floor');
   }
 
-  async function runStructure(buildTargets: () => readonly DoorStructureTarget[]): Promise<void> {
+  async function runStructure(buildTargets: () => readonly DoorStructureTarget[]): Promise<boolean> {
+    if (structurePending) return false;
+    setStructurePending(true);
+    setStructureMessage('Enregistrement de la structure en cours…');
     try {
-      await applyStructure(buildTargets());
+      return await applyStructure(buildTargets());
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Modification de structure refusee.');
+      if (await recoverStructureCache(error)) return false;
+      reportStructure(firestoreWriteErrorMessage(error, 'La structure ne peut pas être enregistrée. Réessaie, puis vérifie les droits Firebase si le problème continue.'));
+      return false;
+    } finally {
+      setStructurePending(false);
     }
   }
 
@@ -404,7 +433,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     const count = Number(quickDoorCount);
     const first = Number(quickFirstLabel);
     if (!Number.isInteger(count) || count < 1 || count > 50 || !Number.isInteger(first) || first < 0) {
-      setMessage('Indiquez entre 1 et 50 portes et un premier numero valide.');
+      reportStructure('Indique entre 1 et 50 portes et un premier numéro valide.');
       return;
     }
     const existing = structureDoors.filter((door) => door.active).map((door) => ({
@@ -413,18 +442,17 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       sortOrder: door.sortOrder,
       existingDoorId: door.id
     }));
-    const labels = new Set(existing.filter((target) => target.floor === floor).map((target) => normalizeDoorLabel(target.label)));
-    const additions = Array.from({ length: count }, (_, index) => {
-      const label = String(first + index);
-      if (labels.has(normalizeDoorLabel(label))) throw new Error(`La porte ${label} existe deja a cet etage.`);
-      labels.add(normalizeDoorLabel(label));
-      return { floor, label, sortOrder: structureDoors.length + index, newDoorId: `door-${crypto.randomUUID()}` };
-    });
     try {
-      await applyStructure([...existing, ...additions]);
-      setStructureMode(null);
+      const labels = new Set(existing.filter((target) => target.floor === floor).map((target) => normalizeDoorLabel(target.label)));
+      const additions = Array.from({ length: count }, (_, index) => {
+        const label = String(first + index);
+        if (labels.has(normalizeDoorLabel(label))) throw new Error(`La porte ${label} existe déjà à cet étage.`);
+        labels.add(normalizeDoorLabel(label));
+        return { floor, label, sortOrder: structureDoors.length + index, newDoorId: `door-${crypto.randomUUID()}` };
+      });
+      if (await runStructure(() => [...existing, ...additions])) setStructureMode(null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Ajout des portes refuse.');
+      reportStructure(error instanceof Error ? error.message : 'Les portes ne peuvent pas être ajoutées.');
     }
   }
 
@@ -447,7 +475,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
           <h2>{building.addressLabel}</h2>
           <div className="building-meta-row">
             {doors.length > 0 && <p className="building-structure-summary">{floors.length} niveau{floors.length > 1 ? 'x' : ''} · {total.doorCount} portes</p>}
-            {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => { setEditing((current) => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => setStructureMode('manage')} type="button">Structure</button></div>}
+            {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => { setEditing((current) => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => openStructure('manage')} type="button">Structure</button></div>}
           </div>
           {doors.length > 0 && <>
           <div className="building-progress-row">
@@ -458,7 +486,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
           </>}
         </section>
 
-        {doors.length === 0 ? <section className="building-empty-state" aria-label="Bâtiment non décrit"><span aria-hidden="true">⌂</span><h3>Bâtiment non décrit</h3><p>Aucun étage ni porte enregistré. Décris la structure une fois — tout le suivi viendra s'y accrocher.</p>{canEditStructure && <div><button className="primary-action" onClick={() => setStructureMode('manage')} type="button">Décrire le bâtiment</button><button className="text-button" onClick={() => void runStructure(() => [{ floor: 0, label: '01', sortOrder: 0, newDoorId: `door-${crypto.randomUUID()}` }])} type="button">C'est un pavillon — une seule porte</button></div>}</section> : <section className={`building-cut${editing ? ' building-cut--editing' : ''}`} aria-label="Coupe verticale du bâtiment">
+        {doors.length === 0 ? <section className="building-empty-state" aria-label="Bâtiment non décrit"><span aria-hidden="true">⌂</span><h3>Bâtiment non décrit</h3><p>Aucun étage ni porte enregistré. Décris la structure une fois — tout le suivi viendra s'y accrocher.</p>{canEditStructure && <div><button className="primary-action" onClick={() => openStructure('manage')} type="button">Décrire le bâtiment</button><button className="text-button" disabled={structurePending} onClick={() => void runStructure(() => [{ floor: 0, label: '01', sortOrder: 0, newDoorId: `door-${crypto.randomUUID()}` }])} type="button">{structurePending ? 'Enregistrement…' : "C'est un pavillon — une seule porte"}</button></div>}</section> : <section className={`building-cut${editing ? ' building-cut--editing' : ''}`} aria-label="Coupe verticale du bâtiment">
           {editing && <button className="building-add-floor" onClick={() => openFloorCreation(Math.max(...floors.map((item) => item.floor)) + 1)} type="button">+ Ajouter un étage au-dessus</button>}
           {floors.slice().reverse().map((item) => {
             const levelDoors = doors.filter((door) => door.floor === item.floor).sort(compareDoorsForFloor);
@@ -482,7 +510,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
                   {confirmsHistoryDeletion ? <div className="door-delete-confirm" role="alert"><b>Supprimer l’historique ?</b><span><button aria-label={`Confirmer la suppression de la porte ${door.label}`} onClick={() => void removeDoor(door)} type="button">Oui</button><button aria-label={`Annuler la suppression de la porte ${door.label}`} onClick={() => setConfirmDeletion(null)} type="button">Non</button></span></div> : <><button aria-expanded={open} aria-label={`Porte ${door.label}, ${status?.label ?? door.currentStatusId}`} className={`door-row${door.sisters ? ' door-row--sisters' : ''}`} onClick={() => void openDoor(door)} style={{ '--status-color': statusColor, '--status-foreground': statusForeground(statusColor) } as CSSProperties} type="button"><span className="door-row-label">{door.label}</span><span aria-hidden="true" className="door-state-dot" /><span className="door-row-status">{status?.label ?? door.currentStatusId}</span></button>{editing && <button aria-label={`Supprimer la porte ${door.label}`} className="door-delete" onClick={() => void removeDoor(door)} type="button">×</button>}</>}
                 </div>;
               })}
-              {canEditStructure && !editing && <button aria-label={`Ajouter des portes au ${floorLabel(item.floor)}`} className="door-add" onClick={() => { setFloor(item.floor); setQuickFirstLabel(String((Math.max(0, ...levelDoors.map((door) => Number(door.label) || 0))) + 1)); setStructureMode('quick-floor'); }} type="button"><b aria-hidden="true">+</b><span>Ajouter</span></button>}
+              {canEditStructure && !editing && <button aria-label={`Ajouter des portes au ${floorLabel(item.floor)}`} className="door-add" onClick={() => { setFloor(item.floor); setQuickFirstLabel(String((Math.max(0, ...levelDoors.map((door) => Number(door.label) || 0))) + 1)); openStructure('quick-floor'); }} type="button"><b aria-hidden="true">+</b><span>Ajouter</span></button>}
                 </div>
               </div>
             </section>;
@@ -524,7 +552,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
             {structureMode === 'quick-floor' ? <>
               <p className="structure-sheet-lead">Crée les portes de cet étage en une fois. Elles commencent en Pas encore fait.</p>
               <div className="quick-door-fields"><label>Combien<input aria-label="Nombre de portes a ajouter" min="1" max="50" onChange={(event) => setQuickDoorCount(event.target.value)} type="number" value={quickDoorCount} /></label><label>Premier numero<input aria-label="Premier numero de porte" min="0" onChange={(event) => setQuickFirstLabel(event.target.value)} type="number" value={quickFirstLabel} /></label></div>
-              <button className="primary-action" onClick={() => void addDoorsToCurrentFloor()} type="button">Créer {Math.max(1, Number(quickDoorCount) || 1)} porte{Number(quickDoorCount) > 1 ? 's' : ''}</button>
+              <button className="primary-action" disabled={structurePending} onClick={() => void addDoorsToCurrentFloor()} type="button">{structurePending ? 'Enregistrement…' : <>Créer {Math.max(1, Number(quickDoorCount) || 1)} porte{Number(quickDoorCount) > 1 ? 's' : ''}</>}</button>
             </> : <div className="structure-panel">
               <p className="structure-sheet-lead">Décris les niveaux une seule fois. Toutes les portes seront créées en « Pas encore fait ».</p>
               {showsCadastralNotice && <p className="structure-suggestion">{CADASTRAL_SUGGESTION_NOTICE}</p>}
@@ -532,7 +560,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
               <p className="structure-numbering-label">Numérotation</p>
               <div className="numbering-options" aria-label="Numérotation"><button aria-pressed={numbering === 'floor'} onClick={() => setNumbering('floor')} type="button">01, 02 · 11, 12</button><button aria-pressed={numbering === 'hundreds'} onClick={() => setNumbering('hundreds')} type="button">101, 102 · 201</button><button aria-pressed={numbering === 'serial'} onClick={() => setNumbering('serial')} type="button">1 à {structurePreview.flat().length}, en suite</button></div>
               <section className="structure-preview" aria-label="Aperçu vivant"><p className="eyebrow">Aperçu</p>{structurePreview.slice().reverse().map((labels, reverseIndex) => { const floorNumber = structurePreview.length - reverseIndex - 1; return <div key={floorNumber}><strong>{floorLabel(floorNumber)}</strong>{labels.map((label) => <span key={label}>{label}</span>)}</div>; })}<small>Rue · entrée principale</small></section>
-              <button className="primary-action" onClick={() => void runStructure(() => structurePreview.flatMap((labels, floorIndex) => labels.map((label, index) => ({ floor: floorIndex, label, sortOrder: floorIndex * labels.length + index, newDoorId: `door-${crypto.randomUUID()}` }))))} type="button">Créer {structurePreview.flat().length} portes</button>
+              <button className="primary-action" disabled={structurePending} onClick={() => void runStructure(() => structurePreview.flatMap((labels, floorIndex) => labels.map((label, index) => ({ floor: floorIndex, label, sortOrder: floorIndex * labels.length + index, newDoorId: `door-${crypto.randomUUID()}` }))))} type="button">{structurePending ? 'Enregistrement…' : `Créer ${structurePreview.flat().length} portes`}</button>
               <button className="text-button" onClick={() => { if (!showManual) setManualPlan(structureDoors.filter((door) => door.active).map((door) => `${door.floor} | ${door.label} | ${door.id}`).join('\n')); setShowManual((current) => !current); }} type="button">Ajustement manuel</button>
               {showManual && <><label className="manual-plan-label">Plan manuel (etage | porte | ID ou new:ID)<textarea aria-label="Plan manuel de portes" onChange={(event) => setManualPlan(event.target.value)} rows={5} value={manualPlan} /></label><button className="secondary-action" onClick={() => void runStructure(() => parseManualTargets(manualPlan))} type="button">Appliquer le plan manuel</button></>}
               <details className="structure-advanced"><summary>Portes archivées</summary>
@@ -540,6 +568,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
               <div className="archived-doors"><p className="eyebrow">Archivees</p>{structureDoors.filter((door) => !door.active).length === 0 ? <span>Aucune</span> : structureDoors.filter((door) => !door.active).map((door) => <span key={door.id}>{floorLabel(door.floor)} / {door.label} - rev. {door.revision}</span>)}</div>
               </details>
             </div>}
+            {structureMessage && <p className="workspace-map-message structure-sheet-message" role="status">{structureMessage}</p>}
           </section>
         </div>}
       </aside>

@@ -4,6 +4,7 @@ import {
   clearIndexedDbPersistence,
   connectFirestoreEmulator,
   initializeFirestore,
+  memoryLocalCache,
   persistentLocalCache,
   persistentMultipleTabManager,
   terminate,
@@ -11,10 +12,21 @@ import {
 } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, type Functions } from 'firebase/functions';
 import { environment } from '../../app/config/environment';
+import { isRecoverableFirestoreCacheError } from './firestore-errors';
 
 export type FirebaseClient = { app: FirebaseApp; auth: Auth; firestore: Firestore; functions: Functions };
 
 let client: FirebaseClient | null = null;
+const MEMORY_CACHE_RECOVERY_FLAG = 'athar:firestore-memory-cache';
+
+function memoryCacheRecoveryRequested(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.sessionStorage.getItem(MEMORY_CACHE_RECOVERY_FLAG) === 'true';
+  } catch {
+    return false;
+  }
+}
 
 export function getFirebaseClient(): FirebaseClient {
   if (client) return client;
@@ -24,7 +36,9 @@ export function getFirebaseClient(): FirebaseClient {
   const firestore = initializeFirestore(app, {
     // WP2: Firestore remains the source of truth while its IndexedDB cache keeps
     // a prepared zone usable in a stairwell or a basement without connectivity.
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    localCache: memoryCacheRecoveryRequested()
+      ? memoryLocalCache()
+      : persistentLocalCache({ tabManager: persistentMultipleTabManager() })
   });
   const functions = getFunctions(app);
   if (environment.firebase.useEmulators) {
@@ -47,4 +61,22 @@ export async function clearFirebaseLocalCache(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Un stockage IndexedDB saturé ou interrompu peut empoisonner l'instance Firestore.
+ * La session recharge alors Firestore en mémoire après avoir tenté de vider le cache ;
+ * les données métier restent sur le serveur et les passages en attente gardent leur outbox dédiée.
+ */
+export async function prepareFirestoreCacheRecovery(error: unknown): Promise<boolean> {
+  if (!isRecoverableFirestoreCacheError(error)) return false;
+  if (typeof window !== 'undefined') {
+    try {
+      window.sessionStorage.setItem(MEMORY_CACHE_RECOVERY_FLAG, 'true');
+    } catch {
+      // Le repli mémoire reste impossible à mémoriser, mais le nettoyage vaut la peine d'être tenté.
+    }
+  }
+  await clearFirebaseLocalCache();
+  return true;
 }
