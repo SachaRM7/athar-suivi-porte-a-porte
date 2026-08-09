@@ -12,6 +12,7 @@ const WORKSPACE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAIN_WORKSPACE_ID = 'main';
 const TECHNICAL_EMAIL_DOMAIN = '@auth.athar.invalid';
 const REGISTERED_MEMBER_FIELDS = ['active', 'createdAt', 'displayName', 'role', 'uid', 'username', 'workspaceId'];
+const PRODUCTION_EXPORTS_ONLY = process.env.ATHAR_FUNCTIONS_MODE === 'production';
 
 function normalizeUsername(value) {
   if (typeof value !== 'string') {
@@ -126,7 +127,7 @@ exports.createMember = onCall(async (request) => {
   return { uid: user.uid, username };
 });
 
-exports.registerMember = onCall(async (request) => {
+const registerMember = onCall(async (request) => {
   if (!request.auth?.uid || !request.auth.token.email) {
     throw new HttpsError('unauthenticated', 'Authentication is required.');
   }
@@ -166,7 +167,7 @@ exports.registerMember = onCall(async (request) => {
   return { uid: request.auth.uid, username, workspaceId: MAIN_WORKSPACE_ID };
 });
 
-exports.claimInitialAdmin = onCall(async (request) => {
+const claimInitialAdmin = onCall(async (request) => {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
   assertExactFields(request.data, ['code']);
   const codeHash = suppliedCodeHash(request.data.code);
@@ -211,6 +212,16 @@ exports.claimInitialAdmin = onCall(async (request) => {
   }
   return { role: 'admin', workspaceId: MAIN_WORKSPACE_ID };
 });
+
+/*
+ * L'inscription ouverte et l'amorcage administrateur restent disponibles pour la
+ * recette locale. En production, les acces sont crees par l'administrateur via
+ * `createMember`; exporter ces callables ouvrirait le workspace a toute inscription.
+ */
+if (!PRODUCTION_EXPORTS_ONLY) {
+  exports.registerMember = registerMember;
+  exports.claimInitialAdmin = claimInitialAdmin;
+}
 
 const ATHAR_STATUS_PRIORITY = Object.freeze({ linked: 5, open: 4, away: 3, locked: 2, dnd: 1, todo: 0 });
 
@@ -260,7 +271,7 @@ async function recomputeAtharBuilding(buildingId) {
   }, { merge: true });
 }
 
-exports.deriveAtharPassage = onDocumentCreated('buildings/{buildingId}/doors/{doorId}/passages/{passageId}', async (event) => {
+const deriveAtharPassage = onDocumentCreated('buildings/{buildingId}/doors/{doorId}/passages/{passageId}', async (event) => {
   const passage = event.data?.data();
   if (!passage || !isFirestoreTimestamp(passage.at)) return;
   const db = getFirestore();
@@ -279,9 +290,16 @@ exports.deriveAtharPassage = onDocumentCreated('buildings/{buildingId}/doors/{do
   await recomputeAtharBuilding(event.params.buildingId);
 });
 
-exports.deriveAtharSistersMarker = onDocumentWritten('buildings/{buildingId}/doors/{doorId}', async (event) => {
+const deriveAtharSistersMarker = onDocumentWritten('buildings/{buildingId}/doors/{doorId}', async (event) => {
   const before = event.data?.before;
   const after = event.data?.after;
   if (before?.exists && after?.exists && before.data().aConfierAuxSoeurs === after.data().aConfierAuxSoeurs) return;
   await recomputeAtharBuilding(event.params.buildingId);
 });
+
+// Ces derives appartiennent encore au schema racine historique. Le produit actif
+// ecrit sous workspaces/main ; elles ne sont donc chargees que par la recette locale.
+if (!PRODUCTION_EXPORTS_ONLY) {
+  exports.deriveAtharPassage = deriveAtharPassage;
+  exports.deriveAtharSistersMarker = deriveAtharSistersMarker;
+}

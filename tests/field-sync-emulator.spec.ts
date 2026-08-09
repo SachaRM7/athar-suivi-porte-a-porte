@@ -33,7 +33,7 @@ async function waitForOfflineShell(page: import('@playwright/test').Page): Promi
 async function outboxEntries(page: import('@playwright/test').Page, authorId: string) {
   return page.evaluate(async (uid) => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('athar-prototype-outbox', 1);
+      const request = indexedDB.open('athar-prototype-outbox');
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve(request.result);
     });
@@ -135,7 +135,7 @@ test('an untrusted sign-out purges the UID outbox and prior persistent Firestore
     await page.evaluate(async () => {
       localStorage.setItem('athar.trusted-device', 'false');
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open('athar-prototype-outbox', 1);
+        const request = indexedDB.open('athar-prototype-outbox');
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve(request.result);
       });
@@ -166,7 +166,7 @@ test('an untrusted sign-out purges the UID outbox and prior persistent Firestore
 
     await expect.poll(async () => page.evaluate(async () => {
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open('athar-prototype-outbox', 1);
+        const request = indexedDB.open('athar-prototype-outbox');
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve(request.result);
       });

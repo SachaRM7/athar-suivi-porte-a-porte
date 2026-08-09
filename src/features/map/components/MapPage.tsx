@@ -80,7 +80,7 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
         structureSuggestion={opened.suggestion}
         sync={sync}
       />
-      {settingsOpen && <InitialAdminSettings member={member} onActivate={initialAdmin} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <InitialAdminSettings allowInitialAdminActivation={environment.firebase?.useEmulators === true} member={member} onActivate={initialAdmin} onClose={() => setSettingsOpen(false)} />}
     </main>
   );
 }

@@ -20,6 +20,7 @@ assert.deepEqual(validatePilotManifest(example), {
 const productionExports = execFileSync(process.execPath, ['-e', "console.log(Object.keys(require('./functions')).sort().join(','))"], {
   cwd: process.cwd(),
   encoding: 'utf8',
+  env: { ...process.env, ATHAR_FUNCTIONS_MODE: 'production' },
 }).trim();
 assert.equal(productionExports, 'createMember');
 const functionsSource = await readFile(new URL('../../functions/index.js', import.meta.url), 'utf8');

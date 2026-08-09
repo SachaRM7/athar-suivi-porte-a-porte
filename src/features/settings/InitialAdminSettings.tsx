@@ -2,17 +2,18 @@ import { useState, type ReactElement } from 'react';
 import type { WorkspaceMember } from '../../domain/workspace/models';
 
 type InitialAdminSettingsProps = {
+  allowInitialAdminActivation: boolean;
   member: WorkspaceMember;
   onClose(): void;
   onActivate(code: string): Promise<void>;
 };
 
-export function InitialAdminSettings({ member, onClose, onActivate }: InitialAdminSettingsProps): ReactElement {
+export function InitialAdminSettings({ allowInitialAdminActivation, member, onClose, onActivate }: InitialAdminSettingsProps): ReactElement {
   const [taps, setTaps] = useState(0);
   const [message, setMessage] = useState('');
   const [activating, setActivating] = useState(false);
   const [code, setCode] = useState('');
-  const revealed = taps >= 10;
+  const revealed = allowInitialAdminActivation && taps >= 10;
 
   async function activate(): Promise<void> {
     setActivating(true);

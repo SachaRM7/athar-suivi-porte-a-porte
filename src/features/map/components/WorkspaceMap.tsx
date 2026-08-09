@@ -1,5 +1,5 @@
 import { Map as MapLibreMap, NavigationControl, addProtocol, type GeoJSONFeature, type GeoJSONSource, type Map as MapInstance } from 'maplibre-gl';
-import { PMTiles, Protocol, type Source } from 'pmtiles';
+import { PMTiles, Protocol } from 'pmtiles';
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode, type GeoJSONStoreFeatures } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { geohashForLocation } from 'geofire-common';
@@ -43,30 +43,13 @@ import {
 } from '../../buildings/model/building-staleness';
 import { cadastralSuggestion, type CadastralSuggestion } from '../../buildings/model/cadastral-structure';
 import type { SelectBuildingOptions } from '../model/use-opened-building';
+import { LocalPmtilesSource } from '../infrastructure/local-pmtiles-source';
 import { TraceBar, type TraceEntry } from '../../../design/components';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './terrain-shell.css';
 
-class LocalPackageSource implements Source {
-  private readonly archive: Promise<ArrayBuffer>;
-
-  constructor(url: string) {
-    this.archive = fetch(url).then((response) => {
-      if (!response.ok) throw new Error(`Offline PMTiles package unavailable: ${response.status}`);
-      return response.arrayBuffer();
-    });
-  }
-
-  getKey(): string { return 'athar-toulouse-local'; }
-
-  async getBytes(offset: number, length: number): Promise<{ data: ArrayBuffer }> {
-    const archive = await this.archive;
-    return { data: archive.slice(offset, offset + length) };
-  }
-}
-
 const protocol = new Protocol();
-const archive = new PMTiles(new LocalPackageSource(withBasePath('/fixtures/toulouse.pmtiles')));
+const archive = new PMTiles(new LocalPmtilesSource(withBasePath('/fixtures/toulouse.pmtiles'), 'athar-toulouse-local'));
 protocol.add(archive);
 addProtocol('pmtiles', protocol.tile);
 // Glyphs are bundled locally so street labels remain available after PWA preparation.
@@ -355,7 +338,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, canCreateBu
     });
     map.current = instance;
     element.current.dataset.basemap = 'local-pmtiles';
-    instance.on('error', (event) => console.error('Workspace map error', event.error));
+    instance.on('error', (event) => console.error('Workspace map error', event.error?.message ?? event.error));
     const initializeWorkspaceLayers = async () => {
       if (instance.getSource(ZONE_SOURCE)) return;
       {

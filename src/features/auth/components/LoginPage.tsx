@@ -7,6 +7,7 @@ import { AccessState } from './AccessState';
 
 export function LoginPage(): ReactElement {
   const { state, signIn, registerMember, finalizeMemberRegistration } = useAuth();
+  const allowLocalOnboarding = environment.firebase?.useEmulators === true;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
@@ -15,6 +16,7 @@ export function LoginPage(): ReactElement {
   if (state.status === 'unconfigured') return <AccessState title="Configuration requise" message="La configuration Firebase de cet environnement est absente. Renseignez les variables VITE_FIREBASE_* avant d'ouvrir une session." />;
   if (state.status === 'loading') return <AccessState title="Verification en cours" message="Athar verifie la session et l'acces au workspace." />;
   if (state.status === 'inactive') return <AccessState canSignOut title="Acces suspendu" message="Ce compte existe, mais son acces au workspace est inactif." />;
+  if (state.status === 'unregistered' && !allowLocalOnboarding) return <AccessState canSignOut title="Acces non active" message="Ce compte n'a pas de profil membre. Demandez a un administrateur de creer ou reactiver l'acces." />;
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -104,7 +106,9 @@ export function LoginPage(): ReactElement {
           </label>
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="primary-action" disabled={pending} type="submit">{pending ? (registering ? 'Creation...' : 'Connexion...') : (registering ? 'Creer mon compte' : 'Se connecter')}</button>
-          <button className="text-button" onClick={() => { setRegistering((value) => !value); setError(null); }} type="button">{registering ? 'J ai deja un compte' : 'Creer un compte'}</button>
+          {allowLocalOnboarding
+            ? <button className="text-button" onClick={() => { setRegistering((value) => !value); setError(null); }} type="button">{registering ? 'J ai deja un compte' : 'Creer un compte'}</button>
+            : <p className="auth-help">Les acces sont crees par un administrateur.</p>}
         </form>}
       </section>
     </main>

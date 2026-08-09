@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'athar-shell-v10';
+const SHELL_CACHE = 'athar-shell-v11';
 const BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 const withBasePath = (path) => `${BASE_PATH}${path}` || '/';
 
@@ -23,6 +23,10 @@ const SHELL_ASSETS = [
   withBasePath('/assets/app.js'),
   withBasePath('/assets/app.css'),
   withBasePath('/manifest.webmanifest'),
+  withBasePath('/icons/athar-mark.svg'),
+  withBasePath('/icons/athar-180.png'),
+  withBasePath('/icons/athar-192.png'),
+  withBasePath('/icons/athar-512.png'),
   ...UI_FONTS
 ];
 

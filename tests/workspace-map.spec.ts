@@ -204,6 +204,7 @@ test('keeps the map full-frame and moves the mobile controls with the bottom she
   expect(panelBefore?.height).toBeCloseTo(306, 0);
 
   await page.getByRole('button', { name: 'Agrandir le panneau' }).click();
+  await expect.poll(async () => (await page.getByLabel('Batiments visibles').boundingBox())?.height).toBeCloseTo(620, 0);
   const panelAfter = await page.getByLabel('Batiments visibles').boundingBox();
   const fabAfter = await page.getByRole('button', { name: 'Cadrer sur les emprises' }).boundingBox();
   expect(panelAfter?.height).toBeCloseTo(620, 0);
