@@ -17,6 +17,10 @@ import {
   type DoorStructureTarget
 } from '../../domain/workspace/building-structure';
 import { fromFirestoreBuilding, fromFirestoreDoor } from './workspace-codecs';
+import {
+  applyBuildingStructureWithRest,
+  type FirestoreRestStructureAuth
+} from './firestore-rest-building-structure';
 
 export class StructureRevisionConflictError extends Error {
   constructor() {
@@ -51,11 +55,18 @@ export class FirestoreBuildingStructureGateway {
   constructor(
     private readonly db: Firestore,
     private readonly workspaceId: string,
-    private readonly currentUserId: () => string | null
+    private readonly currentUserId: () => string | null,
+    private readonly restAuth?: FirestoreRestStructureAuth
   ) {}
 
   async apply(input: ApplyFirestoreBuildingStructureInput): Promise<BuildingStructureDiff> {
     if (this.currentUserId() !== input.authorId) throw new Error('The authenticated user does not own this structure change.');
+    // La toute première structure est le parcours critique sur le terrain. Le commit REST
+    // authentifié contourne l'état local du SDK Firestore qui peut rester bloqué après une
+    // erreur IndexedDB, tout en passant par les mêmes règles de sécurité côté serveur.
+    if (input.expectedStructureRevision === 0 && this.restAuth) {
+      return applyBuildingStructureWithRest(this.restAuth, { ...input, workspaceId: this.workspaceId });
+    }
     const workspace = `workspaces/${this.workspaceId}`;
     const buildingRef = doc(this.db, `${workspace}/buildings/${input.buildingId}`);
     const buildingSnapshot = await getDocFromServer(buildingRef);

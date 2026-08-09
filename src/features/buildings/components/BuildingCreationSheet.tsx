@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { geohashForLocation } from 'geofire-common';
 import type { Building, GeoPoint, Zone } from '../../../domain/workspace/models';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
-import { prepareFirestoreCacheRecovery } from '../../../infrastructure/firebase/client';
 import { firestoreWriteErrorMessage } from '../../../infrastructure/firebase/firestore-errors';
 
 type BuildingCreationSheetProps = {
@@ -57,11 +56,6 @@ export function BuildingCreationSheet({ location, authorId, repositories, onCrea
       onCreated(building);
       onClose();
     } catch (error) {
-      if (await prepareFirestoreCacheRecovery(error)) {
-        setMessage('Le cache local Firebase était bloqué. Athar le répare et recharge l’application…');
-        window.setTimeout(() => window.location.reload(), 500);
-        return;
-      }
       setMessage(firestoreWriteErrorMessage(error, 'Le bâtiment ne peut pas être créé. Réessaie, puis vérifie les droits Firebase si le problème continue.'));
     } finally {
       setPending(false);

@@ -38,7 +38,11 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
       structureWriter: new FirestoreBuildingStructureGateway(
         client.firestore,
         environment.workspaceId,
-        () => client.auth.currentUser?.uid ?? null
+        () => client.auth.currentUser?.uid ?? null,
+        {
+          projectId: client.app.options.projectId ?? '',
+          getIdToken: async () => client.auth.currentUser?.getIdToken() ?? null
+        }
       ),
       zoneWriter: new FirestoreZoneGateway(
         client.firestore,

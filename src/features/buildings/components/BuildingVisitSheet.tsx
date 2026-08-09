@@ -13,7 +13,6 @@ import { isTrustedDevice, setTrustedDevice } from '../../../infrastructure/offli
 import { CADASTRAL_SUGGESTION_NOTICE, type CadastralSuggestion } from '../model/cadastral-structure';
 import { buildingStaleness } from '../model/building-staleness';
 import { Stepper } from '../../../design/components';
-import { prepareFirestoreCacheRecovery } from '../../../infrastructure/firebase/client';
 import { firestoreWriteErrorMessage } from '../../../infrastructure/firebase/firestore-errors';
 
 type BuildingVisitSheetProps = {
@@ -329,13 +328,6 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     setStructureMessage(messageText);
   }
 
-  async function recoverStructureCache(error: unknown): Promise<boolean> {
-    if (!await prepareFirestoreCacheRecovery(error)) return false;
-    reportStructure('Le cache local Firebase était bloqué. Athar le répare et recharge l’application…');
-    window.setTimeout(() => window.location.reload(), 500);
-    return true;
-  }
-
   async function applyStructure(targets: readonly DoorStructureTarget[]): Promise<boolean> {
     await ensureBuildingExists?.();
     let previewId = 0;
@@ -421,7 +413,6 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     try {
       return await applyStructure(buildTargets());
     } catch (error) {
-      if (await recoverStructureCache(error)) return false;
       reportStructure(firestoreWriteErrorMessage(error, 'La structure ne peut pas être enregistrée. Réessaie, puis vérifie les droits Firebase si le problème continue.'));
       return false;
     } finally {
