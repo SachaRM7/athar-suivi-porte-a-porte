@@ -4,6 +4,7 @@ import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestE
 import { doc, GeoPoint, getDoc, setDoc, Timestamp, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { generateUniformDoorTargets } from '../../src/domain/workspace/building-structure';
+import { FirestoreBuildingGateway } from '../../src/infrastructure/firestore/firestore-building-gateway';
 import { FirestoreBuildingStructureGateway, StructureRevisionConflictError } from '../../src/infrastructure/firestore/firestore-building-structure-gateway';
 
 const projectId = 'athar-structure';
@@ -60,6 +61,34 @@ afterAll(async () => {
 });
 
 describe('building structure against emulator rules', () => {
+  it('materializes a detected building and creates its twelve initial doors', async () => {
+    await seed();
+    const db = testEnv.authenticatedContext('member-a').firestore();
+    const buildingGateway = new FirestoreBuildingGateway(db, 'main', () => 'member-a');
+    const structureGateway = new FirestoreBuildingStructureGateway(db, 'main', () => 'member-a');
+
+    await buildingGateway.create({
+      id: 'building-detected',
+      addressLabel: 'Bâtiment détecté',
+      location: { latitude: 43.61, longitude: 1.44 },
+      geohash: 'spc00',
+      zoneId: 'zone-a',
+      createdBy: 'member-a',
+      structureRevision: 0
+    });
+    let nextId = 0;
+    const diff = await structureGateway.apply({
+      buildingId: 'building-detected',
+      expectedStructureRevision: 0,
+      targets: generateUniformDoorTargets({ floorCount: 3, doorsPerFloor: 4, firstLabel: 101 }),
+      authorId: 'member-a',
+      createDoorId: () => `door-detected-${nextId++}`
+    });
+
+    expect(diff.created).toHaveLength(12);
+    expect((await getDoc(doc(db, `${workspace}/buildings/building-detected`))).data()).toMatchObject({ structureRevision: 1 });
+  });
+
   it('extends ten treated doors to twelve without resetting the original ten', async () => {
     await seed();
     const db = testEnv.authenticatedContext('admin-a').firestore();

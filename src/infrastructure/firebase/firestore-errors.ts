@@ -20,6 +20,7 @@ export function isRecoverableFirestoreCacheError(error: unknown): boolean {
   const code = errorCode(error);
   const message = errorMessage(error);
   return code === 'internal' || code === 'firestore/internal' ||
+    /^internal error\.?$/i.test(message.trim()) ||
     /internal assertion failed|indexeddb|idb-set|quotaexceedederror/i.test(message);
 }
 

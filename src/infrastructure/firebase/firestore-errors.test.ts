@@ -4,6 +4,7 @@ import { firestoreWriteErrorMessage, isRecoverableFirestoreCacheError } from './
 describe('Firestore write errors', () => {
   it('recognizes internal Firestore and IndexedDB cache failures', () => {
     expect(isRecoverableFirestoreCacheError({ code: 'firestore/internal' })).toBe(true);
+    expect(isRecoverableFirestoreCacheError(new Error('Internal error.'))).toBe(true);
     expect(isRecoverableFirestoreCacheError(new Error('Error thrown when writing to IndexedDB (idb-set)'))).toBe(true);
     expect(isRecoverableFirestoreCacheError(new Error('QuotaExceededError'))).toBe(true);
   });

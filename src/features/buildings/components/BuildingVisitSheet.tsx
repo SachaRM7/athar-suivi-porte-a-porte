@@ -568,7 +568,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
               <div className="archived-doors"><p className="eyebrow">Archivees</p>{structureDoors.filter((door) => !door.active).length === 0 ? <span>Aucune</span> : structureDoors.filter((door) => !door.active).map((door) => <span key={door.id}>{floorLabel(door.floor)} / {door.label} - rev. {door.revision}</span>)}</div>
               </details>
             </div>}
-            {structureMessage && <p className="workspace-map-message structure-sheet-message" role="status">{structureMessage}</p>}
+            {structureMessage && <p className="structure-sheet-message" role="status">{structureMessage}</p>}
           </section>
         </div>}
       </aside>
