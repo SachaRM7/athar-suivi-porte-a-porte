@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "athar-local"
+    "default": "athar-dev31",
+    "local": "athar-local"
   }
 }
