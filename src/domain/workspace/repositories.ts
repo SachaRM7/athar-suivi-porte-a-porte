@@ -23,6 +23,12 @@ export interface ZoneRepository {
 export interface BuildingRepository {
   get(id: string): Promise<Building | null>;
   create(building: Building): Promise<void>;
+  /**
+   * Dématérialise un bâtiment : le document disparaît et l'emprise redevient une simple
+   * forme grise du fond de carte (principe 7). Refusé tant qu'une porte subsiste, même
+   * archivée, pour ne jamais orpheliner un passage.
+   */
+  delete(buildingId: string): Promise<void>;
   listByZone(zoneId: string): Promise<readonly Building[]>;
   listByViewport(viewport: Viewport, request?: Pick<ReadRequest, 'signal'>): Promise<readonly Building[]>;
   listPageByZone(zoneId: string, request?: ReadRequest): Promise<ReadPage<Building>>;

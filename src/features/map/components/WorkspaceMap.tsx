@@ -95,6 +95,8 @@ type WorkspaceMapProps = {
   /** Archives PMTiles essayées dans l'ordre ; la première disponible fournit les emprises. */
   footprintArchives?: readonly string[];
   onBuildingSelect?: (building: Building, options: SelectBuildingOptions) => void;
+  /** Incrémenté quand un document disparaît ailleurs : la carte relit son cadrage. */
+  reloadToken?: number;
   /** Absent hors session : la maquette et le laboratoire affichent la carte sans compte. */
   account?: { displayName: string; onOpenSettings(): void; onSignOut(): void };
 };
@@ -173,7 +175,7 @@ function geometryFromFeature(feature: GeoJSONStoreFeatures): ZoneGeometry | null
   return closePolygon(coordinates.map(([longitude, latitude]) => [longitude, latitude] as [number, number]));
 }
 
-export function WorkspaceMap({ repositories, authorId, canEditZones, initialZoneId = null, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect, account }: WorkspaceMapProps): ReactElement {
+export function WorkspaceMap({ repositories, authorId, canEditZones, initialZoneId = null, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect, reloadToken = 0, account }: WorkspaceMapProps): ReactElement {
   const element = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const map = useRef<MapInstance | null>(null);
@@ -195,6 +197,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const [mode, setMode] = useState<'terrain' | 'edition'>('terrain');
   const [panelHeight, setPanelHeight] = useState<'peek' | 'full'>('peek');
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(initialZoneId);
+  const [zoneMenuOpen, setZoneMenuOpen] = useState(false);
+  const zonePicker = useRef<HTMLDivElement>(null);
   const [visibleBuildingCount, setVisibleBuildingCount] = useState(0);
   const [attachedBuildingCount, setAttachedBuildingCount] = useState<number | null>(null);
   const [editing, setEditing] = useState<'drawing' | 'editing' | null>(null);
@@ -226,6 +230,35 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   };
 
   useEffect(() => { selectedZoneRef.current = selectedZoneId; }, [selectedZoneId]);
+
+  useEffect(() => {
+    if (!zoneMenuOpen) return undefined;
+    const dismiss = (event: MouseEvent): void => {
+      if (zonePicker.current && !zonePicker.current.contains(event.target as Node)) setZoneMenuOpen(false);
+    };
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setZoneMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [zoneMenuOpen]);
+
+  /**
+   * Téléportation vers une zone. Consultation pure : cadrer une zone ne l'assigne à
+   * personne et n'écrit rien. Chaque membre peut donc regarder n'importe quel secteur.
+   */
+  const flyToZone = (zone: Zone): void => {
+    setZoneMenuOpen(false);
+    selectZone(zone.id);
+    map.current?.fitBounds(
+      [[zone.bbox.west, zone.bbox.south], [zone.bbox.east, zone.bbox.north]],
+      { padding: 64, duration: motionDuration(700) }
+    );
+  };
 
   /**
    * Alimente `feature-state` depuis Firestore. Une emprise sans document reste grise :
@@ -309,6 +342,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     setSelectedZoneId((current) => current ?? nextZones[0]?.id ?? null);
     paintFootprints();
   }, [paintFootprints, repositories]);
+
+  // Un bâtiment retiré depuis sa fiche doit quitter la liste sans attendre un déplacement de carte.
+  useEffect(() => { void refreshViewport().catch(() => undefined); }, [reloadToken, refreshViewport]);
 
   /**
    * Un appui sur une emprise ouvre la vue bâtiment, jamais un formulaire de création :
@@ -646,20 +682,40 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           <span className="terrain-wordmark-la">Athar</span>
         </div>
 
-        <button className="terrain-zonechip" onClick={() => setPanelHeight('full')} type="button">
-          <span className="terrain-zone-ring" style={{ '--terrain-progress': `${coveragePercent}` } as CSSProperties}>
-            <svg viewBox="0 0 36 36" aria-hidden="true">
-              <circle className="terrain-zone-ring-track" cx="18" cy="18" r="15" />
-              <circle className="terrain-zone-ring-value" cx="18" cy="18" r="15" pathLength="100" />
-            </svg>
-            <b>{coveragePercent}</b>
-          </span>
-          <span className="terrain-zone-copy">
-            <strong>{zoneName}</strong>
-            <span>{visibleBuildingCount} bât. · {coveredBuildingCount} faits</span>
-          </span>
-          <span className="terrain-zone-caret" aria-hidden="true">⌄</span>
-        </button>
+        <div className="terrain-zone-picker" ref={zonePicker}>
+          <button aria-expanded={zoneMenuOpen} aria-haspopup="menu" className="terrain-zonechip" onClick={() => setZoneMenuOpen((value) => !value)} type="button">
+            <span className="terrain-zone-ring" style={{ '--terrain-progress': `${coveragePercent}` } as CSSProperties}>
+              <svg viewBox="0 0 36 36" aria-hidden="true">
+                <circle className="terrain-zone-ring-track" cx="18" cy="18" r="15" />
+                <circle className="terrain-zone-ring-value" cx="18" cy="18" r="15" pathLength="100" />
+              </svg>
+              <b>{coveragePercent}</b>
+            </span>
+            <span className="terrain-zone-copy">
+              <strong>{zoneName}</strong>
+              <span>{visibleBuildingCount} bât. · {coveredBuildingCount} faits</span>
+            </span>
+            <span className="terrain-zone-caret" aria-hidden="true">⌄</span>
+          </button>
+          {zoneMenuOpen && (
+            <div aria-label="Choisir une zone" className="terrain-zone-menu" role="menu">
+              {zoneList.length === 0
+                ? <p className="terrain-zone-menu-empty">Aucune zone tracée pour l’instant. Passe en mode Édition pour en dessiner une.</p>
+                : zoneList.map((zone) => (
+                  <button
+                    aria-current={zone.id === selectedZoneId}
+                    key={zone.id}
+                    onClick={() => flyToZone(zone)}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <i aria-hidden="true" style={{ background: zone.color }} />
+                    <span>{zone.name}</span>
+                  </button>
+                ))}
+            </div>
+          )}
+        </div>
 
         <div className="terrain-topbar-spacer" />
 

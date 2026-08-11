@@ -26,6 +26,8 @@ export function MapPage(): ReactElement {
 
 function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignOut(): Promise<void> }): ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** Bougé à chaque écriture faite depuis la fiche : la carte relit alors son cadrage. */
+  const [dataVersion, setDataVersion] = useState(0);
   const initialZoneId = useMemo(() => new URLSearchParams(window.location.search).get('zone'), []);
   const outbox = useMemo(() => new IndexedDbOutbox(member.id), [member.id]);
   const markers = useMemo(() => new IndexedDbDoorMarkerOutbox(member.id), [member.id]);
@@ -65,7 +67,12 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
   const sync = useFieldVisitSync(member.id, outbox, markers, repositories);
   const opened = useOpenedBuilding(repositories);
   // La structure vient d'être écrite : la suggestion cadastrale n'a plus rien à proposer.
-  const changeBuilding = useCallback((building: Building) => opened.select(building, { persisted: true, suggestion: null }), [opened]);
+  // La structure vient de changer : la liste et le compteur de la carte doivent suivre,
+  // sinon ils gardent « 4 portes » sur un bâtiment qu'on vient de vider.
+  const changeBuilding = useCallback((building: Building) => {
+    opened.select(building, { persisted: true, suggestion: null });
+    setDataVersion((version) => version + 1);
+  }, [opened]);
   const account = useMemo(
     () => ({ displayName: member.displayName, onOpenSettings: () => setSettingsOpen(true), onSignOut: () => void onSignOut() }),
     [member.displayName, onSignOut]
@@ -84,6 +91,7 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
           canEditZones={member.role === 'admin'}
           initialZoneId={initialZoneId}
           onBuildingSelect={opened.select}
+          reloadToken={dataVersion}
           repositories={repositories}
         />
       </Suspense>
@@ -95,6 +103,7 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
         ensureBuildingExists={opened.ensureExists}
         markers={markers}
         onBuildingChange={changeBuilding}
+        onBuildingDelete={() => setDataVersion((version) => version + 1)}
         onClose={opened.close}
         outbox={outbox}
         repositories={repositories}

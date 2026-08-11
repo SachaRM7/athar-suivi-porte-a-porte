@@ -37,6 +37,8 @@ type BuildingVisitSheetProps = {
    */
   ensureBuildingExists?(): Promise<void>;
   onBuildingChange(building: Building): void;
+  /** Le bâtiment n'a plus de document : la carte et la liste doivent le laisser retomber en gris. */
+  onBuildingDelete?(building: Building): void;
   onClose(): void;
 };
 
@@ -76,7 +78,7 @@ function manualTargetLine(target: DoorStructureTarget): string {
   return `${target.floor} | ${target.label} | ${identity}`;
 }
 
-export function BuildingVisitSheet({ authorId, building, canEditStructure, canDeleteVisitedDoors, outbox, markers, repositories, structureSuggestion = null, sync, ensureBuildingExists, onBuildingChange, onClose }: BuildingVisitSheetProps): ReactElement | null {
+export function BuildingVisitSheet({ authorId, building, canEditStructure, canDeleteVisitedDoors, outbox, markers, repositories, structureSuggestion = null, sync, ensureBuildingExists, onBuildingChange, onBuildingDelete, onClose }: BuildingVisitSheetProps): ReactElement | null {
   const [doors, setDoors] = useState<readonly Door[]>([]);
   const [structureDoors, setStructureDoors] = useState<readonly Door[]>([]);
   const [statuses, setStatuses] = useState<readonly Status[]>([]);
@@ -414,9 +416,10 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   }
 
   /**
-   * Remet le bâtiment vierge : toutes les portes actives sont archivées d'un plan vide.
-   * Les passages ne sont pas touchés — ils restent dans l'historique, `passages` est
-   * append-only. Geste réservé au coordinateur, comme la suppression d'une porte visitée.
+   * Deux gestes derrière une seule corbeille, dans l'ordre où on les veut sur le terrain :
+   * tant qu'il reste des portes, on vide la structure (les passages restent, `passages` est
+   * append-only) ; une fois le bâtiment vierge, on retire son document Firestore et l'emprise
+   * redevient une forme grise du fond de carte (principe 7). Réservé au coordinateur.
    */
   async function resetStructure(): Promise<void> {
     if (!canDeleteVisitedDoors) {
@@ -428,6 +431,19 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       return;
     }
     setConfirmStructureReset(false);
+    if (doors.length === 0) {
+      setStructurePending(true);
+      try {
+        await repositories.buildings.delete(openedBuilding.id);
+        onBuildingDelete?.(openedBuilding);
+        onClose();
+      } catch (error) {
+        setMessage(firestoreWriteErrorMessage(error, 'Le bâtiment ne peut pas être retiré. Réessaie, puis vérifie les droits Firebase si le problème continue.'));
+      } finally {
+        setStructurePending(false);
+      }
+      return;
+    }
     if (await runStructure(() => [])) {
       setEditing(false);
       setConfirmDeletion(null);
@@ -507,12 +523,14 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
           <h2>{building.addressLabel}</h2>
           <div className="building-meta-row">
             {doors.length > 0 && <p className="building-structure-summary">{floors.length} niveau{floors.length > 1 ? 'x' : ''} · {total.doorCount} portes</p>}
-            {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => { setEditing((current) => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => openStructure('manage')} type="button">Structure</button>{canDeleteVisitedDoors && doors.length > 0 && <button aria-label="Supprimer la structure du bâtiment" className="structure-reset" disabled={structurePending} onClick={() => void resetStructure()} title="Supprimer la structure" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>}</div>}
+            {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => { setEditing((current) => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => openStructure('manage')} type="button">Structure</button>{canDeleteVisitedDoors && <button aria-label={doors.length > 0 ? 'Supprimer la structure du bâtiment' : 'Retirer le bâtiment'} className="structure-reset" disabled={structurePending} onClick={() => void resetStructure()} title={doors.length > 0 ? 'Supprimer la structure' : 'Retirer le bâtiment'} type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>}</div>}
           </div>
           {confirmStructureReset && <div className="structure-reset-confirm" role="alert">
-            <b>Supprimer la structure et repartir vierge ?</b>
-            <span>Les {total.doorCount} portes sont retirées du bâtiment. Les passages déjà enregistrés restent dans l’historique.</span>
-            <span className="structure-reset-actions"><button onClick={() => void resetStructure()} type="button">Oui, tout retirer</button><button onClick={() => setConfirmStructureReset(false)} type="button">Non</button></span>
+            <b>{doors.length > 0 ? 'Supprimer la structure et repartir vierge ?' : 'Retirer ce bâtiment du suivi ?'}</b>
+            <span>{doors.length > 0
+              ? `Les ${total.doorCount} portes sont retirées du bâtiment. Les passages déjà enregistrés restent dans l’historique.`
+              : 'Son enregistrement disparaît et son emprise redevient « Pas encore fait » sur la carte. Le fond de carte n’est pas modifié.'}</span>
+            <span className="structure-reset-actions"><button onClick={() => void resetStructure()} type="button">{doors.length > 0 ? 'Oui, tout retirer' : 'Oui, retirer'}</button><button onClick={() => setConfirmStructureReset(false)} type="button">Non</button></span>
           </div>}
           {doors.length > 0 && <>
           <div className="building-progress-row">

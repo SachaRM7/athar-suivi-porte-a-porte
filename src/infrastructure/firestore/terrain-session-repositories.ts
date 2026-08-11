@@ -17,6 +17,7 @@ export type ZoneWriter = {
 
 export type BuildingWriter = {
   create(building: Building): Promise<void>;
+  delete(buildingId: string): Promise<void>;
 };
 
 export class TerrainDataUnavailableError extends Error {
@@ -151,6 +152,10 @@ export function createTerrainSessionRepositories(input: {
       async create(building) {
         await input.buildingWriter.create(building);
         cacheBuildings([building]);
+      },
+      async delete(buildingId) {
+        await input.buildingWriter.delete(buildingId);
+        buildings.delete(buildingId);
       },
       async listByZone(zoneId) {
         return cacheBuildings(await collectPages((request) => input.remote.buildings.listPageByZone(zoneId, request)));

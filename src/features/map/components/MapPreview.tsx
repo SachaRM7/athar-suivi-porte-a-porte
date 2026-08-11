@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useMemo, type ReactElement } from 'react';
+import { lazy, Suspense, useCallback, useMemo, useState, type ReactElement } from 'react';
 import type { Building } from '../../../domain/workspace/models';
 import { MemoryOutbox } from '../../../domain/sync/sync-service';
 import { MemoryDoorMarkerOutbox } from '../../../domain/sync/door-marker-outbox';
@@ -16,11 +16,15 @@ const WorkspaceMap = lazy(async () => ({ default: (await import('./WorkspaceMap'
 const DEMO_ARCHIVES = ['/fixtures/batiments-carmes.pmtiles'] as const;
 
 export function MapPreview(): ReactElement {
+  const [dataVersion, setDataVersion] = useState(0);
   const repositories = useMemo(() => createMemoryWorkspaceRepositories(demoWorkspace), []);
   const outbox = useMemo(() => new MemoryOutbox(), []);
   const markers = useMemo(() => new MemoryDoorMarkerOutbox(), []);
   const opened = useOpenedBuilding(repositories);
-  const changeBuilding = useCallback((building: Building) => opened.select(building, { persisted: true, suggestion: null }), [opened]);
+  const changeBuilding = useCallback((building: Building) => {
+    opened.select(building, { persisted: true, suggestion: null });
+    setDataVersion((version) => version + 1);
+  }, [opened]);
   return (
     <>
       <Suspense fallback={<div className="workspace-map-loading" aria-label="Chargement de la carte" />}>
@@ -30,6 +34,7 @@ export function MapPreview(): ReactElement {
           canEditZones
           footprintArchives={DEMO_ARCHIVES}
           onBuildingSelect={opened.select}
+          reloadToken={dataVersion}
           repositories={repositories}
         />
       </Suspense>
@@ -41,6 +46,7 @@ export function MapPreview(): ReactElement {
         ensureBuildingExists={opened.ensureExists}
         markers={markers}
         onBuildingChange={changeBuilding}
+        onBuildingDelete={() => setDataVersion((version) => version + 1)}
         onClose={opened.close}
         outbox={outbox}
         repositories={repositories}

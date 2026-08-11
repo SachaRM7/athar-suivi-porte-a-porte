@@ -400,6 +400,36 @@ test('lets the coordinator empty a building structure in two deliberate gestures
   await reset.click();
   await page.getByRole('button', { name: 'Oui, tout retirer' }).click();
   await expect(page.getByRole('heading', { name: 'Bâtiment non décrit' })).toBeVisible();
-  await expect(reset).toBeHidden();
+
+  // Le bâtiment est vierge : la corbeille propose maintenant de le retirer, et ce second
+  // geste est refusé tant que des portes archivées portent des passages.
+  await page.getByRole('button', { name: 'Retirer le bâtiment' }).click();
+  await page.getByRole('button', { name: 'Oui, retirer' }).click();
+  await expect(page.getByText('Retire d’abord les portes de ce bâtiment')).toBeVisible();
+  await page.close();
+});
+
+test('opens any zone from the chip and flies the camera to it', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await openFieldMap(page);
+
+  const chip = page.locator('.terrain-zonechip');
+  await expect(chip).toHaveAttribute('aria-expanded', 'false');
+  await chip.click();
+  const menu = page.getByRole('menu', { name: 'Choisir une zone' });
+  await expect(menu).toBeVisible();
+
+  const zone = menu.getByRole('menuitem').first();
+  const zoneName = (await zone.textContent())?.trim() ?? '';
+  expect(zoneName.length).toBeGreaterThan(0);
+
+  const before = await page.getByLabel('Carte MapLibre des zones').getAttribute('data-viewport');
+  await zone.click();
+  await expect(menu).toBeHidden();
+  await expect(chip).toContainText(zoneName);
+  // La caméra s'est déplacée : le cadrage publié par la carte n'est plus le même.
+  await expect
+    .poll(async () => page.getByLabel('Carte MapLibre des zones').getAttribute('data-viewport'), { timeout: 10_000 })
+    .not.toBe(before);
   await page.close();
 });

@@ -61,6 +61,12 @@ export function createMemoryWorkspaceRepositories(snapshot: WorkspaceSnapshot): 
         if (!zones.has(building.zoneId)) throw new Error('The building zone does not exist.');
         buildings.set(building.id, copy(building));
       },
+      async delete(buildingId) {
+        if ([...doors.values()].some((door) => door.buildingId === buildingId)) {
+          throw new Error('Retire d’abord les portes de ce bâtiment : leurs passages ne peuvent pas rester sans bâtiment.');
+        }
+        buildings.delete(buildingId);
+      },
       async listByZone(zoneId) { return [...buildings.values()].filter((building) => building.zoneId === zoneId).map(copy); },
       async listPageByZone(zoneId, request) { return pageById([...buildings.values()].filter((building) => building.zoneId === zoneId), `buildings:zone:${zoneId}`, request); },
       async listByViewport(viewport, request) {

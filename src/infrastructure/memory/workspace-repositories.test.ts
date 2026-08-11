@@ -21,6 +21,27 @@ describe('memory workspace repositories', () => {
     await expect(repositories.doors.get('door-dalbad-01')).resolves.toMatchObject({ label: '01' });
   });
 
+  it('refuses to dematerialize a building while a door still holds history', async () => {
+    const repositories = createMemoryWorkspaceRepositories(demoWorkspace);
+    await expect(repositories.buildings.delete('building-dalbad')).rejects.toThrow('Retire d’abord les portes');
+    await expect(repositories.buildings.get('building-dalbad')).resolves.not.toBeNull();
+  });
+
+  it('dematerializes a building that carries no door at all', async () => {
+    const repositories = createMemoryWorkspaceRepositories(demoWorkspace);
+    await repositories.buildings.create({
+      id: 'building-vierge',
+      addressLabel: '3 rue sans porte, Toulouse',
+      location: { latitude: 43.606, longitude: 1.446 },
+      geohash: 'sp2j0',
+      zoneId: 'carmes',
+      createdBy: 'admin-1',
+      structureRevision: 0
+    });
+    await repositories.buildings.delete('building-vierge');
+    await expect(repositories.buildings.get('building-vierge')).resolves.toBeNull();
+  });
+
   it('applies a structure diff without changing an existing passage revision', async () => {
     const repositories = createMemoryWorkspaceRepositories(demoWorkspace);
     const before = await repositories.doors.get('door-dalbad-01');

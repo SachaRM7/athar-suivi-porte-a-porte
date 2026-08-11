@@ -1,4 +1,4 @@
-import { GeoPoint, doc, runTransaction, serverTimestamp, type Firestore } from 'firebase/firestore';
+import { GeoPoint, collection, deleteDoc, doc, getDocs, limit, query, runTransaction, serverTimestamp, type Firestore } from 'firebase/firestore';
 import type { Building, Status } from '../../domain/workspace/models';
 
 const DEFAULT_STATUSES: readonly Status[] = [
@@ -50,5 +50,16 @@ export class FirestoreBuildingGateway {
         updatedAt: serverTimestamp()
       });
     });
+  }
+
+  /**
+   * Le refus porte sur toute porte encore présente, active ou archivée : ses passages
+   * sont immuables et ne doivent jamais se retrouver sans bâtiment parent.
+   */
+  async delete(buildingId: string): Promise<void> {
+    const workspace = `workspaces/${this.workspaceId}`;
+    const doors = await getDocs(query(collection(this.db, `${workspace}/buildings/${buildingId}/doors`), limit(1)));
+    if (!doors.empty) throw new Error('Retire d’abord les portes de ce bâtiment : leurs passages ne peuvent pas rester sans bâtiment.');
+    await deleteDoc(doc(this.db, `${workspace}/buildings/${buildingId}`));
   }
 }
