@@ -1,7 +1,7 @@
 # Publie Athar sur Firebase Hosting à chaque poussée sur `main`.
 #
-# Le workflow ne s'exécute que si le secret FIREBASE_SERVICE_ACCOUNT existe : sans lui,
-# l'étape de déploiement est ignorée et rien n'est publié par erreur.
+# Lint et tests unitaires passent avant la publication : une mise en ligne ne part
+# jamais sur du rouge.
 #
 # Secrets attendus dans Paramètres → Secrets and variables → Actions :
 #   FIREBASE_SERVICE_ACCOUNT_ATHAR_DEV31   clé JSON posée par `firebase init hosting:github`
@@ -44,8 +44,7 @@ jobs:
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
-      - if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ATHAR_DEV31 != '' }}
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ATHAR_DEV31 }}
