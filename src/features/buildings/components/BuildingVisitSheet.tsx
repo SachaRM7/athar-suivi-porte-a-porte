@@ -109,6 +109,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const [editing, setEditing] = useState(false);
   const [confirmDeletion, setConfirmDeletion] = useState<string | null>(null);
   const [confirmFloorDeletion, setConfirmFloorDeletion] = useState<number | null>(null);
+  const [confirmStructureReset, setConfirmStructureReset] = useState(false);
   const [ambiguities, setAmbiguities] = useState<readonly StructureAmbiguity[]>([]);
   const [structureMessage, setStructureMessage] = useState('');
   const [structurePending, setStructurePending] = useState(false);
@@ -116,6 +117,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const refresh = useCallback(async () => {
     if (!building) return;
     setStructureLoadedBuildingId(null);
+    setConfirmStructureReset(false);
     const [nextDoors, allStructureDoors, nextStatuses, entries] = await Promise.all([
       repositories.doors.listByBuilding(building.id),
       canEditStructure ? repositories.doors.listStructureByBuilding(building.id) : Promise.resolve([]),
@@ -411,6 +413,29 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     setConfirmFloorDeletion(null);
   }
 
+  /**
+   * Remet le bâtiment vierge : toutes les portes actives sont archivées d'un plan vide.
+   * Les passages ne sont pas touchés — ils restent dans l'historique, `passages` est
+   * append-only. Geste réservé au coordinateur, comme la suppression d'une porte visitée.
+   */
+  async function resetStructure(): Promise<void> {
+    if (!canDeleteVisitedDoors) {
+      setMessage('Seul le coordinateur peut supprimer la structure d’un bâtiment.');
+      return;
+    }
+    if (!confirmStructureReset) {
+      setConfirmStructureReset(true);
+      return;
+    }
+    setConfirmStructureReset(false);
+    if (await runStructure(() => [])) {
+      setEditing(false);
+      setConfirmDeletion(null);
+      setConfirmFloorDeletion(null);
+      reportStructure('Structure supprimée : le bâtiment repart vierge. Les passages déjà enregistrés restent dans l’historique.');
+    }
+  }
+
   function openFloorCreation(floorNumber: number): void {
     const defaultCount = Math.max(1, Number(doorsPerFloor) || 1);
     const firstLabel = numbering === 'hundreds' ? (floorNumber + 1) * 100 + 1
@@ -482,8 +507,13 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
           <h2>{building.addressLabel}</h2>
           <div className="building-meta-row">
             {doors.length > 0 && <p className="building-structure-summary">{floors.length} niveau{floors.length > 1 ? 'x' : ''} · {total.doorCount} portes</p>}
-            {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => { setEditing((current) => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => openStructure('manage')} type="button">Structure</button></div>}
+            {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => { setEditing((current) => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => openStructure('manage')} type="button">Structure</button>{canDeleteVisitedDoors && doors.length > 0 && <button aria-label="Supprimer la structure du bâtiment" className="structure-reset" disabled={structurePending} onClick={() => void resetStructure()} title="Supprimer la structure" type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>}</div>}
           </div>
+          {confirmStructureReset && <div className="structure-reset-confirm" role="alert">
+            <b>Supprimer la structure et repartir vierge ?</b>
+            <span>Les {total.doorCount} portes sont retirées du bâtiment. Les passages déjà enregistrés restent dans l’historique.</span>
+            <span className="structure-reset-actions"><button onClick={() => void resetStructure()} type="button">Oui, tout retirer</button><button onClick={() => setConfirmStructureReset(false)} type="button">Non</button></span>
+          </div>}
           {doors.length > 0 && <>
           <div className="building-progress-row">
             <span aria-hidden="true" className="building-progress-track"><i style={{ width: `${total.ratio * 100}%` }} /></span>

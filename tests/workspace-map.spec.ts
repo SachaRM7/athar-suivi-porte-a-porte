@@ -380,3 +380,26 @@ test('updates the structure preview live and protects a visited door from one-cl
   await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeVisible();
   await page.close();
 });
+
+test('lets the coordinator empty a building structure in two deliberate gestures', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await openFieldMap(page);
+  await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
+
+  const reset = page.getByRole('button', { name: 'Supprimer la structure du bâtiment' });
+  await expect(reset).toBeVisible();
+
+  // Premier appui : rien n'est écrit, la coupe reste intacte tant que l'avertissement n'est pas confirmé.
+  await reset.click();
+  await expect(page.getByText('Supprimer la structure et repartir vierge ?')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeVisible();
+  await page.getByRole('button', { name: 'Non' }).click();
+  await expect(page.getByText('Supprimer la structure et repartir vierge ?')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeVisible();
+
+  await reset.click();
+  await page.getByRole('button', { name: 'Oui, tout retirer' }).click();
+  await expect(page.getByRole('heading', { name: 'Bâtiment non décrit' })).toBeVisible();
+  await expect(reset).toBeHidden();
+  await page.close();
+});
