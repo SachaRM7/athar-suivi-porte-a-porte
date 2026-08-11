@@ -378,7 +378,13 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     setSession(terrainSession(scopedDoors));
   }, [repositories]);
 
-  useEffect(() => { void refreshZone(selectedZoneId).catch(() => undefined); }, [refreshZone, reloadToken, selectedZoneId]);
+  /**
+   * Tant que les zones ne sont pas chargées, il n'y a rien à lire : `?zone=` posait un
+   * identifiant dès le montage, la lecture partait à vide et ne repassait jamais puisque
+   * l'identifiant, lui, ne changeait plus. On attend donc que la zone existe vraiment.
+   */
+  const loadedZoneId = zoneList.some((zone) => zone.id === selectedZoneId) ? selectedZoneId : null;
+  useEffect(() => { void refreshZone(loadedZoneId).catch(() => undefined); }, [refreshZone, reloadToken, loadedZoneId]);
 
   /**
    * Un appui sur une emprise ouvre la vue bâtiment, jamais un formulaire de création :
@@ -811,7 +817,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
               <div className="building-list-filters" role="group" aria-label="Filtrer les bâtiments">
                 {BUILDING_LIST_FILTERS.map((filter) => (
                   <button aria-pressed={listFilter === filter.id} className="building-list-filter" key={filter.id} onClick={() => setListFilter(filter.id)} type="button">
-                    {filter.label}<b>{filter.id === 'all' ? visibleBuildingCount : filter.id === 'todo' ? todoCount : staleCount}</b>
+                    {filter.label}<b>{filter.id === 'all' ? zoneBuildingCount : filter.id === 'todo' ? todoCount : staleCount}</b>
                   </button>
                 ))}
               </div>

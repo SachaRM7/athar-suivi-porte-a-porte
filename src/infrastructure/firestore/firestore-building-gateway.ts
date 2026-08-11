@@ -1,4 +1,4 @@
-import { GeoPoint, collection, deleteDoc, doc, getDocs, limit, query, runTransaction, serverTimestamp, type Firestore } from 'firebase/firestore';
+import { GeoPoint, collection, deleteDoc, doc, getDocs, limit, query, runTransaction, serverTimestamp, where, type Firestore } from 'firebase/firestore';
 import type { Building, Status } from '../../domain/workspace/models';
 
 const DEFAULT_STATUSES: readonly Status[] = [
@@ -55,10 +55,18 @@ export class FirestoreBuildingGateway {
   /**
    * Le refus porte sur toute porte encore présente, active ou archivée : ses passages
    * sont immuables et ne doivent jamais se retrouver sans bâtiment parent.
+   *
+   * Les portes vivent dans la collection plate `doors` du workspace, pas sous le
+   * bâtiment : interroger une sous-collection inexistante sortait du périmètre des
+   * règles et faisait échouer la suppression sur un refus de lecture.
    */
   async delete(buildingId: string): Promise<void> {
     const workspace = `workspaces/${this.workspaceId}`;
-    const doors = await getDocs(query(collection(this.db, `${workspace}/buildings/${buildingId}/doors`), limit(1)));
+    const doors = await getDocs(query(
+      collection(this.db, `${workspace}/doors`),
+      where('buildingId', '==', buildingId),
+      limit(1)
+    ));
     if (!doors.empty) throw new Error('Retire d’abord les portes de ce bâtiment : leurs passages ne peuvent pas rester sans bâtiment.');
     await deleteDoc(doc(this.db, `${workspace}/buildings/${buildingId}`));
   }
