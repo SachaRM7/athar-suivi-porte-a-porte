@@ -45,7 +45,8 @@ import { cadastralSuggestion, type CadastralSuggestion } from '../../buildings/m
 import { AccountMenu } from './AccountMenu';
 import type { SelectBuildingOptions } from '../model/use-opened-building';
 import { LocalPmtilesSource } from '../infrastructure/local-pmtiles-source';
-import { TraceBar, type TraceEntry } from '../../../design/components';
+import { TraceBar } from '../../../design/components';
+import { terrainSession, type TerrainSession } from '../model/terrain-session';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './terrain-shell.css';
 
@@ -55,12 +56,6 @@ protocol.add(archive);
 addProtocol('pmtiles', protocol.tile);
 // Glyphs are bundled locally so street labels remain available after PWA preparation.
 const DEFAULT_ZONE_COLOR = '#16835F';
-
-const TERRAIN_TRACE: readonly TraceEntry[] = [
-  'open', 'open', 'away', 'linked', 'open', 'open', 'locked',
-  'pause',
-  'open', 'away', 'open', 'dnd', 'open', 'linked',
-];
 
 /**
  * Tuileset d'emprises du lot WP6. Il pèse 72 Mo et vit hors de Git ; l'échantillon versionné
@@ -190,7 +185,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   /** Suggestions cadastrales lues sur les tuiles, indexées par ID-RNB. Jamais appliquées seules. */
   const footprintSuggestions = useRef(new Map<string, CadastralSuggestion>());
   const [zoneList, setZoneList] = useState<readonly Zone[]>([]);
-  const [visibleBuildings, setVisibleBuildings] = useState<readonly BuildingListEntry[]>([]);
+  /** Tous les bâtiments de la zone choisie, cadrage ou pas : la liste sert à naviguer. */
+  const [zoneBuildings, setZoneBuildings] = useState<readonly BuildingListEntry[]>([]);
+  const [session, setSession] = useState<TerrainSession>({ trace: [], markedCount: 0, durationLabel: null });
   const [listFilter, setListFilter] = useState<BuildingListFilter>('all');
   const [listSort, setListSort] = useState<BuildingListSort>('staleness');
   const [searchQuery, setSearchQuery] = useState('');
@@ -215,7 +212,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const selectedZone = zoneList.find((zone) => zone.id === selectedZoneId) ?? null;
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase('fr-FR');
   const listedBuildings = sortBuildingList(
-    visibleBuildings.filter((entry) => (
+    zoneBuildings.filter((entry) => (
       matchesBuildingListFilter(entry, listFilter)
       && (normalizedSearch.length === 0 || entry.building.addressLabel.toLocaleLowerCase('fr-FR').includes(normalizedSearch))
     )),
@@ -251,6 +248,20 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
    * Téléportation vers une zone. Consultation pure : cadrer une zone ne l'assigne à
    * personne et n'écrit rien. Chaque membre peut donc regarder n'importe quel secteur.
    */
+  /**
+   * La liste couvre toute la zone : un bâtiment choisi peut être hors du cadrage. On amène
+   * donc la carte sur lui, à un zoom où les emprises sont dessinées.
+   */
+  const flyToBuilding = (building: Building): void => {
+    const instance = map.current;
+    if (!instance) return;
+    instance.easeTo({
+      center: [building.location.longitude, building.location.latitude],
+      zoom: Math.max(instance.getZoom(), FOOTPRINT_MIN_ZOOM + 0.4),
+      duration: motionDuration(600)
+    });
+  };
+
   const flyToZone = (zone: Zone): void => {
     setZoneMenuOpen(false);
     selectZone(zone.id);
@@ -338,13 +349,36 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     };
     (instance.getSource(ZONE_SOURCE) as GeoJSONSource | undefined)?.setData(zoneFeatures(nextZones, new Map(stats)));
     setVisibleBuildingCount(buildings.length);
-    setVisibleBuildings(buildingListEntries(buildings, grouped));
     setSelectedZoneId((current) => current ?? nextZones[0]?.id ?? null);
     paintFootprints();
   }, [paintFootprints, repositories]);
 
   // Un bâtiment retiré depuis sa fiche doit quitter la liste sans attendre un déplacement de carte.
   useEffect(() => { void refreshViewport().catch(() => undefined); }, [reloadToken, refreshViewport]);
+
+  /**
+   * La liste ne suit pas le cadrage mais la zone : on doit pouvoir parcourir tous ses
+   * bâtiments et sauter de l'un à l'autre, y compris hors de l'écran. Les portes sont
+   * lues en une seule requête sur l'emprise de la zone, pas une par bâtiment.
+   */
+  const refreshZone = useCallback(async (zoneId: string | null) => {
+    const zone = zones.current.find((candidate) => candidate.id === zoneId) ?? null;
+    if (!zone) {
+      setZoneBuildings([]);
+      setSession({ trace: [], markedCount: 0, durationLabel: null });
+      return;
+    }
+    const [buildings, doors] = await Promise.all([
+      repositories.buildings.listByZone(zone.id),
+      repositories.doors.listByViewport(zone.bbox)
+    ]);
+    const zoneBuildingIds = new Set(buildings.map((building) => building.id));
+    const scopedDoors = doors.filter((door) => zoneBuildingIds.has(door.buildingId));
+    setZoneBuildings(buildingListEntries(buildings, groupDoorsByBuilding(scopedDoors)));
+    setSession(terrainSession(scopedDoors));
+  }, [repositories]);
+
+  useEffect(() => { void refreshZone(selectedZoneId).catch(() => undefined); }, [refreshZone, reloadToken, selectedZoneId]);
 
   /**
    * Un appui sur une emprise ouvre la vue bâtiment, jamais un formulaire de création :
@@ -655,10 +689,13 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     }
   };
 
-  const coveredBuildingCount = visibleBuildings.filter((entry) => entry.treatedCount > 0).length;
-  const coveragePercent = visibleBuildingCount === 0 ? 0 : Math.round((coveredBuildingCount / visibleBuildingCount) * 100);
-  const todoCount = visibleBuildings.filter((entry) => entry.staleness.days === null).length;
-  const staleCount = visibleBuildings.filter((entry) => entry.staleness.alert).length;
+  // Tout ce qui se compte ici se compte sur la zone entière, pas sur le rectangle à l'écran :
+  // c'est le secteur qu'on parcourt, pas le cadrage du moment, qui dit où on en est.
+  const zoneBuildingCount = zoneBuildings.length;
+  const coveredBuildingCount = zoneBuildings.filter((entry) => entry.treatedCount > 0).length;
+  const coveragePercent = zoneBuildingCount === 0 ? 0 : Math.round((coveredBuildingCount / zoneBuildingCount) * 100);
+  const todoCount = zoneBuildings.filter((entry) => entry.staleness.days === null).length;
+  const staleCount = zoneBuildings.filter((entry) => entry.staleness.alert).length;
   const zoneName = selectedZone?.name ?? 'Zone à choisir';
 
   return (
@@ -693,7 +730,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
             </span>
             <span className="terrain-zone-copy">
               <strong>{zoneName}</strong>
-              <span>{visibleBuildingCount} bât. · {coveredBuildingCount} faits</span>
+              <span>{zoneBuildingCount} bât. · {coveredBuildingCount} faits</span>
             </span>
             <span className="terrain-zone-caret" aria-hidden="true">⌄</span>
           </button>
@@ -757,9 +794,11 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           <div className="terrain-panel-head">
             <div className="terrain-session-line">
               <span className="ds-microlabel">Sortie du jour</span>
-              <span>14 marqués · 1 h 05</span>
+              <span>{session.markedCount === 0
+                ? 'aucune porte marquée'
+                : `${session.markedCount} marqué${session.markedCount > 1 ? 's' : ''}${session.durationLabel ? ` · ${session.durationLabel}` : ''}`}</span>
             </div>
-            <TraceBar entries={TERRAIN_TRACE} />
+            <TraceBar entries={session.trace} />
             <label className="terrain-search">
               <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></svg>
               <span className="terrain-sr-only">Chercher une adresse</span>
@@ -784,11 +823,11 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
               </label>
             </div>
             {listedBuildings.length === 0
-              ? <p className="building-list-empty">{listFilter === 'stale' ? 'Aucun bâtiment vu il y a plus de trois mois. Tout est à jour ici.' : 'Aucun bâtiment décrit dans ce cadrage. Touche une emprise pour commencer.'}</p>
+              ? <p className="building-list-empty">{listFilter === 'stale' ? 'Aucun bâtiment vu il y a plus de trois mois. Tout est à jour ici.' : 'Aucun bâtiment décrit dans cette zone. Touche une emprise pour commencer.'}</p>
               : <ul className="building-list-rows">
                 {listedBuildings.map((entry) => (
                   <li key={entry.building.id}>
-                    <button className="building-row" onClick={() => onBuildingSelect(entry.building, { persisted: true, suggestion: footprintSuggestions.current.get(entry.building.id) ?? null })} type="button">
+                    <button className="building-row" onClick={() => { flyToBuilding(entry.building); onBuildingSelect(entry.building, { persisted: true, suggestion: footprintSuggestions.current.get(entry.building.id) ?? null }); }} type="button">
                       <span className={`terrain-building-pin terrain-building-pin--${entry.treatedCount === 0 ? 'todo' : entry.staleness.alert ? 'away' : 'open'}`} />
                       <span className="terrain-building-copy">
                         <span className="building-row-address">{entry.building.addressLabel}</span>
@@ -800,7 +839,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
                 ))}
               </ul>}
             <span className="terrain-visible-count">
-              {visibleBuildingCount} batiment(s) visibles
+              {zoneBuildingCount} batiment(s) dans la zone · {visibleBuildingCount} a l ecran
               {attachedBuildingCount !== null && <> · {attachedBuildingCount} rattache(s)</>}
             </span>
           </div>
