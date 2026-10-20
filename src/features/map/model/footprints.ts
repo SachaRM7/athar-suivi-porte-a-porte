@@ -1,6 +1,7 @@
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { point, polygon } from '@turf/helpers';
 import type { Building, Door, Status, Zone, ZoneStats } from '../../../domain/workspace/models';
+import { hasRecordedVisit } from '../../../domain/workspace/status-ids';
 import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
 import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
 
@@ -22,7 +23,7 @@ function dominanceRank(statusId: string): number {
 
 /** Statut dominant d'un bâtiment, ou `null` quand aucune porte n'a de passage. */
 export function dominantStatusId(doors: readonly Door[]): string | null {
-  const visited = doors.filter((door) => door.lastVisitId !== null);
+  const visited = doors.filter(hasRecordedVisit);
   if (visited.length === 0) return null;
   return visited.reduce((best, door) => (dominanceRank(door.currentStatusId) < dominanceRank(best) ? door.currentStatusId : best), visited[0]!.currentStatusId);
 }

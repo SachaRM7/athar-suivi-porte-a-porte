@@ -111,9 +111,9 @@ describe('building list', () => {
     expect(entryFor('b-never').staleness).toMatchObject({ label: 'jamais vu', alert: false });
   });
 
-  it('keeps « Pas vu > 3 mois » apart from « Pas encore fait »', () => {
+  it('includes a partly visited building when it still has first visits to do', () => {
     expect(entries.filter((entry) => matchesBuildingListFilter(entry, 'stale')).map((entry) => entry.building.id)).toEqual(['b-stale']);
-    expect(entries.filter((entry) => matchesBuildingListFilter(entry, 'todo')).map((entry) => entry.building.id)).toEqual(['b-never']);
+    expect(entries.filter((entry) => matchesBuildingListFilter(entry, 'todo')).map((entry) => entry.building.id)).toEqual(['b-fresh', 'b-never']);
     expect(entries.filter((entry) => matchesBuildingListFilter(entry, 'all'))).toHaveLength(3);
   });
 
@@ -167,5 +167,21 @@ describe('sortie du cycle de suivi (lot A2)', () => {
   it('keeps ordinary statuses working: absent and blocked doors stay in the cycle', () => {
     const ordinary = buildingFollowUp([withStatus('a', 'b', 'retry', 100), withStatus('b', 'b', 'locked', 100), withStatus('c', 'b', 'contacted', 100)], now);
     expect(ordinary).toMatchObject({ revisitDoorCount: 3, excludedDoorCount: 0, suggestedForRevisit: true });
+  });
+});
+
+
+describe('lot B follow-up evidence', () => {
+  it('keeps an old eligible door visible even when another door was visited today', () => {
+    const entries = buildingListEntries([building('b', 'Adresse')], new Map([['b', [visited('old', 'b', 128), visited('today', 'b', 0)]]]), now);
+    expect(entries[0].followUp.suggestedForRevisit).toBe(true);
+    expect(entries[0].staleness.label).toBe("aujourd'hui");
+  });
+  it('does not call an undated referenced visit never visited or suggest a dated revisit', () => {
+    const d = visited('d', 'b', 120); d.lastVisitAt = null;
+    const entry = buildingListEntries([building('b', 'Adresse')], new Map([['b', [d]]]), now)[0];
+    expect(entry.staleness.label).toBe('date inconnue');
+    expect(entry.followUp.suggestedForRevisit).toBe(false);
+    expect(matchesBuildingListFilter(entry, 'todo')).toBe(false);
   });
 });

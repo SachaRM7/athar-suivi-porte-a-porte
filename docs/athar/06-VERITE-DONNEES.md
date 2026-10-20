@@ -2,8 +2,11 @@
 
 Base : `main` après intégration du lot A, `a6bfc67` (PR #1).
 Cette spécification complète l'audit initial de `cbbeead` ; elle décrit le schéma actif.
-Le premier sous-lot B1 est implémenté sur `lot-b-verite-donnees`. Les sous-lots suivants
-restent à réaliser. Aucun déploiement, inventaire cloud ou migration n'est effectué ici.
+Le code du lot B est implémenté sur `lot-b-verite-donnees` : lectures communes, catalogue,
+diagnostic, reconstruction serveur et rafraîchissement des consommateurs. Les commandes
+opérationnelles sont livrées et testées sur émulateurs. Aucun déploiement, inventaire cloud,
+import de catalogue réel ou migration de données historiques n'est effectué dans ce lot.
+La suppression des données et outils historiques dépend de l'inventaire réel et reste interdite.
 
 ## Contrat canonique
 
@@ -53,7 +56,7 @@ complétude. `coverageState` est une déclaration de coordination, pas un résul
   pourcentage. Un ensemble non vide sans passage donne un vrai 0 %. Les pourcentages
   entiers sont tronqués : 999/1000 donne 99 %, jamais 100 % avant complétude.
 
-Le producteur futur doit prouver la cohérence de `lastVisitId`, de la révision, du statut
+Le producteur `functions/stats-core.js` vérifie la cohérence de `lastVisitId`, de la révision, du statut
 et du passage référencé. Il ne doit pas déduire un passage de `currentStatusId != unvisited`
 seul, ni choisir une correction à partir de la seule date saisie sur un appareil.
 
@@ -86,13 +89,13 @@ zéro distincts ; 3/6 portes donne 50 % même si les deux bâtiments sont touch�
 de libellés incomplet sans effet sur la formule ; aucun 100 % fabriqué par des statuts
 inconnus, une somme partielle ou l'arrondi. Tests unitaires, codecs et navigateur dédiés.
 
-**Limites assumées de cette première tranche :** les anciens `zoneStats` ne sont pas
+**État au commit B1 (dépassé par les sous-lots ci-dessous) :** les anciens `zoneStats` ne sont pas
 reconstruits ; les lectures restent ponctuelles ou issues du cache selon le parcours.
 Les compteurs locaux des bâtiments ne sont pas des confirmations serveur. L'activité
 du jour, les couleurs dominantes, les races de chargement et le suivi des portes anciennes
 restent à corriger dans B5. B1 ne clôture pas l'ensemble du lot B.
 
-## Suite ordonnée et critères de clôture
+## Découpage de référence et critères de recette
 
 | Ordre | Sous-lot / fichiers concernés | Acceptation et tests nécessaires |
 |---|---|---|
@@ -140,3 +143,153 @@ La recette laboratoire valide ses 19 parcours existants ; le nouveau cas de prog
 mobile est validé séparément après retrait d'une attente de sept tuiles propre au cadrage
 desktop. La progression ne dépend pas du nombre de tuiles visibles.
 Les réserves du lot A sur la production et les appareils physiques restent applicables.
+
+
+## Implémentation B2–B6
+
+### Catalogue et couverture (B2)
+
+`scripts/carto/catalogue.mjs` transforme le GeoJSONL **avant tuilage** en catalogue.
+Il déduplique les RNB multi-emprises et choisit comme ancrage le sommet extrême ouest,
+puis sud à égalité. Le point appartient à l'emprise ; il est déterministe quel que soit
+l'ordre des emprises. Il peut différer du centre visuel des tuiles. Les points sur la
+limite sont inclus. Une emprise dans deux zones appartient aux deux dénominateurs :
+**ne pas additionner les couvertures des zones pour calculer un total communal**.
+
+La complétude porte sur la source résidentielle filtrée annoncée, pas sur tous les
+bâtiments existant réellement. Elle exige un périmètre explicitement déclaré, une
+source complète et une zone entièrement contenue dans ce périmètre. Un extrait de
+laboratoire n'est pas complet. Le hash protège les données, la géométrie de zone et
+la version ; une modification de polygone rend le catalogue de cette zone inutilisable
+jusqu'à régénération. Les bâtiments hors catalogue restent comptés séparément.
+
+`build_tiles.sh` peut produire cet artefact via `ATHAR_CATALOGUE_EXTENT` et
+`ATHAR_CATALOGUE_COMPLETE=true`. Sans déclaration, aucune couverture totale n'est inventée.
+Le catalogue n'a aucun besoin de documents `buildings` pour les emprises non décrites.
+
+### Convergence et diagnostic (B3/B6)
+
+`data-audit.mjs` analyse un export logique `{path,data}[]`, retourne les anomalies,
+les références hachées et un plan stable basé sur les **chemins complets** historiques.
+Toutes les correspondances historiques restent en quarantaine : auteur, date, ordre des
+révisions, identité RNB et rattachement de zone ne sont jamais inventés. L'outil signale
+les orphelins, statuts inconnus, révisions ambiguës, historiques incomplets, corrections
+invalides et dates de porte manquantes, y compris sur les portes archivées.
+
+`inventory-data.mjs` lit le canonique à un instantané cohérent et parcourt les sous-collections
+racines, même si un parent a été supprimé. Il n'écrit qu'un rapport expurgé ; aucune note,
+composition de foyer ou marqueur sensible n'est exporté. Le parcours historique est un
+inventaire diagnostique, pas une sauvegarde transactionnelle. Il ne permet jamais à lui
+seul de supprimer l'historique. `seed:wp2`, les dérivations locales et les tests historiques
+restent des fixtures explicitement réservées à l'émulateur. Leurs accès production restent
+fermés par A. Une suppression aveugle de ces chemins ferait courir un risque de perte de
+passages ; elle n'est donc pas une condition artificielle pour intégrer le code B.
+
+### Reconstruction et maintien (B4)
+
+- `stats-core.js` : calcul pur ; preuve par passage référencé, statut, auteur présent,
+  date, acquittement serveur, révision maximale unique et chaîne complète. Les corrections
+  suivent les révisions, jamais l'horloge du téléphone. Les portes archivées ne comptent pas.
+- `stats-rebuild.js` : pages de 400 documents dans **une transaction en lecture seule**, à
+  un `readTime` obtenu du serveur. Zones, structures, portes, visites et catalogue ont le
+  même instantané. Le résultat est publié atomiquement avec génération, versions, dates,
+  empreinte géométrique et état de complétude. Un compare-and-set sur `sourceReadTime`
+  empêche tout retour à une génération plus ancienne, y compris après événements désordonnés.
+- `stats-triggers.js` : changements de portes, passages, bâtiments, zones et manifestes
+  de catalogue. Un événement déjà couvert par le dernier instantané est ignoré. Les seuls
+  changements de profil sensible n'invalident pas les statistiques. Les erreurs transitoires
+  sont rejouées. Les déplacements reconstruisent toutes les zones, ancienne et nouvelle.
+- `rebuildZoneStats` : callable réservée à un administrateur actif avec rôle admin vérifié.
+  `stats:rebuild` fournit aussi un diagnostic sans écriture par défaut et une réparation
+  explicite avec confirmation du projet sur la ligne de commande.
+
+**Budget explicite :** 50 000 documents lus et 250 zones par workspace/reconstruction.
+Cela inclut l'historique et les fragments du catalogue. Le catalogue est aussi borné à
+250 000 identités chargées et la publication à 500 écritures atomiques. Le dépassement ou une interruption
+invalide les anciens relevés (`incomplete`) sans publier une somme partielle ; l'erreur de
+budget n'est pas rejouée indéfiniment. Un nouveau rebuild répare l'état. La pagination
+est vérifiée au-delà des anciennes limites de 250. Pour un workspace dépassant ce budget,
+il faudra partitionner les reconstructions par zone avec le même contrat de lecture ;
+augmenter arbitrairement le plafond ou additionner des pages non cohérentes est interdit.
+Le scan complet privilégie la correction pour le volume actuel ; son coût doit être mesuré
+avant une montée en charge. Il ne constitue pas un calcul incrémental à coût constant.
+
+Sources SDK : [transactions Firestore](https://firebase.google.com/docs/firestore/manage-data/transactions),
+[options Node de transaction](https://github.com/googleapis/nodejs-firestore/blob/main/types/firestore.d.ts),
+[livraison des événements](https://firebase.google.com/docs/functions/firestore-events).
+
+### Écrans et sémantique (B5)
+
+Carte, polygones, choix de zone et administration lisent la même génération. Les abonnements
+Firestore se désabonnent au changement de zone/démontage et répercutent visites, archives,
+reconstructions et suppressions. Les lectures du cache sont identifiées. Le relevé ancien
+sans métadonnées B est explicitement non reconstruit ; sa date n'est jamais remplacée par
+la date de lecture. Une projection invalide ne donne pas zéro.
+
+La liste terrain charge les portes par bâtiment, même hors bbox. Les réponses de la zone
+précédente sont ignorées. Les compteurs terrain sont décrits comme des portes chargées,
+avec d'éventuels passages locaux en attente ; ils ne deviennent pas des acquittements
+serveur. Le retour de fiche recharge la zone. Une ancienne porte éligible reste proposée
+même si sa voisine est récente ; DND/linked restent exclus. Une référence sans date donne
+« date inconnue ». « Pas encore fait » inclut un bâtiment partiellement visité s'il conserve
+des premières visites à faire. L'activité du jour est explicitement celle de la zone,
+tous auteurs, d'après les derniers passages connus. La durée inférée n'est plus affichée
+comme durée d'une sortie. Un statut inconnu ne devient pas « Contact établi ».
+
+### Contrat de publication et retour arrière (B6)
+
+Le contrat de A inclut explicitement les cinq triggers et `rebuildZoneStats`. L'empreinte
+Functions comprend tous les modules JavaScript de production et le lockfile. L'inscription
+publique et les dérivations racines restent exclues de la production. Aucun index composite
+nouveau n'est nécessaire : le scanner pagine par identifiant de document, sans filtre composé.
+`deploy/backend-state.json` conserve ses valeurs inconnues jusqu'à une publication attestée.
+
+Avant toute opération réelle : vérifier le projet, conserver une sauvegarde complète
+chiffrée des données, exécuter le diagnostic, examiner les quarantaines et simuler le rebuild.
+Le rapport expurgé n'est pas une sauvegarde. La migration des archives ne doit pas être
+couplée au déploiement de l'interface. Après publication autorisée des Functions, lancer une
+reconstruction initiale : les triggers ne rejouent pas spontanément tout le stock préexistant.
+Comparer son résultat au diagnostic et contrôler ses anomalies.
+
+En cas de retour arrière : suspendre/retirer les nouveaux triggers si nécessaire,
+conserver les passages nouveaux, corriger ou restaurer le producteur puis **recalculer**
+une génération à partir du canonique. Ne jamais restaurer un ancien instantané des portes
+sur les nouveaux passages ; ne jamais réactiver le schéma racine. L'interface doit garder
+les contrôles de complétude et les dates de relevé durant cette opération.
+
+## Commandes opérateur (non exécutées en production)
+
+```bash
+# Diagnostic local d'un export logique ; sortie sans champs sensibles.
+npm run audit:data -- --input export.json --workspace main --output diagnostic.json
+# Inventaire réel, uniquement lecture ; nécessite une identité cloud déjà autorisée.
+node scripts/commissioning/inventory-data.mjs --project PROJET --workspace main --output diagnostic.json
+# Catalogue indépendant des tuiles ; --complete uniquement sur une source complète vérifiée.
+node scripts/carto/catalogue.mjs --input batiments_avec_rnb.geojsonl --output catalogue.json --extent 1.3,43.5,1.6,43.8 --complete
+# Simulation puis activation explicite d'un catalogue (fragments avant manifeste).
+npm run stats:rebuild -- --project PROJET --workspace main --catalogue catalogue.json
+npm run stats:rebuild -- --project PROJET --workspace main --catalogue catalogue.json --apply --confirm-project PROJET
+# Simulation puis publication atomique des statistiques.
+npm run stats:rebuild -- --project PROJET --workspace main
+npm run stats:rebuild -- --project PROJET --workspace main --apply --confirm-project PROJET
+```
+
+Les générations de catalogue sont conservées ; ne pas effacer leurs fragments tant qu'un
+manifeste peut les référencer. Un changement de catalogue ou de géométrie déclenche la
+reconstruction ; tant que le catalogue ne correspond plus à la géométrie, seule la
+progression des portes est exploitable et la couverture géographique est indisponible.
+
+## Recette de l'implémentation complète
+
+Sous Node 22 : lint, typage et build de production vérifié ; **210 tests unitaires**, **14
+contrôles Functions**, **4 tests catalogue/diagnostic**, **6 contrôles de configuration**, **84
+tests Firestore/Auth** et **10 parcours navigateur sur émulateurs** réussis. La reconstruction
+est testée à 900 portes, avec écriture entre les pages, publication concurrente, génération
+retardée, interruption, réparation, archivage et suppression de zone. Le navigateur vérifie
+l'actualisation automatique après passage et archivage sans rechargement. La recette du
+lot A conserve le conflit réel à deux appareils et la purge à la déconnexion.
+
+Les tests Functions sont exécutés avant les fixtures de charge qui alimentent la file
+sérielle de l'émulateur. Tous les tests sont conservés, sans allongement de leurs délais.
+La vérification d'interface mobile a été effectuée sur la carte de laboratoire ; les
+appareils physiques et la configuration de production restent hors de cette recette.

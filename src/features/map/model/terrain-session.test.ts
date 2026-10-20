@@ -65,3 +65,10 @@ describe('terrain session', () => {
     expect(elapsedLabel(180 * 60_000)).toBe('3 h 00');
   });
 });
+
+it('does not invent a contact from an unknown status or an archived door', () => {
+  expect(terrainSession([
+    door({ id: 'unknown', currentStatusId: 'unknown', lastVisitAt: '2026-08-11T15:00:00.000Z' }),
+    door({ id: 'archived', active: false, currentStatusId: 'contacted', lastVisitAt: '2026-08-11T15:00:00.000Z' })
+  ], NOW).markedCount).toBe(0);
+});

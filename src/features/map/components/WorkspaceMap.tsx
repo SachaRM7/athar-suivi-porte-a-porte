@@ -8,7 +8,7 @@ import type { FeatureCollection, Point, Polygon } from 'geojson';
 import { withBasePath } from '../../../app/config/public-paths';
 import type { Building, GeoPoint, Status, Zone, ZoneGeometry, ZoneStats } from '../../../domain/workspace/models';
 import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
-import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
+import { zoneProgressDate, zoneProgressSummary, zoneStatsProvenance, zoneBuildingCoverage } from '../../zones/model/zone-progress-label';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
 import { assertZone } from '../../../domain/workspace/invariants';
 import { boundingBoxForPolygon, buildingsAttachedToZone, closePolygon } from '../../zones/model/zone-geometry';
@@ -179,14 +179,17 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const [zoneList, setZoneList] = useState<readonly Zone[]>([]);
   const [zoneStats, setZoneStats] = useState<ReadonlyMap<string, ZoneStats | null>>(new Map());
   /** Tous les bâtiments de la zone choisie, cadrage ou pas : la liste sert à naviguer. */
-  const [zoneBuildings, setZoneBuildings] = useState<readonly BuildingListEntry[]>([]);
-  const [session, setSession] = useState<TerrainSession>({ trace: [], markedCount: 0, durationLabel: null });
+  const [zoneBuildingsState, setZoneBuildings] = useState<readonly BuildingListEntry[]>([]);
+  const [sessionZoneId, setSessionZoneId] = useState<string | null>(null);
+  const [sessionState, setSession] = useState<TerrainSession>({ trace: [], markedCount: 0, durationLabel: null });
   const [listFilter, setListFilter] = useState<BuildingListFilter>('all');
   const [listSort, setListSort] = useState<BuildingListSort>('staleness');
   const [searchQuery, setSearchQuery] = useState('');
   const [mode, setMode] = useState<'terrain' | 'edition'>('terrain');
   const [panelHeight, setPanelHeight] = useState<'peek' | 'full'>('peek');
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(initialZoneId);
+  const zoneBuildings = zoneBuildingsState.filter(entry => entry.building.zoneId === selectedZoneId);
+  const session = sessionZoneId === selectedZoneId ? sessionState : { trace: [], markedCount: 0, durationLabel: null };
   const [zoneMenuOpen, setZoneMenuOpen] = useState(false);
   const zonePicker = useRef<HTMLDivElement>(null);
   const [visibleBuildingCount, setVisibleBuildingCount] = useState(0);
@@ -308,10 +311,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     const bounds = instance.getBounds();
     const viewport = { north: bounds.getNorth(), south: bounds.getSouth(), east: bounds.getEast(), west: bounds.getWest() };
     element.current?.setAttribute('data-viewport', JSON.stringify(viewport));
-    const [nextZones, buildings, doors, statuses] = await Promise.all([
+    const [nextZones, buildings, statuses] = await Promise.all([
       repositories.zones.list(),
       repositories.buildings.listByViewport(viewport, { signal: controller.signal }),
-      repositories.doors.listByViewport(viewport, { signal: controller.signal }),
       repositories.statuses.list()
     ]);
     if (controller.signal.aborted || viewportRequest.current !== controller) return;
@@ -327,13 +329,18 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     zones.current = nextZones;
     setZoneList(nextZones);
     const statsByZone = new Map(stats);
-    setZoneStats(statsByZone);
+    setZoneStats(current => new Map([...statsByZone].map(([id, stats]) => {
+      const existing = current.get(id);
+      return [id, existing && stats && existing.updatedAt > stats.updatedAt ? existing : stats];
+    })));
     const requestedZoneId = selectedZoneRef.current;
     const activeZoneId = nextZones.some((zone) => zone.id === requestedZoneId) ? requestedZoneId : nextZones[0]?.id ?? null;
     if (activeZoneId !== selectedZoneRef.current) {
       selectedZoneRef.current = activeZoneId;
       setSelectedZoneId(activeZoneId);
     }
+    const doors = (await Promise.all(buildings.map(building => repositories.doors.listByBuilding(building.id)))).flat();
+    if (controller.signal.aborted || viewportRequest.current !== controller) return;
     const grouped = groupDoorsByBuilding(doors);
     footprintContext.current = {
       zone: nextZones.find((zone) => zone.id === activeZoneId) ?? null,
@@ -342,9 +349,6 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       statuses: new Map<string, Status>(statuses.map((status) => [status.id, status])),
       untouchedColor: UNTOUCHED_COLOR
     };
-    (instance.getSource(ZONE_SOURCE) as GeoJSONSource | undefined)?.setData(zoneFeatures(nextZones,
-      new Map(nextZones.map((zone) => [zone.id, zoneProgressLabel(zone, statsByZone.get(zone.id) ?? null)]))
-    ));
     setVisibleBuildingCount(buildings.length);
     setSelectedZoneId((current) => current ?? nextZones[0]?.id ?? null);
     paintFootprints();
@@ -356,23 +360,26 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   /**
    * La liste ne suit pas le cadrage mais la zone : on doit pouvoir parcourir tous ses
    * bâtiments et sauter de l'un à l'autre, y compris hors de l'écran. Les portes sont
-   * lues en une seule requête sur l'emprise de la zone, pas une par bâtiment.
+   * lues par rattachement au bâtiment, même si une entrée est hors de la bbox.
    */
+  const zoneRequest = useRef(0);
   const refreshZone = useCallback(async (zoneId: string | null) => {
+    const request = ++zoneRequest.current;
     const zone = zones.current.find((candidate) => candidate.id === zoneId) ?? null;
     if (!zone) {
       setZoneBuildings([]);
       setSession({ trace: [], markedCount: 0, durationLabel: null });
       return;
     }
-    const [buildings, doors] = await Promise.all([
-      repositories.buildings.listByZone(zone.id),
-      repositories.doors.listByViewport(zone.bbox)
-    ]);
+    const buildings = await repositories.buildings.listByZone(zone.id);
+    // Membership follows buildingId, including a doorway outside the polygon bbox.
+    const doors = (await Promise.all(buildings.map(building => repositories.doors.listByBuilding(building.id)))).flat();
+    if (request !== zoneRequest.current) return;
     const zoneBuildingIds = new Set(buildings.map((building) => building.id));
     const scopedDoors = doors.filter((door) => zoneBuildingIds.has(door.buildingId));
     setZoneBuildings(buildingListEntries(buildings, groupDoorsByBuilding(scopedDoors)));
     setSession(terrainSession(scopedDoors));
+    setSessionZoneId(zone.id);
   }, [repositories]);
 
   /**
@@ -381,11 +388,26 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
    * l'identifiant, lui, ne changeait plus. On attend donc que la zone existe vraiment.
    */
   const loadedZoneId = zoneList.some((zone) => zone.id === selectedZoneId) ? selectedZoneId : null;
+  const statsZoneIds = zoneList.map(zone => zone.id).sort().join('|');
+  useEffect(() => {
+    const stop = statsZoneIds.split('|').filter(Boolean).map(id => repositories.zones.subscribeStats?.(id,
+      stats => setZoneStats(current => new Map(current).set(id, stats)),
+      () => setZoneStats(current => new Map(current).set(id, null))));
+    return () => { stop.forEach(unsubscribe => unsubscribe?.()); };
+  }, [repositories, statsZoneIds]);
+  useEffect(() => {
+    (map.current?.getSource(ZONE_SOURCE) as GeoJSONSource | undefined)?.setData(zoneFeatures(zones.current,
+      new Map(zones.current.map(zone => [zone.id, zoneProgressLabel(zone, zoneStats.get(zone.id) ?? null)]))));
+  }, [zoneStats]);
+
   // Une liste de zone illisible n'est pas une zone vide : l'erreur est dite, pas avalée.
   useEffect(() => {
+    let active = true;
     void refreshZone(loadedZoneId).catch((error: unknown) => {
-      setMessage(error instanceof Error ? `Liste de la zone indisponible : ${error.message}` : 'Liste de la zone indisponible.');
+      if (active) setMessage(error instanceof Error ? `Liste de la zone indisponible : ${error.message}` : 'Liste de la zone indisponible.');
     });
+    const requestRef = zoneRequest;
+    return () => { active = false; requestRef.current++; };
   }, [refreshZone, reloadToken, loadedZoneId]);
 
   /**
@@ -702,8 +724,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   // La liste terrain peut contenir des intentions locales. L'anneau utilise le même
   // relevé daté que le tableau administrateur ; il ne mesure pas les bâtiments détectés.
   const zoneBuildingCount = zoneBuildings.length;
-  const progress = zoneDoorProgress(zoneStats.get(selectedZoneId ?? '') ?? null, selectedZoneId ?? '');
-  const todoCount = zoneBuildings.filter((entry) => entry.staleness.days === null).length;
+  const selectedStats = zoneStats.get(selectedZoneId ?? '') ?? null;
+  const progress = zoneDoorProgress(selectedStats, selectedZoneId ?? '');
+  const todoCount = zoneBuildings.filter((entry) => matchesBuildingListFilter(entry, 'todo')).length;
   const staleCount = zoneBuildings.filter((entry) => entry.followUp.suggestedForRevisit).length;
   const zoneName = selectedZone?.name ?? 'Zone à choisir';
 
@@ -802,12 +825,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
 
           <div className="terrain-panel-head">
             <div className="terrain-session-line">
-              <span className="ds-microlabel">Sortie du jour</span>
+              <span className="ds-microlabel">Activité du jour · zone</span>
               <span>{session.markedCount === 0
                 ? 'aucune porte marquée'
-                : `${session.markedCount} marqué${session.markedCount > 1 ? 's' : ''}${session.durationLabel ? ` · ${session.durationLabel}` : ''}`}</span>
+                : `${session.markedCount} marqué${session.markedCount > 1 ? 's' : ''} · dernières visites connues`}</span>
             </div>
-            <TraceBar entries={session.trace} />
+            <TraceBar entries={session.trace} /><small>Derniers passages connus, tous auteurs · peut inclure des passages en attente sur cet appareil</small>
             <label className="terrain-search">
               <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></svg>
               <span className="terrain-sr-only">Chercher une adresse</span>
@@ -840,7 +863,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
                       <span className={`terrain-building-pin terrain-building-pin--${entry.treatedCount === 0 ? 'todo' : entry.followUp.suggestedForRevisit ? 'away' : entry.followUp.outOfFollowUp ? 'linked' : 'open'}`} />
                       <span className="terrain-building-copy">
                         <span className="building-row-address">{entry.building.addressLabel}</span>
-                        <span className="building-row-progress">{entry.doorCount} portes · {entry.treatedCount} faites</span>
+                        <span className="building-row-progress">{entry.treatedCount}/{entry.doorCount} portes chargées avec passage</span>
                       </span>
                       <span className={entry.followUp.suggestedForRevisit ? 'building-row-age alert' : 'building-row-age'}>{buildingAgeLabel(entry)}</span>
                     </button>
@@ -851,7 +874,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
               {zoneBuildingCount} bâtiment(s) suivis · {visibleBuildingCount} à l’écran
               {attachedBuildingCount !== null && <> · {attachedBuildingCount} rattache(s)</>}
             </span>
-            <p className="terrain-visible-count">{zoneProgressDate(progress)}. Les nouveaux passages peuvent ne pas encore être comptés. Couverture de tous les bâtiments : indisponible.</p>
+            <p className="terrain-visible-count">{zoneProgressDate(progress)}. Les nouveaux passages peuvent ne pas encore être comptés. {zoneBuildingCoverage(selectedStats)}. {zoneStatsProvenance(selectedStats)}</p>
           </div>
 
           <footer className="terrain-panel-foot">

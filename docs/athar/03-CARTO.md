@@ -149,3 +149,11 @@ plusieurs bâtiments sous un même numéro, voies non nommées, impasses absente
 corriger à la main une fois sur deux. L'adresse est une **étiquette** attachée au bâtiment, jamais sa clé
 d'identification — ce qui règle au passage le cas de l'impasse sans nom, dont les bâtiments existent quand même
 dans le référentiel.
+
+
+## Catalogue de couverture — lot B
+
+Le tuileset sert au dessin. Le dénominateur de couverture vient du catalogue complet
+produit **avant** tippecanoe par `scripts/carto/catalogue.mjs`. La procédure, les limites
+incluses, les chevauchements et l'import versionné sont définis dans
+[06-VERITE-DONNEES.md](06-VERITE-DONNEES.md). Aucun nombre de tuiles visibles ne sert de total.

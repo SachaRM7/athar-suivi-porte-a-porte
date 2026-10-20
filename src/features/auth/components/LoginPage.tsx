@@ -9,7 +9,7 @@ import { AccessState } from './AccessState';
 import { AuthBackdrop } from './AuthBackdrop';
 import { useGuardedSignOut } from './GuardedSignOut';
 import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
-import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
+import { zoneProgressDate, zoneProgressSummary, zoneStatsProvenance, zoneBuildingCoverage } from '../../zones/model/zone-progress-label';
 
 type ZoneEntry = { zone: Zone; stats: ZoneStats | null };
 
@@ -24,6 +24,7 @@ function ActiveEntry(): ReactElement {
 
   useEffect(() => {
     let active = true;
+    const subscriptions: (() => void)[] = [];
     void Promise.all([
       import('../../../infrastructure/firebase/client'),
       import('../../../infrastructure/firestore/firestore-workspace-read-repositories')
@@ -37,11 +38,18 @@ function ActiveEntry(): ReactElement {
       })));
       if (!active) return;
       setEntries(next);
+      for (const zone of zones) {
+        const receive = (stats: ZoneStats | null) => {
+          if (active) setEntries(current => current?.map(entry => entry.zone.id === zone.id ? { ...entry, stats } : entry) ?? null);
+        };
+        const stop = repositories.zones.subscribeStats?.(zone.id, receive, () => receive(null));
+        if (stop) subscriptions.push(stop);
+      }
       setSelectedId(next[0]?.zone.id ?? null);
     }).catch(() => {
       if (active) setEntries([]);
     });
-    return () => { active = false; };
+    return () => { active = false; subscriptions.forEach(stop => stop()); };
   }, []);
 
   if (entries === null) {
@@ -56,7 +64,7 @@ function ActiveEntry(): ReactElement {
       <p className="auth-microlabel">Première ouverture · {state.session.member.displayName}</p>
       <h1 id="zone-choice-title">Choisis la zone de la sortie.</h1>
       <p className="auth-lede">Tu pourras en changer à tout moment depuis la carte. Ce choix organise le terrain, il ne limite pas ton accès.</p>
-      <p className="auth-footnote">Progression des portes décrites au dernier relevé. Les nouveaux passages peuvent ne pas encore être comptés ; la couverture de tous les bâtiments reste indisponible.</p>
+      <p className="auth-footnote">Progression des portes décrites au dernier relevé. Les nouveaux passages peuvent ne pas encore être comptés ; les compteurs restent datés et excluent les passages en attente de synchronisation.</p>
       <div className="auth-zone-list" role="radiogroup" aria-label="Zone de la sortie">
         {entries.map((entry) => {
           const progress = zoneDoorProgress(entry.stats, entry.zone.id);
@@ -70,7 +78,7 @@ function ActiveEntry(): ReactElement {
               type="button"
             >
               <span className="auth-zone-ring" style={{ '--zone-progress': `${(progress.percent ?? 0) * 3.6}deg` } as CSSProperties}><b>{progress.percent === null ? '—' : `${progress.percent}%`}</b></span>
-              <span><strong>{entry.zone.name}</strong><small>{zoneProgressSummary(progress)}</small><small>{zoneProgressDate(progress)}</small></span>
+              <span><strong>{entry.zone.name}</strong><small>{zoneProgressSummary(progress)}</small><small>{zoneProgressDate(progress)}. {zoneStatsProvenance(entry.stats)} {zoneBuildingCoverage(entry.stats)}</small></span>
               <i aria-hidden="true">›</i>
             </button>
           );

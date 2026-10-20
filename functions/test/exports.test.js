@@ -7,6 +7,8 @@ const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const { localOnboardingEnabled } = require('../runtime-mode');
+const projectionExports = ['projectWorkspaceDoor', 'projectWorkspaceVisit', 'projectWorkspaceBuilding', 'projectWorkspaceZone', 'projectWorkspaceCatalogue', 'rebuildZoneStats'];
+const productionExports = ['createMember', ...projectionExports].sort();
 
 function exportedFunctions(extraEnv) {
   const env = { ...process.env, GCLOUD_PROJECT: 'athar-exports-test', FIREBASE_CONFIG: JSON.stringify({ projectId: 'athar-exports-test' }) };
@@ -21,22 +23,22 @@ function exportedFunctions(extraEnv) {
 }
 
 test('production: an absent variable never opens self-service registration', () => {
-  assert.deepEqual(exportedFunctions({}), ['createMember']);
+  assert.deepEqual(exportedFunctions({}), productionExports);
 });
 
-test('production: a misspelt or permissive mode still exports only createMember', () => {
-  assert.deepEqual(exportedFunctions({ ATHAR_FUNCTIONS_MODE: 'local' }), ['createMember']);
-  assert.deepEqual(exportedFunctions({ ATHAR_FUNCTIONS_MODE: '' }), ['createMember']);
+test('production: a misspelt or permissive mode still excludes self-service onboarding', () => {
+  assert.deepEqual(exportedFunctions({ ATHAR_FUNCTIONS_MODE: 'local' }), productionExports);
+  assert.deepEqual(exportedFunctions({ ATHAR_FUNCTIONS_MODE: '' }), productionExports);
 });
 
 test('emulator: local onboarding and bootstrap stay available for end-to-end tests', () => {
   assert.deepEqual(exportedFunctions({ FUNCTIONS_EMULATOR: 'true' }), [
-    'claimInitialAdmin', 'createMember', 'deriveAtharPassage', 'deriveAtharSistersMarker', 'registerMember'
-  ]);
+    'claimInitialAdmin', 'createMember', 'deriveAtharPassage', 'deriveAtharSistersMarker', 'registerMember', ...projectionExports
+  ].sort());
 });
 
 test('emulator replaying production: onboarding is closed', () => {
-  assert.deepEqual(exportedFunctions({ FUNCTIONS_EMULATOR: 'true', ATHAR_FUNCTIONS_MODE: 'production' }), ['createMember']);
+  assert.deepEqual(exportedFunctions({ FUNCTIONS_EMULATOR: 'true', ATHAR_FUNCTIONS_MODE: 'production' }), productionExports);
 });
 
 test('the runtime guard follows the same rule', () => {

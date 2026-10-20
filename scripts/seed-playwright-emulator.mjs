@@ -31,6 +31,10 @@ async function ensureUser(uid, username) {
 
 await Promise.all(PILOTE_MINIMAL.users.map((user) => ensureUser(user.uid, user.username)));
 
+// Re-seeding is an emulator-only reset: old visits must not survive revision-zero fixture doors.
+for (const collection of ['visits', 'doors', 'buildings', 'zones', 'zoneStats', 'statsState']) {
+  await db.recursiveDelete(workspace.collection(collection));
+}
 const batch = db.batch();
 for (const user of PILOTE_MINIMAL.users) {
   batch.set(workspace.collection('members').doc(user.uid), {
@@ -81,6 +85,13 @@ batch.set(workspace.collection('zoneStats').doc('carmes'), {
   doorCount: 1, countsByStatus: { unvisited: 1, retry: 0, contacted: 0, 'do-not-return': 0 }, updatedAt: createdAt
 });
 if (includeRegressionData) {
+  batch.set(workspace.collection('buildings').doc('invalid-stat-building'), {
+    addressLabel: 'Bâtiment de contrôle statistique', location: point, geohash: pointGeohash, zoneId: 'saint-cyprien', createdBy: 'admin-1', structureRevision: 0
+  });
+  batch.set(workspace.collection('doors').doc('invalid-stat-door'), {
+    buildingId: 'invalid-stat-building', zoneId: 'saint-cyprien', location: point, geohash: pointGeohash, floor: 0, label: '01', sortOrder: 0,
+    active: true, currentStatusId: 'unknown-status', revision: 0, lastVisitId: null, lastVisitAt: null, createdBy: 'admin-1'
+  });
   batch.set(workspace.collection('zoneStats').doc('saint-cyprien'), {
     doorCount: 'invalid', countsByStatus: {}, updatedAt: createdAt
   });
@@ -103,7 +114,15 @@ if (bootstrapCode) {
     codeHash: createHash('sha256').update(bootstrapCode, 'utf8').digest('hex'), createdAt
   });
 }
-await batch.commit();
+const writes = await batch.commit();
+const committedAt = writes.at(-1).writeTime;
+const deadline = Date.now() + 30000;
+while (true) {
+  const state = (await workspace.collection('statsState').doc('current').get()).data();
+  if (state?.state === 'ready' && state.sourceReadTime.toMillis() >= committedAt.toMillis()) break;
+  if (Date.now() > deadline) throw new Error('Canonical projections did not settle after seeding.');
+  await new Promise(resolve => setTimeout(resolve, 100));
+}
 
 console.log(includeRegressionData
   ? 'Emulator fixture pilote-minimal and regression datasets seeded.'

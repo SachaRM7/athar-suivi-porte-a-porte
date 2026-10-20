@@ -7,7 +7,7 @@ import { createFirestoreWorkspaceReadRepositories } from '../../../infrastructur
 import type { ReadMetrics } from '../../../domain/workspace/read-pagination';
 import { useGuardedSignOut } from '../../auth/components/GuardedSignOut';
 import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
-import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
+import { zoneProgressDate, zoneProgressSummary, zoneStatsProvenance, zoneBuildingCoverage } from '../../zones/model/zone-progress-label';
 
 type DashboardData = {
   zones: readonly Zone[];
@@ -90,11 +90,24 @@ export function AdminDashboardPage(): ReactElement {
     return () => { mounted = false; controller.abort(); };
   }, [buildingCursor, repositories, selectedZoneId]);
 
+  const [liveStats, setLiveStats] = useState<{ zoneId: string; stats: ZoneStats | null; invalid: boolean } | null>(null);
+  useEffect(() => {
+    let active = true;
+    let stop: (() => void) | undefined;
+    void repositories.then(workspace => {
+      if (!active || !selectedZoneId) return;
+      stop = workspace.zones.subscribeStats?.(selectedZoneId,
+        stats => { if (active) setLiveStats({ zoneId: selectedZoneId, stats, invalid: false }); },
+        () => { if (active) setLiveStats({ zoneId: selectedZoneId, stats: null, invalid: true }); });
+    });
+    return () => { active = false; stop?.(); };
+  }, [repositories, selectedZoneId]);
+
   const selectedZone = data?.zones.find((zone) => zone.id === selectedZoneId) ?? null;
   const selectedDetails = zoneDetails?.zoneId === selectedZoneId ? zoneDetails : null;
   const selectedZoneError = zoneIssue?.zoneId === selectedZoneId ? zoneIssue.message : null;
   const zoneLoading = Boolean(selectedZoneId && !selectedDetails && !selectedZoneError);
-  const selectedStats = selectedZoneError ? null : selectedDetails?.stats ?? null;
+  const selectedStats = selectedZoneError ? null : liveStats?.zoneId === selectedZoneId ? liveStats.stats : selectedDetails?.stats ?? null;
   const selectedBuildings = selectedDetails?.buildings ?? [];
   const progress = zoneDoorProgress(selectedStats, selectedZoneId);
   const selectedStatus = data?.statuses.find((status) => status.id === selectedStatusId) ?? null;
@@ -150,12 +163,12 @@ export function AdminDashboardPage(): ReactElement {
                 {data.statuses.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}
               </select>
             </label>
-            <p className="dashboard-projection-note">Les compteurs décrivent le dernier relevé enregistré. Les nouveaux passages peuvent ne pas encore être comptés. Le choix du compteur ne filtre pas les bâtiments.</p>
+            <p className="dashboard-projection-note">{zoneStatsProvenance(selectedStats)} {zoneBuildingCoverage(selectedStats)}. Les compteurs décrivent le dernier relevé enregistré. Les nouveaux passages peuvent ne pas encore être comptés. Le choix du compteur ne filtre pas les bâtiments.</p>
           </section>
 
           {zoneLoading && <p className="dashboard-loading" role="status">Lecture de la zone selectionnee...</p>}
           {selectedZoneError && <p className="form-error" role="alert">{selectedZoneError}</p>}
-          {selectedDetails?.projectionInvalid && <p className="form-error" role="alert">Projection de compteurs invalide. Les batiments restent consultables.</p>}
+          {(liveStats?.zoneId === selectedZoneId ? liveStats.invalid : selectedDetails?.projectionInvalid) && <p className="form-error" role="alert">Projection de compteurs invalide. Les batiments restent consultables.</p>}
           {missingStatusLabels && <p className="dashboard-projection-note" role="status">La liste des statuts est incomplète. Le total et la progression incluent aussi les portes dont le statut n’est pas affiché ci-dessous.</p>}
 
           <section className="dashboard-overview" aria-labelledby="zone-summary-title">

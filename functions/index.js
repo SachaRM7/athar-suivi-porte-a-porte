@@ -317,3 +317,6 @@ if (LOCAL_ONBOARDING) {
   exports.deriveAtharPassage = deriveAtharPassage;
   exports.deriveAtharSistersMarker = deriveAtharSistersMarker;
 }
+
+// Lot B: only canonical workspace projections are exported in production.
+Object.assign(exports, require('./stats-triggers'));

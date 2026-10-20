@@ -51,6 +51,25 @@ export type Zone = {
 };
 
 export type ZoneStats = {
+  schemaVersion?: 2;
+  formulaVersion?: string;
+  completeness?: 'complete' | 'invalid' | 'incomplete';
+  generation?: string;
+  sourceReadTime?: string;
+  computedAt?: string;
+  readSource?: 'server' | 'cache';
+  issues?: Readonly<Record<string, number>>;
+  visitedDoorCount?: number;
+  buildingCount?: number;
+  describedBuildingCount?: number;
+  visitedBuildingCount?: number;
+  detectedBuildingCount?: number | null;
+  describedCatalogueBuildingCount?: number | null;
+  visitedCatalogueBuildingCount?: number | null;
+  outsideCatalogueBuildingCount?: number | null;
+  catalogueVersion?: string | null;
+  geometryHash?: string;
+
   zoneId: EntityId;
   doorCount: number;
   countsByStatus: Readonly<Record<StatusId, number>>;

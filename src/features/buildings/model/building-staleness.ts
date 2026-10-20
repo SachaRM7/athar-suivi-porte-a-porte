@@ -1,4 +1,5 @@
 import type { Building, Door } from '../../../domain/workspace/models';
+import { hasRecordedVisit } from '../../../domain/workspace/status-ids';
 import { doorFollowUp } from '../../../domain/workspace/follow-up';
 
 /**
@@ -49,10 +50,10 @@ export function stalenessLabel(days: number | null): string {
   return `il y a ${months} mois`;
 }
 
-export function buildingStaleness(lastVisitAt: string | null, now: Date = new Date()): BuildingStaleness {
+export function buildingStaleness(lastVisitAt: string | null, now: Date = new Date(), hasVisit = false): BuildingStaleness {
   if (lastVisitAt === null || Number.isNaN(Date.parse(lastVisitAt))) {
     // « Jamais vu » n'est pas une alerte : c'est le gris « pas encore fait », pas un retard.
-    return { lastVisitAt: null, days: null, label: 'jamais vu', alert: false };
+    return { lastVisitAt: null, days: null, label: hasVisit ? 'date inconnue' : 'jamais vu', alert: false };
   }
   const days = elapsedDays(lastVisitAt, now);
   return { lastVisitAt, days, label: stalenessLabel(days), alert: days > STALE_ALERT_DAYS };
@@ -78,7 +79,8 @@ export function buildingFollowUp(activeDoors: readonly Door[], now: Date = new D
   const states = activeDoors.map((door) => ({ door, followUp: doorFollowUp(door) }));
   const revisitDoors = states.filter((state) => state.followUp === 'revisit').map((state) => state.door);
   const excludedDoorCount = states.filter((state) => state.followUp === 'excluded').length;
-  const revisitStaleness = buildingStaleness(lastVisitOfBuilding(revisitDoors), now);
+  const dates = revisitDoors.map(door => door.lastVisitAt).filter((at): at is string => Boolean(at) && Number.isFinite(Date.parse(at!))).sort();
+  const revisitStaleness = buildingStaleness(dates[0] ?? null, now, revisitDoors.some(door => Boolean(door.lastVisitId)));
   return {
     firstVisitDoorCount: states.filter((state) => state.followUp === 'first-visit').length,
     revisitDoorCount: revisitDoors.length,
@@ -117,9 +119,9 @@ export function buildingListEntries(
     const doors = (doorsByBuilding.get(building.id) ?? []).filter((door) => door.active);
     return {
       building,
-      staleness: buildingStaleness(lastVisitOfBuilding(doors), now),
+      staleness: buildingStaleness(lastVisitOfBuilding(doors), now, doors.some(door => Boolean(door.lastVisitId))),
       doorCount: doors.length,
-      treatedCount: doors.filter((door) => door.currentStatusId !== 'unvisited').length,
+      treatedCount: doors.filter(hasRecordedVisit).length,
       followUp: buildingFollowUp(doors, now)
     };
   });
@@ -130,7 +132,7 @@ export function buildingListEntries(
  * sur le terrain. La première appelle un repassage, la seconde une première visite.
  */
 export function matchesBuildingListFilter(entry: BuildingListEntry, filter: BuildingListFilter): boolean {
-  if (filter === 'todo') return entry.staleness.days === null;
+  if (filter === 'todo') return entry.doorCount === 0 || entry.followUp.firstVisitDoorCount > 0;
   if (filter === 'stale') return entry.followUp.suggestedForRevisit;
   return true;
 }

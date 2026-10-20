@@ -58,7 +58,7 @@ test('shows the recorded door ratio instead of calling two touched buildings a f
   await expect(page.getByTestId('zone-recorded-progress')).toHaveText('50%');
   await expect(page.locator('.terrain-zone-copy')).toContainText('3/6 portes décrites avec passage');
   await expect(page.locator('.terrain-zonechip')).toHaveAttribute('title', /^Relevé du /);
-  await expect(page.getByText(/Couverture de tous les bâtiments : indisponible/)).toBeVisible();
+  await expect(page.getByText(/Couverture des bâtiments indisponible/)).toBeVisible();
 });
 
 test('draws and saves an editable local zone over the prepared MapLibre package', async ({ page }) => {

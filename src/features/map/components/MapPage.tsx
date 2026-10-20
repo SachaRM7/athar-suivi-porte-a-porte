@@ -101,7 +101,7 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
         markers={markers}
         onBuildingChange={changeBuilding}
         onBuildingDelete={() => setDataVersion((version) => version + 1)}
-        onClose={opened.close}
+        onClose={() => { opened.close(); setDataVersion(version => version + 1); }}
         outbox={outbox}
         repositories={repositories}
         structureSuggestion={opened.suggestion}

@@ -6,6 +6,14 @@ import { isWorkspaceStatusId } from './status-ids';
  * Cela vérifie sa cohérence interne, pas sa concordance avec les visites ni sa fraîcheur.
  */
 export function assertZoneStats(stats: ZoneStats): void {
+  if (stats.schemaVersion !== undefined) {
+    if (stats.schemaVersion !== 2 || stats.formulaVersion !== 'doors-history-v2' || stats.completeness !== 'complete'
+      || !stats.generation || !stats.sourceReadTime || !stats.computedAt
+      || !Number.isFinite(Date.parse(stats.sourceReadTime)) || !Number.isFinite(Date.parse(stats.computedAt))
+      || !Number.isSafeInteger(stats.visitedDoorCount) || stats.visitedDoorCount! < 0 || stats.visitedDoorCount! > stats.doorCount) {
+      throw new Error('Zone stats reconstruction is incomplete or invalid.');
+    }
+  }
   if (!Number.isSafeInteger(stats.doorCount) || stats.doorCount < 0) {
     throw new Error('Zone stats door count must be a non-negative safe integer.');
   }
@@ -47,7 +55,7 @@ export function zoneDoorProgress(stats: ZoneStats | null, zoneId: string): ZoneD
     return { state: 'empty', percent: null, total: 0, visited: 0, unvisited: 0, updatedAt: stats.updatedAt };
   }
   const unvisited = stats.countsByStatus.unvisited ?? 0;
-  const visited = stats.doorCount - unvisited;
+  const visited = stats.visitedDoorCount ?? stats.doorCount - unvisited;
   // Tronquer évite d'annoncer 100 % lorsque, par exemple, 999 portes sur 1 000 sont visitées.
   const percent = Number((BigInt(visited) * 100n) / BigInt(stats.doorCount));
   return { state: 'recorded', percent, total: stats.doorCount, visited, unvisited, updatedAt: stats.updatedAt };

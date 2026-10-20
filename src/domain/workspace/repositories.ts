@@ -16,6 +16,7 @@ export interface StatusRepository {
 export interface ZoneRepository {
   list(): Promise<readonly Zone[]>;
   getStats(zoneId: string): Promise<ZoneStats | null>;
+  subscribeStats?(zoneId: string, receive: (stats: ZoneStats | null) => void, onError: () => void): () => void;
   save(zone: Zone): Promise<void>;
   delete(zoneId: string): Promise<void>;
 }
@@ -53,7 +54,7 @@ export interface VisitRepository {
 export type WorkspaceReadRepositories = {
   members: Pick<MemberRepository, 'listActive' | 'get'>;
   statuses: Pick<StatusRepository, 'list'>;
-  zones: Pick<ZoneRepository, 'list' | 'getStats'>;
+  zones: Pick<ZoneRepository, 'list' | 'getStats' | 'subscribeStats'>;
   buildings: Pick<BuildingRepository, 'get' | 'listByZone' | 'listByViewport' | 'listPageByZone' | 'listPageByViewport'>;
   doors: Pick<DoorRepository, 'get' | 'listByViewport' | 'listByBuilding' | 'listStructureByBuilding' | 'listPageByBuilding' | 'listPageByViewport'>;
   visits: Pick<VisitRepository, 'listByDoor' | 'listPageByDoor'>;

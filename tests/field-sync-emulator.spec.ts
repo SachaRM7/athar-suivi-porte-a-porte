@@ -91,8 +91,8 @@ test('two terrain clients retain offline intentions and resolve a real Firestore
     });
     await Promise.all([openDoor(first), openDoor(second)]);
 
-    await expect(first.getByText('Hors ligne')).toBeVisible();
-    await expect(second.getByText('Hors ligne')).toBeVisible();
+    await expect(first.getByText('Hors ligne', { exact: true })).toBeVisible();
+    await expect(second.getByText('Hors ligne', { exact: true })).toBeVisible();
     const pendingBeforeReload = await outboxEntries(second, 'member-b');
     expect(pendingBeforeReload).toHaveLength(1);
 
@@ -250,7 +250,7 @@ test('the desktop dashboard is reserved to admins and reads a selected zone from
     await expect(admin.getByTestId('zone-recorded-progress')).toHaveText('—');
     await expect(admin.getByText('Statistiques indisponibles', { exact: true })).toBeVisible();
     await expect(admin.getByTestId('zone-door-count')).toHaveText('-');
-    await expect(admin.getByTestId('zone-building-count')).toHaveText('0');
+    await expect(admin.getByTestId('zone-building-count')).toHaveText('1');
 
     await admin.getByLabel('Zone suivie').selectOption('pagination');
     await expect(admin.getByTestId('zone-recorded-progress')).toHaveText('—');
@@ -306,4 +306,36 @@ test('the desktop dashboard, map and zone choice share a dated projection and di
   await page.goto('/admin');
   await expect(page.getByText('Statistiques indisponibles', { exact: true })).toBeVisible();
   await expect(page.getByTestId('zone-recorded-progress')).toHaveText('—');
+});
+
+test('canonical projections refresh the open map after a visit and an archive without reloading @emulator', async ({ page }) => {
+  const { initializeApp, deleteApp } = await import('firebase-admin/app');
+  const { getFirestore, GeoPoint, Timestamp } = await import('firebase-admin/firestore');
+  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8180';
+  const app = initializeApp({ projectId: 'athar-local' }, 'stats-browser');
+  const db = getFirestore(app);
+  const root = db.doc('workspaces/main');
+  try {
+    const sourceZone = (await root.collection('zones').doc('carmes').get()).data()!;
+    const sourceDoor = (await root.collection('doors').doc('pilot-door-002').get()).data()!;
+    const batch = db.batch();
+    batch.set(root.collection('zones').doc('live-stats'), { ...sourceZone, name: 'Relevé en direct' });
+    batch.set(root.collection('buildings').doc('live-building'), { addressLabel: 'Bâtiment de recette', location: new GeoPoint(43.606, 1.445), geohash: sourceDoor.geohash, zoneId: 'live-stats', createdBy: 'admin-1', structureRevision: 0 });
+    batch.set(root.collection('doors').doc('live-door'), { ...sourceDoor, buildingId: 'live-building', zoneId: 'live-stats', revision: 0, lastVisitId: null, lastVisitAt: null, currentStatusId: 'unvisited', active: true });
+    await batch.commit();
+    await signIn(page, 'pilot.admin');
+    await page.goto('/?zone=live-stats');
+    await expect(page.getByTestId('zone-recorded-progress')).toHaveText('0%', { timeout: 20000 });
+    const visitBatch = db.batch();
+    const at = Timestamp.now();
+    visitBatch.set(root.collection('visits').doc('live-visit'), { doorId: 'live-door', doorRevision: 1, statusId: 'retry', authorId: 'admin-1', occurredAt: at, syncedAt: at, note: '' });
+    visitBatch.update(root.collection('doors').doc('live-door'), { revision: 1, lastVisitId: 'live-visit', lastVisitAt: at, currentStatusId: 'retry' });
+    await visitBatch.commit();
+    await expect(page.getByTestId('zone-recorded-progress')).toHaveText('100%', { timeout: 20000 });
+    await root.collection('doors').doc('live-door').update({ active: false });
+    await expect(page.getByTestId('zone-recorded-progress')).toHaveText('—', { timeout: 20000 });
+    await expect(page.getByText('Relevé : Aucune porte décrite dans ce relevé', { exact: true })).toBeVisible();
+  } finally {
+    await deleteApp(app);
+  }
 });
