@@ -67,6 +67,18 @@ afterAll(async () => {
 });
 
 describe('Auth and Functions emulators', () => {
+  it('reserves reconstruction to active administrators and rejects members and suspended admins', async () => {
+    const password = 'Temporary-password-123';
+    await seedActiveMember('stats-admin', 'stats-admin', password);
+    const call = (suffix: string) => callCallable('rebuildZoneStats', 'stats-admin@auth.athar.invalid', password, { workspaceId: 'main' }, `stats-${suffix}`);
+    expect((await call('member')).response.status).toBe(403);
+    await getAuth(app).setCustomUserClaims('stats-admin', { role: 'admin' });
+    await getFirestore(app).doc('workspaces/main/members/stats-admin').update({ role: 'admin', active: false });
+    expect((await call('suspended')).response.status).toBe(403);
+    await getFirestore(app).doc('workspaces/main/members/stats-admin').update({ active: true });
+    expect((await call('active')).response.status).toBe(200);
+  });
+
   it('serves the local callable endpoint without exporting a production health route', async () => {
     const response = await fetch(`http://127.0.0.1:5101/${projectId}/us-central1/createMember`, {
       method: 'POST',

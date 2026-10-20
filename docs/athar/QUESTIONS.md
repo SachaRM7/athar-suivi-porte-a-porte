@@ -155,3 +155,13 @@ Ne pas inventer une palette sombre avant de la valider sur le terrain : elle tou
 les textes et les six statuts. Le thème clair reste l'unique thème des lots actuels. Le mode nuit passe hors
 périmètre et, s'il est rouvert dans un lot dédié, sera un réglage manuel — jamais `prefers-color-scheme` — avec
 validation de contraste et d'usage en conditions nocturnes.
+
+
+## Lot B — opérations restantes hors intégration du code
+
+- Aucun inventaire cloud fourni : présence de données racines inconnue. Garder leur fermeture
+  et leurs fixtures ; ne pas exécuter de migration ni suppression sans sauvegarde et correspondances validées.
+- HYPOTHÈSE : le catalogue d'emprises filtrées est le référentiel de couverture. Sa complétude
+  et son périmètre sont déclarés par l'opérateur ; un extrait de démonstration ne peut pas servir de total.
+- Le producteur utilise un budget de 50 000 documents / 250 zones, avec résultat indisponible
+  au dépassement. Mesurer le volume réel et les lectures avant d'étendre l'usage.

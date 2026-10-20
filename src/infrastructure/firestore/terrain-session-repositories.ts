@@ -133,6 +133,7 @@ export function createTerrainSessionRepositories(input: {
         return cacheZones(requirePreparedOfflineData(await input.remote.zones.list()));
       },
       getStats: (zoneId) => input.remote.zones.getStats(zoneId),
+      subscribeStats: input.remote.zones.subscribeStats?.bind(input.remote.zones),
       async save(zone) {
         await input.zoneWriter.save(zone);
         cacheZones([zone]);

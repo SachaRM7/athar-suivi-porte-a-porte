@@ -1,6 +1,7 @@
 import { GeoPoint, Timestamp, type DocumentData } from 'firebase/firestore';
 import type { Building, Door, Status, Visit, WorkspaceMember, WorkspaceSnapshot, Zone, ZoneStats } from '../../domain/workspace/models';
 import { assertBuilding, assertDoor, assertEntityId, assertStatus, assertVisit, assertZone } from '../../domain/workspace/invariants';
+import { assertZoneStats } from '../../domain/workspace/zone-progress';
 
 export type FirestoreSeedDocument = { path: string; data: DocumentData };
 
@@ -59,7 +60,7 @@ export function fromFirestoreDoor(id: string, data: DocumentData): Door {
     revision: requiredNumber(data, 'revision'),
     lastVisitId: data.lastVisitId,
     // Absente des portes écrites avant WP8 : une porte sans date n'est pas invalide,
-    // elle se lit « jamais vu » comme n'importe quelle porte sans passage.
+    // elle se lit « date inconnue » si un passage existe, jamais « jamais vu ».
     lastVisitAt: data.lastVisitId && data.lastVisitAt instanceof Timestamp ? data.lastVisitAt.toDate().toISOString() : null,
     createdBy: requiredString(data, 'createdBy'),
     // Les anciennes portes n'avaient pas encore ce champ : elles se relisent comme
@@ -153,9 +154,18 @@ export function fromFirestoreZoneStats(zoneId: string, data: DocumentData): Zone
     if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) throw new Error('Zone stats status count must be a non-negative integer.');
     countsByStatus[statusId] = count;
   }
-  const projectedCount = Object.values(countsByStatus).reduce((total, count) => total + count, 0);
-  if (projectedCount > data.doorCount) throw new Error('Zone stats status counts exceed the door count.');
-  return { zoneId, doorCount: data.doorCount, countsByStatus, updatedAt: data.updatedAt.toDate().toISOString() };
+  const stats: ZoneStats = { zoneId, doorCount: data.doorCount, countsByStatus, updatedAt: data.updatedAt.toDate().toISOString() };
+  if (data.schemaVersion !== undefined) {
+    if (data.schemaVersion !== 2) throw new Error('Unsupported zone stats schema.');
+    const fields = ['formulaVersion', 'completeness', 'generation', 'issues', 'visitedDoorCount', 'buildingCount', 'describedBuildingCount', 'visitedBuildingCount', 'detectedBuildingCount', 'describedCatalogueBuildingCount', 'visitedCatalogueBuildingCount', 'outsideCatalogueBuildingCount', 'catalogueVersion', 'geometryHash'] as const;
+    Object.assign(stats, Object.fromEntries(fields.map(field => [field, data[field]])), { schemaVersion: 2 });
+    for (const field of ['sourceReadTime', 'computedAt'] as const) {
+      if (!(data[field] instanceof Timestamp)) throw new Error('Zone stats source date must be a timestamp.');
+      stats[field] = data[field].toDate().toISOString();
+    }
+  }
+  assertZoneStats(stats);
+  return stats;
 }
 
 export function fromFirestoreVisit(id: string, data: DocumentData): Visit {

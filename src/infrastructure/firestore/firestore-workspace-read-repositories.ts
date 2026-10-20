@@ -1,5 +1,6 @@
 import {
   collection,
+  onSnapshot,
   documentId,
   doc,
   getDoc,
@@ -166,9 +167,16 @@ export function createFirestoreWorkspaceReadRepositories(db: Firestore, workspac
           .map((entry) => fromFirestoreZone(entry.id, entry.data()))
           .sort((left, right) => left.name.localeCompare(right.name));
       },
+      subscribeStats(zoneId, receive, onError) {
+        return onSnapshot(doc(db, `${workspace}/zoneStats/${zoneId}`), { includeMetadataChanges: true }, snapshot => {
+          try {
+            receive(snapshot.exists() ? { ...fromFirestoreZoneStats(snapshot.id, snapshot.data()), readSource: snapshot.metadata.fromCache ? 'cache' : 'server' } : null);
+          } catch { onError(); }
+        }, onError);
+      },
       async getStats(zoneId) {
         const snapshot = await readDoc(doc(db, `${workspace}/zoneStats/${zoneId}`));
-        return snapshot.exists() ? fromFirestoreZoneStats(snapshot.id, snapshot.data()) : null;
+        return snapshot.exists() ? { ...fromFirestoreZoneStats(snapshot.id, snapshot.data()), readSource: snapshot.metadata.fromCache ? 'cache' : 'server' } : null;
       }
     },
     buildings: {

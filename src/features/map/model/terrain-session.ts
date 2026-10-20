@@ -1,18 +1,6 @@
 import type { Door } from '../../../domain/workspace/models';
 import type { TraceEntry } from '../../../design/components';
-import type { DoorStatus } from '../../../design/status';
-
-/**
- * Les identifiants Firestore des statuts et les clés du vocabulaire visuel ne portent pas
- * les mêmes noms. La table reste ici, au seul endroit qui dessine une trace de sortie.
- */
-const TRACE_STATUS: Readonly<Record<string, DoorStatus>> = {
-  contacted: 'open',
-  retry: 'away',
-  linked: 'linked',
-  'do-not-return': 'dnd',
-  locked: 'locked'
-};
+import { isWorkspaceStatusId, WORKSPACE_VISUAL_STATUS } from '../../../domain/workspace/status-ids';
 
 /** Au-delà de ce silence entre deux portes, la sortie a marqué une pause. */
 const PAUSE_AFTER_MINUTES = 20;
@@ -40,12 +28,12 @@ export function elapsedLabel(milliseconds: number): string {
 }
 
 /**
- * La sortie du jour se lit sur les portes elles-mêmes : celles dont le dernier passage
+ * L’activité du jour (derniers passages connus, tous auteurs) se lit sur les portes elles-mêmes : celles dont le dernier passage
  * date d'aujourd'hui. Aucune donnée de session n'est stockée à côté — le passage fait foi.
  */
 export function terrainSession(doors: readonly Door[], now: Date = new Date()): TerrainSession {
   const marked = doors
-    .filter((door) => door.lastVisitAt !== null && door.currentStatusId !== 'unvisited')
+    .filter((door) => door.active && door.lastVisitAt !== null && isWorkspaceStatusId(door.currentStatusId) && door.currentStatusId !== 'unvisited')
     .map((door) => ({ at: new Date(door.lastVisitAt!), statusId: door.currentStatusId }))
     .filter((entry) => !Number.isNaN(entry.at.getTime()) && sameDay(entry.at, now))
     .sort((left, right) => left.at.getTime() - right.at.getTime());
@@ -56,7 +44,7 @@ export function terrainSession(doors: readonly Door[], now: Date = new Date()): 
   marked.forEach((entry, index) => {
     const previous = marked[index - 1];
     if (previous && entry.at.getTime() - previous.at.getTime() > PAUSE_AFTER_MINUTES * 60_000) trace.push('pause');
-    trace.push(TRACE_STATUS[entry.statusId] ?? 'open');
+    if (isWorkspaceStatusId(entry.statusId)) trace.push(WORKSPACE_VISUAL_STATUS[entry.statusId]);
   });
 
   const span = marked[marked.length - 1]!.at.getTime() - marked[0]!.at.getTime();

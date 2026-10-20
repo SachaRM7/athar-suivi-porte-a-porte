@@ -1,3 +1,4 @@
+import { hasRecordedVisit } from '../../../domain/workspace/status-ids';
 import type { Door } from '../../../domain/workspace/models';
 
 export type FloorProgress = {
@@ -18,7 +19,7 @@ export function floorProgress(doors: readonly Door[]): readonly FloorProgress[] 
   }
   return [...floors.entries()]
     .map(([floor, floorDoors]) => {
-      const treatedCount = floorDoors.filter((door) => door.currentStatusId !== 'unvisited').length;
+      const treatedCount = floorDoors.filter(hasRecordedVisit).length;
       return { floor, doorCount: floorDoors.length, treatedCount, ratio: floorDoors.length === 0 ? 0 : treatedCount / floorDoors.length };
     })
     .sort((left, right) => left.floor - right.floor);
@@ -26,7 +27,7 @@ export function floorProgress(doors: readonly Door[]): readonly FloorProgress[] 
 
 export function overallProgress(doors: readonly Door[]): FloorProgress {
   const activeDoors = doors.filter((door) => door.active);
-  const treatedCount = activeDoors.filter((door) => door.currentStatusId !== 'unvisited').length;
+  const treatedCount = activeDoors.filter(hasRecordedVisit).length;
   return { floor: 0, doorCount: activeDoors.length, treatedCount, ratio: activeDoors.length === 0 ? 0 : treatedCount / activeDoors.length };
 }
 

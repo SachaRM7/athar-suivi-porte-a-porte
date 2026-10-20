@@ -17,6 +17,15 @@ workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
 mkdir -p "$(dirname "$output")"
 
+# Optional complete catalogue is built from the untiled source, never from visible tiles.
+# Extent and completeness must be asserted by the data operator, not guessed from file size.
+if [[ -n "${ATHAR_CATALOGUE_EXTENT:-}" ]]; then
+  catalogue_flags=()
+  if [[ "${ATHAR_CATALOGUE_COMPLETE:-false}" == "true" ]]; then catalogue_flags+=(--complete); fi
+  node scripts/carto/catalogue.mjs --input "$input" --output "${output%.pmtiles}.catalogue.json" \
+    --extent "$ATHAR_CATALOGUE_EXTENT" "${catalogue_flags[@]}"
+fi
+
 # Tippecanoe de cette installation écrit un conteneur MBTiles ; l'extension
 # doit donc rester .mbtiles jusqu'à la conversion explicite par pmtiles.
 python3 scripts/carto/prepare_tile_features.py \

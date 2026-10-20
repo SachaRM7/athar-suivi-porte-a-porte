@@ -10,6 +10,6 @@
     "firebase-functions": "latest"
   },
   "scripts": {
-    "test": "node --test test/exports.test.js"
+    "test": "node --test test/*.test.js"
   }
 }

@@ -54,7 +54,7 @@ for (const name of exported) {
 const release = {
   commit: process.env.GITHUB_SHA ?? (() => { try { return String(execFileSync('git', ['rev-parse', 'HEAD'])).trim(); } catch { return null; } })(),
   rulesSha256: sha256('firestore.rules'),
-  functionsSha256: sha256('functions/index.js', 'functions/runtime-mode.js'),
+  functionsSha256: sha256(...readdirSync('functions').filter(name => name.endsWith('.js') || name === 'package-lock.json').sort().map(name => join('functions', name))),
   productionFunctions: exported,
   callablesUsedByFrontend: called
 };

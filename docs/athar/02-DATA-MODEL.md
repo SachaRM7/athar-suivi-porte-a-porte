@@ -1,5 +1,11 @@
 # Athar — modèle de données
 
+> **Schéma actif :** `workspaces/{workspaceId}/{buildings,doors,visits,…}`.
+> Le [contrat canonique et le plan du lot B](06-VERITE-DONNEES.md) font référence pour
+> l'application actuelle. Les collections racines et dérivations françaises décrites
+> ci-dessous constituent la spécification historique WP2 ; leurs accès clients sont
+> fermés depuis le lot A. Elles ne doivent pas servir à implémenter les projections du workspace.
+
 ## Décision structurante
 
 Un bâtiment détecté sur la carte **n'a aucun document en base** tant que personne n'y est allé.
