@@ -104,3 +104,10 @@ C'est le seul endroit où l'interface se permet de l'audace. Tout le reste reste
 ## Légende
 
 Deux registres séparés par un filet : d'abord les six statuts, puis en dessous le marqueur sœurs (anneau rose vide, pas un disque plein). Ne jamais présenter le marqueur comme un septième statut.
+
+
+### Agrandissement du texte — lot D
+
+Les tailles nominales ci-dessus sont implémentées en rem dans `tokens.css` (référence
+16 px : 15 px = 0,9375 rem). Le rendu par défaut reste identique, mais le texte suit
+la préférence de taille du navigateur. Ne pas fixer la taille racine en pixels.

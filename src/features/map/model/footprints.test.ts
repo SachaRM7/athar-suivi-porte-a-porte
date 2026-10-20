@@ -63,9 +63,12 @@ describe('dominantStatusId', () => {
 });
 
 describe('footprintState', () => {
+  it('does not classify unread footprints as unvisited', () => {
+    expect(footprintState('unknown', [1.447, 43.6065], context({ complete: false })).known).toBe(false);
+  });
   it('leaves a footprint without a Firestore document untracked and grey', () => {
     const state = footprintState('PG31CARMES002', [1.447, 43.6065], context());
-    expect(state).toEqual({ inZone: true, tracked: false, color: '#CDD3CD', sisters: false });
+    expect(state).toEqual({ inZone: true, known: true, tracked: false, color: '#CDD3CD', sisters: false });
   });
 
   it('colours a tracked footprint with its dominant status', () => {
@@ -73,7 +76,7 @@ describe('footprintState', () => {
       buildings: new Map([['building-dalbad', building('building-dalbad')]]),
       doorsByBuilding: new Map([['building-dalbad', [door({ id: 'd1', buildingId: 'building-dalbad', currentStatusId: 'retry' })]]])
     }));
-    expect(state).toEqual({ inZone: true, tracked: true, color: '#C87A0A', sisters: false });
+    expect(state).toEqual({ inZone: true, known: true, tracked: true, color: '#C87A0A', sisters: false });
   });
 
   it('keeps a described building without any passage grey', () => {

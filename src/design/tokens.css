@@ -63,15 +63,15 @@
   --font-ar: "Noto Kufi Arabic", serif;                   /* أثر du wordmark */
 
   /* ---- échelle typographique — 10 / 11.5 / 12.5 / 13.5 / 15 / 17 / 19. Pas d'autres tailles. ---- */
-  --t-10: 10px;
-  --t-115: 11.5px;
-  --t-125: 12.5px;
-  --t-135: 13.5px;
-  --t-15: 15px;
-  --t-17: 17px;
-  --t-19: 19px;
+  --t-10: 0.625rem;
+  --t-115: 0.71875rem;
+  --t-125: 0.78125rem;
+  --t-135: 0.84375rem;
+  --t-15: 0.9375rem;
+  --t-17: 1.0625rem;
+  --t-19: 1.1875rem;
   /* Écran d'authentification — valeur fixée par 08-REFONTE-CONNEXION.md. */
-  --t-auth-title: 25px;
+  --t-auth-title: 1.5625rem;
 
   /* ---- rayons des composants ---- */
   --r-door: 10px;     /* case de porte */

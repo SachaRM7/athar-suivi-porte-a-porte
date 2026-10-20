@@ -1,3 +1,5 @@
+import { MapLoadingBoundary } from './MapLoadingBoundary';
+import { readTask } from '../../../shared/async/read-task';
 import { lazy, Suspense, useCallback, useMemo, useState, type ReactElement } from 'react';
 import type { Building } from '../../../domain/workspace/models';
 import { MemoryOutbox } from '../../../domain/sync/sync-service';
@@ -7,7 +9,7 @@ import { demoWorkspace } from '../../../infrastructure/demo/demo-workspace';
 import { createMemoryWorkspaceRepositories } from '../../../infrastructure/memory/workspace-repositories';
 import { useOpenedBuilding } from '../model/use-opened-building';
 
-const WorkspaceMap = lazy(async () => ({ default: (await import('./WorkspaceMap')).WorkspaceMap }));
+const WorkspaceMap = lazy(async () => ({ default: (await readTask(import('./WorkspaceMap'), undefined, 30_000)).WorkspaceMap }));
 
 /**
  * Route de régression : elle travaille sur le jeu de démonstration, donc sur l'échantillon
@@ -27,7 +29,7 @@ export function MapPreview(): ReactElement {
   }, [opened]);
   return (
     <>
-      <Suspense fallback={<div className="workspace-map-loading" aria-label="Chargement de la carte" />}>
+      <MapLoadingBoundary><Suspense fallback={<div className="workspace-map-loading" role="status">Chargement de la carte…</div>}>
         <WorkspaceMap
           authorId="member-1"
           canCreateBuildings
@@ -37,7 +39,7 @@ export function MapPreview(): ReactElement {
           reloadToken={dataVersion}
           repositories={repositories}
         />
-      </Suspense>
+      </Suspense></MapLoadingBoundary>
       <BuildingVisitSheet
         authorId="member-1"
         building={opened.building}

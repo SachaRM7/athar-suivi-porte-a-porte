@@ -1,4 +1,5 @@
-import { useState, type ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
+import { useModalFocus } from '../../design/hooks/use-modal-focus';
 import type { WorkspaceMember } from '../../domain/workspace/models';
 
 type InitialAdminSettingsProps = {
@@ -13,6 +14,8 @@ export function InitialAdminSettings({ allowInitialAdminActivation, member, onCl
   const [message, setMessage] = useState('');
   const [activating, setActivating] = useState(false);
   const [code, setCode] = useState('');
+  const panel = useRef<HTMLElement>(null);
+  useModalFocus(panel, true, onClose);
   const revealed = allowInitialAdminActivation && taps >= 10;
 
   async function activate(): Promise<void> {
@@ -28,8 +31,8 @@ export function InitialAdminSettings({ allowInitialAdminActivation, member, onCl
   }
 
   return <div className="structure-sheet-layer">
-    <button aria-label="Fermer les reglages" className="structure-sheet-backdrop" onClick={onClose} type="button" />
-    <section aria-label="Reglages" className="structure-sheet" role="dialog">
+    <button aria-label="Fermer les reglages" tabIndex={-1} aria-hidden="true" className="structure-sheet-backdrop" onClick={onClose} type="button" />
+    <section aria-label="Reglages" className="structure-sheet" role="dialog" aria-modal="true" tabIndex={-1} ref={panel}>
       <header><div><p className="eyebrow">Compte</p><h3>Reglages</h3></div><button aria-label="Fermer les reglages" className="icon-action" onClick={onClose} type="button">X</button></header>
       <p>{member.displayName} - {member.role === 'admin' ? 'administrateur' : 'membre'}</p>
       <button aria-label="Version de l application" className="text-button" onClick={() => setTaps((value) => Math.min(10, value + 1))} type="button">Athar V1.0</button>

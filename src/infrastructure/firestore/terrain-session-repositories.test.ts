@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryDoorMarkerOutbox } from '../../domain/sync/door-marker-outbox';
 import { MemoryOutbox } from '../../domain/sync/sync-service';
 import type { WorkspaceReadRepositories } from '../../domain/workspace/repositories';
 import { demoWorkspace } from '../demo/demo-workspace';
@@ -10,13 +11,14 @@ const member = demoWorkspace.members.find((entry) => entry.id === 'member-1')!;
 
 afterEach(() => vi.unstubAllGlobals());
 
-function setup(remote: WorkspaceReadRepositories, outbox = new MemoryOutbox()) {
+function setup(remote: WorkspaceReadRepositories, outbox = new MemoryOutbox(), markers = new MemoryDoorMarkerOutbox()) {
   return {
     outbox,
     repositories: createTerrainSessionRepositories({
       remote,
       member,
       outbox,
+      markers,
       structureWriter: { apply: async () => { throw new Error('not used'); } },
       zoneWriter: { save: async () => { throw new Error('not used'); }, delete: async () => { throw new Error('not used'); } },
       buildingWriter: { create: async () => { throw new Error('not used'); }, delete: async () => { throw new Error('not used'); } }
@@ -161,3 +163,18 @@ describe('terrain session repositories', () => {
     await expect(repositories.statuses.list()).rejects.toThrow('Preparez cette zone');
   });
 });
+
+ it('recovers a pending passage and sensitive profile after the session cache evicts the door', async () => {
+   const door = demoWorkspace.doors.find(value => value.id === 'door-dalbad-02')!;
+   const remote = createMemoryWorkspaceRepositories({ ...demoWorkspace, doors: [door, ...Array.from({ length: 2001 }, (_, index) => ({ ...door, id: `extra-${index}` }))] });
+   const outbox = new MemoryOutbox(); const markers = new MemoryDoorMarkerOutbox();
+   const { repositories } = setup(remote, outbox, markers);
+   await outbox.add({ commandId: 'pending', doorId: door.id, authorId: member.id, expectedRevision: 0, createdAt: '2026-10-20T12:00:00Z', statusId: 'retry', note: 'conservé' });
+   await markers.add({ commandId: 'profile', doorId: door.id, authorId: member.id, createdAt: '2026-10-20T12:00:00Z', sisters: true, foyer: 'famille' });
+   await repositories.doors.get(door.id);
+   for (let index = 0; index < 2001; index++) await repositories.doors.get(`extra-${index}`);
+   const fetch = vi.spyOn(remote.doors, 'get');
+   await expect(repositories.doors.get(door.id)).resolves.toMatchObject({ revision: 1, currentStatusId: 'retry', sisters: true, foyer: 'famille' });
+   expect(fetch).toHaveBeenCalledWith(door.id);
+   expect(await repositories.visits.listByDoor(door.id)).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'pending', note: 'conservé' })]));
+ });
