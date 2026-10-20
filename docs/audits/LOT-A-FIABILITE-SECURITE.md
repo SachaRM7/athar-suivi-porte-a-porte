@@ -113,7 +113,7 @@ npx firebase functions:delete registerMember claimInitialAdmin --project athar-d
 ### A5 — Mise en production — commit `a28ba93`
 
 - `npm run build:deploy` = `check-deploy-config.mjs` (4 variables Web présentes, projet = `.firebaserc`/`ATHAR_EXPECTED_PROJECT_ID`, pas d'émulateur, pas de laboratoire, pas de clé de recette, Functions de production = `createMember` seulement ; valeurs jamais imprimées) → build → `verify-build.mjs --deploy` (laboratoires absents, toutes les ressources précachées par `sw.js` présentes, manifeste et icônes, MapLibre différé, projet attendu présent, aucune trace `athar-local`) → `check-backend-contract.mjs` (callables appelées par le frontend ⊂ Functions de production, hors `claimInitialAdmin` réservé à l'émulateur ; écart règles/Functions vs `deploy/backend-state.json` signalé ; écrit `dist/athar-release.json`).
-- Workflow : job `verifier` sur toute poussée et PR (lint, `tsc -b`, unitaires, Functions, scripts CI, règles + Auth + Functions sur émulateurs, build vérifié, e2e critiques émulateur) ; `publier` (`needs: verifier`, `main` uniquement) → `build:deploy` → Hosting seul. Aucune publication de règles ni de Functions.
+- Workflow : job `verifier` sur les poussées sur `main` et les PR (lint, `tsc -b`, unitaires, Functions, scripts CI, règles + Auth + Functions sur émulateurs, build vérifié, e2e critiques émulateur). Depuis la validation d'intégration, `publier` exige un lancement manuel sur `main` avec `publish=true`, après succès de `verifier` → `build:deploy` → Hosting seul. Aucune publication de règles ni de Functions.
 - Commandes Linux : `test:emulator:ci`, `test:e2e:emulator:ci`, `test:functions`, `typecheck` (les scripts PowerShell restent pour Windows).
 
 #### Cohérence des versions (A5.3)
@@ -125,7 +125,7 @@ autorisée de règles ou de Functions, y recopier les empreintes de `athar-relea
 
 #### Procédure de déploiement et de retour arrière
 
-1. PR → `verifier` vert → fusion sur `main` → `publier` (Hosting seul).
+1. PR → `verifier` vert → fusion sur `main` sans publication. Lorsqu'une publication est autorisée : lancer manuellement le workflow sur `main` avec `publish` coché ; `verifier` doit réussir avant `publier` (Hosting seul).
 2. Règles (autorisation explicite) : `npx firebase deploy --only firestore:rules --project athar-dev31`, puis mettre à jour `deploy/backend-state.json`. **Les règles de ce lot sont rétrocompatibles avec le frontend actuel** ; les publier ferme le schéma historique et la mobilité des bâtiments.
 3. Functions (autorisation explicite) : `npx firebase deploy --only functions:createMember --project athar-dev31`, puis A3.4.
 4. Retour arrière Hosting : console Firebase → Hosting → historique → « Restaurer », ou `npx firebase hosting:clone athar-dev31:live@<version> athar-dev31:live`. Règles : redéployer `firestore.rules` du commit précédent. Functions : redéployer la version précédente (aucune donnée n'est migrée par ce lot).
@@ -156,7 +156,7 @@ autorisée de règles ou de Functions, y recopier les empreintes de `athar-relea
 - Inventaire et éventuelle suppression des Functions `registerMember` / `claimInitialAdmin` en ligne (A3.4).
 - Publication des nouvelles règles Firestore.
 - Renseigner `deploy/backend-state.json` après publication.
-- Le workflow modifié s'exécutera à la prochaine fusion sur `main` et publiera Hosting si tout est vert.
+- La fusion sur `main` exécute uniquement la validation. Hosting exige désormais un lancement manuel avec `publish=true`.
 
 ## 5. État des tests (commandes réellement exécutées, Linux, Node 22.22.0, Java 21)
 

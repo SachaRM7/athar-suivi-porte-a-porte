@@ -1,9 +1,9 @@
 # Contrôle puis publie Athar sur Firebase Hosting (lot A5).
 #
-# - Toute poussée et toute pull request passent par le job `verifier` : lint, typage, tests
+# - Toute poussée sur main et toute pull request passent par le job `verifier` : lint, typage, tests
 #   unitaires, Functions, règles Firestore et Auth sur émulateurs, parcours critiques
 #   (inscription fermée, routes techniques absentes, purge de déconnexion), build vérifié.
-# - Seule une poussée sur `main` (ou un lancement manuel) publie, et seulement si
+# - Seul un lancement manuel sur `main` avec `publish` coché publie, et seulement si
 #   `verifier` est vert ET si le build de déploiement passe ses gardes de configuration.
 # - Ce workflow ne publie QUE Hosting. Règles Firestore, index et Functions se publient à
 #   part, sur autorisation explicite (procédure : docs/audits/LOT-A-FIABILITE-SECURITE.md).
@@ -21,6 +21,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publier sur Firebase Hosting après validation
+        type: boolean
+        required: true
+        default: false
 
 concurrency:
   group: deploy-hosting-${{ github.ref }}
@@ -68,7 +74,7 @@ jobs:
 
   publier:
     needs: verifier
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
