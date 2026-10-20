@@ -44,11 +44,11 @@ test('276 buildings stay accessible in bounded pages, including after closing a 
     await expect(page.locator('.building-row')).toHaveCount(index === 11 ? 1 : 25);
     await expect(page.locator('.terrain-pagination')).toContainText(`Page ${index + 1}`);
   }
-  const last = page.getByRole('button', { name: 'Adresse de recette 275', exact: true });
+  const last = page.getByRole('button', { name: /^Adresse de recette 275/ });
   await last.click();
   await expect(page.getByRole('heading', { name: 'Bâtiment non décrit' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(last).toBeVisible(); await expect(page.locator('.terrain-pagination')).toContainText('Page 12');
   await page.getByRole('button', { name: 'Précédente', exact: true }).click(); await expect(page.locator('.building-row')).toHaveCount(25);
-  await expect(page.getByRole('button', { name: 'Adresse de recette 250', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Adresse de recette 250/ })).toBeVisible();
 });
