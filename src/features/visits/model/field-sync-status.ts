@@ -2,17 +2,19 @@ import type { OutboxEntry } from '../../../domain/doors/contracts';
 import type { SyncDeferralReason } from '../../../domain/sync/sync-service';
 
 /**
- * Les cinq états qu'un frère doit pouvoir distinguer d'un coup d'œil (lot A1.3).
+ * États de sauvegarde visibles sur le terrain (lots A et C).
  *
  * - `synced` : tout ce qui a été saisi est confirmé par le serveur ;
  * - `pending` : enregistré durablement sur l'appareil, envoi en attente ;
  * - `deferred` : envoi temporairement impossible (réseau, session, serveur) ;
  * - `attention` : conflit ou rejet, une décision humaine est nécessaire ;
  * - `storage-error` : le stockage local ne répond pas — rien de neuf n'est sauvegardé.
+ * - `checking` : la file locale n'a pas encore été relue ;
+ * - `save-error` : la dernière saisie a été refusée localement et doit être reprise.
  *
  * Aucun UUID, aucune révision : ce sont des détails internes.
  */
-export type FieldSyncPhase = 'synced' | 'pending' | 'deferred' | 'attention' | 'storage-error';
+export type FieldSyncPhase = 'checking' | 'synced' | 'pending' | 'deferred' | 'attention' | 'storage-error' | 'save-error';
 
 export type FieldSyncSummary = {
   phase: FieldSyncPhase;
@@ -21,6 +23,8 @@ export type FieldSyncSummary = {
 };
 
 export type FieldSyncInput = {
+  checking?: boolean;
+  localSaveFailure?: string | null;
   online: boolean;
   /** `null` quand la file locale n'a pas pu être lue. */
   entries: readonly OutboxEntry[] | null;
@@ -35,6 +39,8 @@ function plural(count: number, singular: string, pluralForm: string): string {
 }
 
 export function summarizeFieldSync(input: FieldSyncInput): FieldSyncSummary {
+  if (input.localSaveFailure) return { phase: 'save-error', label: 'Saisie non enregistrée', detail: input.localSaveFailure };
+  if (input.checking) return { phase: 'checking', label: 'Vérification des saisies…', detail: null };
   if (input.entries === null) {
     return {
       phase: 'storage-error',
@@ -53,7 +59,7 @@ export function summarizeFieldSync(input: FieldSyncInput): FieldSyncSummary {
   const waiting = input.entries.length + input.pendingProfiles;
   if (waiting === 0) {
     return input.online
-      ? { phase: 'synced', label: 'À jour', detail: null }
+      ? { phase: 'synced', label: 'À jour', detail: 'Les saisies de cet appareil sont confirmées par le serveur.' }
       : { phase: 'synced', label: 'Hors ligne', detail: 'Aucune saisie en attente sur cet appareil.' };
   }
   const what = plural(waiting, 'modification enregistrée sur l’appareil', 'modifications enregistrées sur l’appareil');

@@ -15,6 +15,8 @@ import { IndexedDbDoorMarkerOutbox, IndexedDbOutbox } from '../../../infrastruct
 import { useFieldVisitSync } from '../../visits/model/use-field-visit-sync';
 import { useOpenedBuilding } from '../model/use-opened-building';
 import { useGuardedSignOut } from '../../auth/components/GuardedSignOut';
+import { ZonePreparationControl } from '../../offline/components/ZonePreparationControl';
+import { FieldSyncNotice } from '../../visits/components/FieldSyncNotice';
 
 const WorkspaceMap = lazy(async () => ({ default: (await import('./WorkspaceMap')).WorkspaceMap }));
 
@@ -63,6 +65,22 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
   const guardedSignOut = useGuardedSignOut({ onSynchronize: sync.synchronize });
   const requestSignOut = guardedSignOut.request;
   const opened = useOpenedBuilding(repositories);
+  const [issueMessage, setIssueMessage] = useState<string | null>(null);
+  async function openSyncIssue() {
+    try {
+      const issue = sync.entries.find(entry => entry.state !== 'pending');
+      const doorId = sync.failedDoorId ?? issue?.doorId;
+      const door = doorId ? await repositories.doors.get(doorId) : null;
+      const building = door ? await repositories.buildings.get(door.buildingId) : null;
+      if (!building) throw new Error('unavailable');
+      setIssueMessage(null);
+      opened.select(building, { persisted: true });
+    } catch {
+      setIssueMessage(sync.failedDoorId
+        ? 'Le bâtiment concerné est indisponible. Reconnecte-toi pour le retrouver. La dernière saisie n’a pas été enregistrée.'
+        : 'Le bâtiment concerné est indisponible. Reconnecte-toi pour le retrouver ; le passage reste conservé sur cet appareil.');
+    }
+  }
   // La structure vient d'être écrite : la suggestion cadastrale n'a plus rien à proposer.
   // La structure vient de changer : la liste et le compteur de la carte doivent suivre,
   // sinon ils gardent « 4 portes » sur un bâtiment qu'on vient de vider.
@@ -90,6 +108,8 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
           onBuildingSelect={opened.select}
           reloadToken={dataVersion}
           repositories={repositories}
+          syncNotice={!opened.building && <><FieldSyncNotice sync={sync} onResolve={() => void openSyncIssue()} />{issueMessage && <p role="status">{issueMessage}</p>}</>}
+          renderPreparation={zone => <ZonePreparationControl key={`${member.id}:${zone.id}`} zone={zone} userId={member.id} />}
         />
       </Suspense>
       <BuildingVisitSheet

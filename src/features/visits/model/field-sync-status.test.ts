@@ -9,6 +9,13 @@ const entry = {
 const base = { online: true, entries: [], pendingProfiles: 0, deferral: null, failure: null };
 
 describe('field sync summary', () => {
+  it('does not announce server confirmation before reading the local outbox', () => {
+    expect(summarizeFieldSync({ ...base, checking: true })).toMatchObject({ phase: 'checking', label: 'Vérification des saisies…' });
+    expect(summarizeFieldSync(base).detail).toContain('confirmées par le serveur');
+  });
+  it('keeps a failed save visible even when the outbox is readable and empty', () => {
+    expect(summarizeFieldSync({ ...base, localSaveFailure: 'Rien n’a été enregistré.' })).toMatchObject({ phase: 'save-error', label: 'Saisie non enregistrée' });
+  });
   it('distinguishes the five states without exposing UUIDs or revisions', () => {
     const summaries = [
       summarizeFieldSync(base),

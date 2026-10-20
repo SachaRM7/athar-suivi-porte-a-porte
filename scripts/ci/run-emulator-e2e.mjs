@@ -36,3 +36,6 @@ run('npx playwright test tests/field-sync-emulator.spec.ts --grep-invert "deskto
 // fixture terrain illisible : elles ne sont injectées que pour ce dernier parcours.
 run('node scripts/seed-playwright-emulator.mjs --with-regressions');
 run('npx playwright test tests/field-sync-emulator.spec.ts --grep "desktop dashboard"');
+// La recette admin supprime volontairement un statut ; repartir d'une configuration valide.
+run('node scripts/seed-playwright-emulator.mjs');
+run('npx playwright test tests/terrain-preparation-emulator.spec.ts');

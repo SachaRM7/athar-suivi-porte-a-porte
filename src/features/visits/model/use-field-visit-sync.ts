@@ -8,7 +8,7 @@ import { environment } from '../../../app/config/environment';
 import { firestoreRestAuthFor, getFirebaseClient } from '../../../infrastructure/firebase/client';
 import { FirestoreDoorGateway } from '../../../infrastructure/firestore/firestore-door-gateway';
 import { FirestoreDoorMarkerGateway } from '../../../infrastructure/firestore/firestore-door-marker-gateway';
-import { summarizeFieldSync, type FieldSyncSummary } from './field-sync-status';
+import { localWriteErrorMessage, summarizeFieldSync, type FieldSyncSummary } from './field-sync-status';
 
 export type FieldVisitSync = {
   online: boolean;
@@ -17,6 +17,8 @@ export type FieldVisitSync = {
   syncing: boolean;
   /** État lisible de la sauvegarde : appareil, serveur, attente, conflit ou panne de stockage. */
   status: FieldSyncSummary;
+  failedDoorId: string | null;
+  reportLocalSave(doorId: string, error?: unknown): void;
   synchronize(): Promise<void>;
   reapplyConflict(commandId: string): Promise<void>;
   abandonConflict(commandId: string): Promise<void>;
@@ -38,6 +40,13 @@ export function useFieldVisitSync(
   repositories: WorkspaceRepositories
 ): FieldVisitSync {
   const [online, setOnline] = useState(browserOnline);
+  const [checking, setChecking] = useState(true);
+  const [localSaveFailure, setLocalSaveFailure] = useState<{ doorId: string; message: string } | null>(null);
+  const reportLocalSave = useCallback((doorId: string, error?: unknown) => {
+    setLocalSaveFailure(current => error
+      ? { doorId, message: localWriteErrorMessage(error) }
+      : current?.doorId === doorId ? null : current);
+  }, []);
   /** `null` : la file locale n'a pas pu être lue, ce qui n'est pas « rien en attente ». */
   const [entries, setEntries] = useState<readonly OutboxEntry[] | null>([]);
   const [pendingProfiles, setPendingProfiles] = useState(0);
@@ -71,6 +80,8 @@ export function useFieldVisitSync(
     } catch {
       // Une file illisible n'est jamais affichée comme vide : l'état passe en panne de stockage.
       setEntries(null);
+    } finally {
+      setChecking(false);
     }
   }, [markers, outbox]);
 
@@ -154,17 +165,20 @@ export function useFieldVisitSync(
     };
   }, [refresh, synchronize]);
 
-  // Serveur en difficulté ou réponse inattendue : nouvel essai automatique, sans perte.
+  // `online` peut précéder la disponibilité du transport. Un fetch refusé doit être
+  // réessayé même sans nouvel événement réseau ; les refus de session restent explicites.
+  // L'intervalle survit à deux échecs identiques, contrairement à un timeout dépendant
+  // uniquement d'une raison d'échec dont la valeur ne change pas.
   useEffect(() => {
-    if (deferral !== 'server' && !failure) return undefined;
-    const retry = window.setTimeout(() => { if (browserOnline()) void synchronize(); }, 30_000);
-    return () => window.clearTimeout(retry);
-  }, [deferral, failure, synchronize]);
+    if (!online || (deferral !== 'offline' && deferral !== 'server' && !failure)) return undefined;
+    const retry = window.setInterval(() => { if (browserOnline()) void synchronize(); }, deferral === 'offline' ? 5_000 : 30_000);
+    return () => window.clearInterval(retry);
+  }, [deferral, failure, online, synchronize]);
 
   const status = useMemo(
-    () => summarizeFieldSync({ online, entries, pendingProfiles, deferral, failure }),
-    [deferral, entries, failure, online, pendingProfiles]
+    () => summarizeFieldSync({ checking, localSaveFailure: localSaveFailure?.message, online, entries, pendingProfiles, deferral, failure }),
+    [checking, localSaveFailure, deferral, entries, failure, online, pendingProfiles]
   );
 
-  return { online, entries: entries ?? [], reconciledDoors, syncing, status, synchronize, reapplyConflict, abandonConflict, refresh };
+  return { online, entries: entries ?? [], reconciledDoors, syncing, status, failedDoorId: localSaveFailure?.doorId ?? null, reportLocalSave, synchronize, reapplyConflict, abandonConflict, refresh };
 }

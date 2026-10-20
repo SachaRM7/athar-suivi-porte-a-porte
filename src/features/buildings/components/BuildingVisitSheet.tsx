@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import type { Outbox } from '../../../domain/sync/outbox';
 import type { Building, Door, DoorFoyer, Status, Visit } from '../../../domain/workspace/models';
 import type { DoorStructureTarget } from '../../../domain/workspace/building-structure';
@@ -101,7 +101,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const [doorVisits, setDoorVisits] = useState<readonly (Visit & { authorName: string })[]>([]);
   const [note, setNote] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
-  const [message, setMessage] = useState('A jour localement.');
+  const [message, setMessage] = useState('Choisis une porte pour enregistrer un passage.');
   const [trustedDevice, setTrustedDeviceState] = useState(isTrustedDevice);
   const [structureMode, setStructureMode] = useState<'quick-floor' | 'manage' | null>(null);
   const [quickDoorCount, setQuickDoorCount] = useState('4');
@@ -126,10 +126,18 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const [structurePending, setStructurePending] = useState(false);
   /** Correction d'un « Ne pas déranger » en attente de confirmation. */
   const [dndCorrection, setDndCorrection] = useState<{ doorId: string; statusId: string } | null>(null);
+  const loadRequest = useRef(0);
+  const historyRequest = useRef(0);
+  const savingPassage = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [historyState, setHistoryState] = useState<'loading' | 'ready' | 'error'>('ready');
 
   const refresh = useCallback(async () => {
     if (!building) return;
+    const request = ++loadRequest.current;
     setStructureLoadedBuildingId(null);
+    setLoadError(false);
     setConfirmStructureReset(false);
     const [nextDoors, allStructureDoors, nextStatuses, entries] = await Promise.all([
       repositories.doors.listByBuilding(building.id),
@@ -139,6 +147,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       // qui vient du serveur. Le compteur repasse temporairement à zéro.
       outbox.all().catch(() => [])
     ]);
+    if (request !== loadRequest.current) return;
     const sorted = [...nextDoors].sort((left, right) => left.floor - right.floor || compareDoorsForFloor(left, right));
     setDoors(sorted);
     setStructureDoors([...allStructureDoors].sort((left, right) => left.floor - right.floor || compareDoorsForFloor(left, right)));
@@ -149,13 +158,21 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   }, [building, canEditStructure, outbox, repositories]);
 
   useEffect(() => {
+    let active = true;
+    const loadSequence = loadRequest;
+    const historySequence = historyRequest;
     queueMicrotask(() => {
+      if (!active) return;
       void refresh().catch((error) => {
+        if (!active) return;
         setDoors([]);
         setStructureDoors([]);
-        setMessage(error instanceof Error ? error.message : 'Donnees du batiment indisponibles.');
+        setLoadError(true);
+        setMessage('Données du bâtiment indisponibles. Vérifie la connexion ou la préparation hors ligne, puis réessaie.');
+        void error;
       });
     });
+    return () => { active = false; loadSequence.current++; historySequence.current++; };
   }, [refresh]);
 
   useEffect(() => {
@@ -221,10 +238,10 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       return `${floorIndex}${index + 1}`.padStart(2, '0');
     }));
   }, [floorCount, doorsPerFloor, numbering]);
-  const paletteDoor = doors.find((door) => door.id === openPaletteDoorId) ?? null;
-  const selectedEntry = sync?.entries.find((entry) => entry.doorId === selectedDoorId && entry.state !== 'pending')
-    ?? sync?.entries.find((entry) => entry.state !== 'pending')
-    ?? sync?.entries.find((entry) => entry.doorId === selectedDoorId && entry.state === 'pending');
+  const paletteDoor = structureLoadedBuildingId === building?.id ? doors.find((door) => door.id === openPaletteDoorId) ?? null : null;
+  const selectedEntry = sync?.entries.find((entry) => doors.some(door => door.id === entry.doorId) && entry.doorId === selectedDoorId && entry.state !== 'pending')
+    ?? sync?.entries.find((entry) => doors.some(door => door.id === entry.doorId) && entry.state !== 'pending')
+    ?? sync?.entries.find((entry) => doors.some(door => door.id === entry.doorId) && entry.doorId === selectedDoorId && entry.state === 'pending');
   const pendingEntries = sync?.entries.filter((entry) => entry.state === 'pending').length ?? pendingCount;
   const syncLabel = !sync ? (pendingEntries > 0 ? `${pendingEntries} changement(s) en attente` : 'À jour') : sync.status.label;
   const syncDetail = sync?.status.detail ?? null;
@@ -232,11 +249,11 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const loadDoorVisits = useCallback(async (doorId: string): Promise<readonly (Visit & { authorName: string })[]> => {
     const visits = await repositories.visits.listByDoor(doorId);
     const authorIds = [...new Set(visits.map((visit) => visit.authorId))];
-    const authors = await Promise.all(authorIds.map((id) => repositories.members.get(id)));
-    const names = new Map(authorIds.map((id, index) => [id, authors[index]?.displayName ?? id]));
+    const authors = await Promise.all(authorIds.map((id) => repositories.members.get(id).catch(() => null)));
+    const names = new Map(authorIds.map((id, index) => [id, authors[index]?.displayName ?? 'Membre de l’équipe']));
     return [...visits]
       .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
-      .map((visit) => ({ ...visit, authorName: names.get(visit.authorId) ?? visit.authorId }));
+      .map((visit) => ({ ...visit, authorName: names.get(visit.authorId) ?? 'Membre de l’équipe' }));
   }, [repositories]);
 
   if (!building) return null;
@@ -248,23 +265,35 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       setNote('');
       // Enregistré sur l'appareil, pas encore confirmé : l'état de synchronisation le dira.
       setMessage(`Porte ${door.label} : passage enregistré sur l’appareil.`);
+      sync?.reportLocalSave(door.id);
       return true;
     } catch (error) {
       setMessage(localWriteErrorMessage(error));
+      sync?.reportLocalSave(door.id, error);
       return false;
     }
   }
 
   async function applyStatus(door: Door, statusId: string): Promise<void> {
-    if (await record(door, statusId)) {
-      setSelectedDoorId(door.id);
-      setOpenPaletteDoorId(null);
-      await refresh();
-      await sync?.synchronize();
+    if (savingPassage.current) return;
+    savingPassage.current = true;
+    setSaving(true);
+    try {
+      if (await record(door, statusId)) {
+        setSelectedDoorId(door.id);
+        setOpenPaletteDoorId(null);
+        await sync?.refresh();
+        await refresh().catch(() => setLoadError(true));
+        void sync?.synchronize();
+      }
+    } finally {
+      savingPassage.current = false;
+      setSaving(false);
     }
   }
 
   async function openDoor(door: Door): Promise<void> {
+    const request = ++historyRequest.current;
     setSelectedDoorId(door.id);
     setOpenPaletteDoorId(door.id);
     setDndCorrection(null);
@@ -272,7 +301,15 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     setSisters(door.sisters);
     setAutoSisters(false);
     setFoyer(door.foyer);
-    setDoorVisits(await loadDoorVisits(door.id));
+    setDoorVisits([]);
+    setHistoryState('loading');
+    setNote('');
+    try {
+      const visits = await loadDoorVisits(door.id);
+      if (request === historyRequest.current) { setDoorVisits(visits); setHistoryState('ready'); }
+    } catch {
+      if (request === historyRequest.current) setHistoryState('error');
+    }
   }
 
   /**
@@ -338,7 +375,9 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     const awayStatus = statuses.find((status) => status.id === 'retry' && status.active);
     // Règle centrale : jamais une porte sortie du suivi, jamais une porte déjà visitée.
     const targets = doorsForGroupedAbsence(scope);
-    if (!awayStatus || targets.length === 0) return;
+    if (!awayStatus || targets.length === 0 || savingPassage.current) return;
+    savingPassage.current = true;
+    setSaving(true);
     try {
       const results = await recordLocalVisits(repositories, outbox, {
         authorId,
@@ -346,12 +385,18 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
         statusId: awayStatus.id,
         note: ''
       });
-      await refresh();
-      await sync?.synchronize();
+      await refresh().catch(() => setLoadError(true));
+      await sync?.refresh();
+      void sync?.synchronize();
       setMessage(`${results.length} passage(s) « Absent » enregistrés sur l’appareil pour cet étage.`);
+      for (const door of targets) sync?.reportLocalSave(door.id);
     } catch (error) {
       // Groupe atomique : en cas d'échec, aucune porte n'a été marquée.
       setMessage(`${localWriteErrorMessage(error)} Aucune porte de l’étage n’a été marquée.`);
+      sync?.reportLocalSave(targets[0].id, error);
+    } finally {
+      savingPassage.current = false;
+      setSaving(false);
     }
   }
 
@@ -573,7 +618,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
           </>}
         </section>
 
-        {doors.length === 0 ? <section className="building-empty-state" aria-label="Bâtiment non décrit"><span aria-hidden="true">⌂</span><h3>Bâtiment non décrit</h3><p>Aucun étage ni porte enregistré. Décris la structure une fois — tout le suivi viendra s'y accrocher.</p>{canEditStructure && <div><button className="primary-action" onClick={() => openStructure('manage')} type="button">Décrire le bâtiment</button><button className="text-button" disabled={structurePending} onClick={() => void runStructure(() => [{ floor: 0, label: '01', sortOrder: 0, newDoorId: `door-${crypto.randomUUID()}` }])} type="button">{structurePending ? 'Enregistrement…' : "C'est un pavillon — une seule porte"}</button></div>}</section> : <section className={`building-cut${editing ? ' building-cut--editing' : ''}`} aria-label="Coupe verticale du bâtiment">
+        {structureLoadedBuildingId !== building.id ? <section className="building-empty-state" role="status"><h3>{loadError ? 'Bâtiment indisponible' : 'Chargement du bâtiment…'}</h3>{loadError && <button type="button" onClick={() => void refresh().catch(() => setLoadError(true))}>Réessayer</button>}</section> : doors.length === 0 ? <section className="building-empty-state" aria-label="Bâtiment non décrit"><span aria-hidden="true">⌂</span><h3>Bâtiment non décrit</h3><p>Aucun étage ni porte enregistré. Décris la structure une fois — tout le suivi viendra s'y accrocher.</p>{canEditStructure && <div><button className="primary-action" onClick={() => openStructure('manage')} type="button">Décrire le bâtiment</button><button className="text-button" disabled={structurePending} onClick={() => void runStructure(() => [{ floor: 0, label: '01', sortOrder: 0, newDoorId: `door-${crypto.randomUUID()}` }])} type="button">{structurePending ? 'Enregistrement…' : "C'est un pavillon — une seule porte"}</button></div>}</section> : <section className={`building-cut${editing ? ' building-cut--editing' : ''}`} aria-label="Coupe verticale du bâtiment">
           {editing && <button className="building-add-floor" onClick={() => openFloorCreation(Math.max(...floors.map((item) => item.floor)) + 1)} type="button">+ Ajouter un étage au-dessus</button>}
           {floors.slice().reverse().map((item) => {
             const levelDoors = doors.filter((door) => door.floor === item.floor).sort(compareDoorsForFloor);
@@ -585,7 +630,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
                   {editing ? <span className="building-floor-edit-actions">
                     <button onClick={() => openFloorCreation(item.floor)} type="button">+ porte</button>
                     {confirmFloorDeletion === item.floor ? <span className="floor-delete-confirm"><b>Supprimer l’étage et son historique ?</b><button aria-label={`Confirmer la suppression du ${floorLabel(item.floor)}`} onClick={() => void removeFloor(item.floor)} type="button">Oui</button><button aria-label={`Annuler la suppression du ${floorLabel(item.floor)}`} onClick={() => setConfirmFloorDeletion(null)} type="button">Non</button></span> : <button className="floor-delete" onClick={() => void removeFloor(item.floor)} type="button">supprimer l’étage</button>}
-                  </span> : <span>{item.treatedCount}/{item.doorCount} · {item.treatedCount === item.doorCount ? <strong className="building-floor-complete">terminé</strong> : <button onClick={() => void markFloorAway(levelDoors)} type="button">tout marquer absent</button>}</span>}
+                  </span> : <span>{item.treatedCount}/{item.doorCount} · {item.treatedCount === item.doorCount ? <strong className="building-floor-complete">terminé</strong> : <button disabled={saving} onClick={() => void markFloorAway(levelDoors)} type="button">tout marquer absent</button>}</span>}
                 </header>
                 <div className="door-grid" aria-label={`Portes ${floorLabel(item.floor)}`}>
               {levelDoors.map((door) => {
@@ -594,7 +639,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
                 const statusColor = status?.color ?? '#8C9494';
                 const confirmsHistoryDeletion = confirmDeletion === door.id;
                 return <div className={`door-card${confirmsHistoryDeletion ? ' door-card--confirm' : ''}`} key={door.id}>
-                  {confirmsHistoryDeletion ? <div className="door-delete-confirm" role="alert"><b>Supprimer l’historique ?</b><span><button aria-label={`Confirmer la suppression de la porte ${door.label}`} onClick={() => void removeDoor(door)} type="button">Oui</button><button aria-label={`Annuler la suppression de la porte ${door.label}`} onClick={() => setConfirmDeletion(null)} type="button">Non</button></span></div> : <><button aria-expanded={open} aria-label={`Porte ${door.label}, ${status?.label ?? door.currentStatusId}`} className={`door-row${door.sisters ? ' door-row--sisters' : ''}`} onClick={() => void openDoor(door)} style={{ '--status-color': statusColor, '--status-foreground': statusForeground(statusColor) } as CSSProperties} type="button"><span className="door-row-label">{door.label}</span><span aria-hidden="true" className="door-state-dot" /><span className="door-row-status">{status?.label ?? door.currentStatusId}</span></button>{editing && <button aria-label={`Supprimer la porte ${door.label}`} className="door-delete" onClick={() => void removeDoor(door)} type="button">×</button>}</>}
+                  {confirmsHistoryDeletion ? <div className="door-delete-confirm" role="alert"><b>Supprimer l’historique ?</b><span><button aria-label={`Confirmer la suppression de la porte ${door.label}`} onClick={() => void removeDoor(door)} type="button">Oui</button><button aria-label={`Annuler la suppression de la porte ${door.label}`} onClick={() => setConfirmDeletion(null)} type="button">Non</button></span></div> : <><button aria-expanded={open} aria-label={`Porte ${door.label}, ${status?.label ?? 'Statut indisponible'}`} className={`door-row${door.sisters ? ' door-row--sisters' : ''}`} onClick={() => void openDoor(door)} style={{ '--status-color': statusColor, '--status-foreground': statusForeground(statusColor) } as CSSProperties} type="button"><span className="door-row-label">{door.label}</span><span aria-hidden="true" className="door-state-dot" /><span className="door-row-status">{status?.label ?? 'Statut indisponible'}</span></button>{editing && <button aria-label={`Supprimer la porte ${door.label}`} className="door-delete" onClick={() => void removeDoor(door)} type="button">×</button>}</>}
                 </div>;
               })}
               {canEditStructure && !editing && <button aria-label={`Ajouter des portes au ${floorLabel(item.floor)}`} className="door-add" onClick={() => { setFloor(item.floor); setQuickFirstLabel(String((Math.max(0, ...levelDoors.map((door) => Number(door.label) || 0))) + 1)); openStructure('quick-floor'); }} type="button"><b aria-hidden="true">+</b><span>Ajouter</span></button>}
@@ -617,12 +662,12 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
           <section aria-label={`Fiche de la porte ${paletteDoor.label}`} className="door-status-sheet door-detail-sheet" role="dialog">
             <button className="door-detail-back" onClick={() => setOpenPaletteDoorId(null)} type="button">‹ {building.addressLabel}</button>
             <h3>Porte {paletteDoor.label} · {floorLabel(paletteDoor.floor)}</h3>
-            <p className="door-detail-subline">Dernier passage {doorVisits[0] ? buildingStaleness(doorVisits[0].occurredAt).label : 'jamais'}</p>
+            <p className="door-detail-subline">Dernier passage {buildingStaleness(paletteDoor.lastVisitAt, new Date(), Boolean(paletteDoor.lastVisitId)).label}</p>
             <p className="eyebrow">Résultat du passage</p>
-            <div className="status-palette"><button className="status-swatch open-result" onClick={() => void savePassage(paletteDoor, 'contacted')} type="button"><span aria-hidden="true" /><b>Contact établi</b></button><button className="status-swatch away-result" onClick={() => void savePassage(paletteDoor, 'retry')} type="button"><span aria-hidden="true" /><b>Absent</b></button><button className="status-swatch linked-result" onClick={() => void savePassage(paletteDoor, 'linked')} type="button"><span aria-hidden="true" /><b>Attaché à l'effort — plus à revisiter</b></button><button className="status-swatch dnd-result" onClick={() => void savePassage(paletteDoor, 'do-not-return')} type="button"><span aria-hidden="true" /><b>Ne pas déranger</b></button><button className="status-swatch locked-result" onClick={() => void savePassage(paletteDoor, 'locked')} type="button"><span aria-hidden="true" /><b>Accès bloqué (interphone / code)</b></button></div>
+            <div className="status-palette"><button disabled={saving || !statusesById.get('contacted')?.active} className="status-swatch open-result" onClick={() => void savePassage(paletteDoor, 'contacted')} type="button"><span aria-hidden="true" /><b>Contact établi</b></button><button disabled={saving || !statusesById.get('retry')?.active} className="status-swatch away-result" onClick={() => void savePassage(paletteDoor, 'retry')} type="button"><span aria-hidden="true" /><b>Absent</b></button><button disabled={saving || !statusesById.get('linked')?.active} className="status-swatch linked-result" onClick={() => void savePassage(paletteDoor, 'linked')} type="button"><span aria-hidden="true" /><b>Attaché à l'effort — plus à revisiter</b></button><button disabled={saving || !statusesById.get('do-not-return')?.active} className="status-swatch dnd-result" onClick={() => void savePassage(paletteDoor, 'do-not-return')} type="button"><span aria-hidden="true" /><b>Ne pas déranger</b></button><button disabled={saving || !statusesById.get('locked')?.active} className="status-swatch locked-result" onClick={() => void savePassage(paletteDoor, 'locked')} type="button"><span aria-hidden="true" /><b>Accès bloqué (interphone / code)</b></button></div>
             {dndCorrection?.doorId === paletteDoor.id && <div className="dnd-correction" role="alert">
               <b>Cette personne a demandé à ne plus être dérangée.</b>
-              <span>Enregistrer « {statusesById.get(dndCorrection.statusId)?.label ?? dndCorrection.statusId} » à la place ? Le passage « Ne pas déranger » reste dans l’historique.</span>
+              <span>Enregistrer « {statusesById.get(dndCorrection.statusId)?.label ?? 'Statut indisponible'} » à la place ? Le passage « Ne pas déranger » reste dans l’historique.</span>
               <span className="dnd-correction-actions"><button onClick={() => void savePassage(paletteDoor, dndCorrection.statusId)} type="button">Oui, corriger</button><button onClick={() => setDndCorrection(null)} type="button">Annuler</button></span>
             </div>}
             <p className="eyebrow">Composition du foyer</p>
@@ -630,7 +675,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
             <button aria-pressed={sisters} className="sisters-toggle" onClick={() => void toggleSisters(paletteDoor, !sisters, false)} type="button"><span className="sisters-toggle-copy"><strong>À confier aux sœurs</strong><span>Le prochain passage sera fait par les sœurs.</span></span><i aria-hidden="true" className="sisters-toggle-control" /></button>
             {autoSisters && <p className="sisters-auto">Activé automatiquement — tu peux le désactiver.</p>}
             <p className="eyebrow">Historique des passages</p>
-            <ol className="door-history">{doorVisits.length === 0 ? <li className="door-history-empty">Aucun passage enregistré.</li> : doorVisits.map((visit) => { const status = statusesById.get(visit.statusId); return <li key={visit.id} style={{ '--history-status': status?.color ?? 'var(--st-todo)' } as CSSProperties}><i aria-hidden="true" className="door-history-dot" /><span className="door-history-body"><strong>{new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(visit.occurredAt))} · {buildingStaleness(visit.occurredAt).label}</strong><span>{visit.authorName}{visit.note ? ` — « ${visit.note} »` : status ? ` — ${status.label}` : ''}</span></span></li>; })}</ol>
+            <ol className="door-history">{historyState !== 'ready' ? <li className="door-history-empty">{historyState === 'loading' ? 'Chargement de l’historique…' : 'Historique indisponible. Les passages conservés n’ont pas été effacés.'}</li> : doorVisits.length === 0 ? <li className="door-history-empty">Aucun passage enregistré.</li> : doorVisits.map((visit) => { const status = statusesById.get(visit.statusId); return <li key={visit.id} style={{ '--history-status': status?.color ?? 'var(--st-todo)' } as CSSProperties}><i aria-hidden="true" className="door-history-dot" /><span className="door-history-body"><strong>{new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(visit.occurredAt))} · {buildingStaleness(visit.occurredAt).label}</strong><span>{visit.authorName}{visit.note ? ` — « ${visit.note} »` : status ? ` — ${status.label}` : ''}</span></span></li>; })}</ol>
             <button aria-expanded={showPassageNote} className="passage-note-toggle" onClick={() => setShowPassageNote((current) => !current)} type="button">+ note courte</button>
             {showPassageNote && <label className="passage-note-field">Note du passage<textarea aria-label={`Note pour porte ${paletteDoor.label}`} maxLength={280} onChange={(event) => setNote(event.target.value)} rows={2} value={note} /></label>}
             <p className="privacy-note">La composition et ce marqueur ne sont visibles que dans cette fiche.</p>
@@ -657,7 +702,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
               {showManual && <><label className="manual-plan-label">Plan manuel (etage | porte | ID ou new:ID)<textarea aria-label="Plan manuel de portes" onChange={(event) => setManualPlan(event.target.value)} rows={5} value={manualPlan} /></label><button className="secondary-action" onClick={() => void runStructure(() => parseManualTargets(manualPlan))} type="button">Appliquer le plan manuel</button></>}
               <details className="structure-advanced"><summary>Portes archivées</summary>
               {ambiguities.length > 0 && <section className="structure-ambiguities" aria-label="Renommages ambigus"><p>Choisir la porte historique:</p>{ambiguities.map((ambiguity) => <div key={`${ambiguity.target.floor}-${ambiguity.target.label}`}><strong>{floorLabel(ambiguity.target.floor)} / {ambiguity.target.label}</strong>{ambiguity.candidateDoorIds.map((doorId) => <button className="secondary-action" key={doorId} onClick={() => resolveAmbiguity(ambiguity, doorId)} type="button">Conserver {doorId}</button>)}</div>)}</section>}
-              <div className="archived-doors"><p className="eyebrow">Archivees</p>{structureDoors.filter((door) => !door.active).length === 0 ? <span>Aucune</span> : structureDoors.filter((door) => !door.active).map((door) => <span key={door.id}>{floorLabel(door.floor)} / {door.label} - rev. {door.revision}</span>)}</div>
+              <div className="archived-doors"><p className="eyebrow">Archivees</p>{structureDoors.filter((door) => !door.active).length === 0 ? <span>Aucune</span> : structureDoors.filter((door) => !door.active).map((door) => <span key={door.id}>{floorLabel(door.floor)} / {door.label}</span>)}</div>
               </details>
             </div>}
             {structureMessage && <p className="structure-sheet-message" role="status">{structureMessage}</p>}

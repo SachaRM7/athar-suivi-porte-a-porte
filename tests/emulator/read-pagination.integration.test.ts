@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, GeoPoint, writeBatch } from 'firebase/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { generateLoadWorkspace } from '../../src/infrastructure/load/generate-load-workspace';
 import { toFirestoreSeedDocuments } from '../../src/infrastructure/firestore/workspace-codecs';
@@ -107,5 +107,25 @@ describe('paginated Firestore reads', () => {
     })).rejects.toThrow('Read cursor is invalid.');
     await expect(repositories.buildings.listPageByZone('load-zone', { pageSize: 101 }))
       .rejects.toThrow('Page size must be an integer from 1 to 100.');
+  });
+
+  it('loads a prepared building structure beyond 250 doors including its archives', async () => {
+    await testEnv.withSecurityRulesDisabled(async context => {
+      const db = context.firestore();
+      const source = (await getDoc(doc(db, 'workspaces/load/doors/load-door-000'))).data()!;
+      const batch = writeBatch(db);
+      for (let index = 0; index < 300; index++) {
+        batch.set(doc(db, `workspaces/load/doors/structure-${String(index).padStart(3, '0')}`), {
+          ...source, buildingId: 'large-structure', zoneId: 'structure-zone',
+          location: new GeoPoint(0, 0), geohash: 's00000000', label: String(index), sortOrder: index, active: index < 290
+        });
+      }
+      await batch.commit();
+    });
+    const repositories = createFirestoreWorkspaceReadRepositories(testEnv.authenticatedContext('load-member').firestore(), 'load');
+    const structure = await repositories.doors.listStructureByBuilding('large-structure');
+    expect(structure).toHaveLength(300);
+    expect(structure.filter(door => !door.active)).toHaveLength(10);
+    expect(new Set(structure.map(door => door.id)).size).toBe(300);
   });
 });

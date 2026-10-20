@@ -21,6 +21,7 @@ import {
   type DocumentSnapshot,
   type Query,
   type QuerySnapshot,
+  type QueryConstraint,
   type Firestore
 } from 'firebase/firestore';
 import type { Building, Door, Visit } from '../../domain/workspace/models';
@@ -56,9 +57,11 @@ export type FirestoreReadOptions = {
 };
 
 async function serverFirstDoc<T extends DocumentData>(reference: DocumentReference<T>): Promise<DocumentSnapshot<T>> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return getDocFromCache(reference);
   try {
     return await getDocFromServer(reference);
   } catch (serverError) {
+    if (!canUseOfflineCache(serverError)) throw serverError;
     try {
       return await getDocFromCache(reference);
     } catch {
@@ -68,15 +71,23 @@ async function serverFirstDoc<T extends DocumentData>(reference: DocumentReferen
 }
 
 async function serverFirstDocs<T extends DocumentData>(reference: Query<T>): Promise<QuerySnapshot<T>> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return getDocsFromCache(reference);
   try {
     return await getDocsFromServer(reference);
   } catch (serverError) {
+    if (!canUseOfflineCache(serverError)) throw serverError;
     try {
       return await getDocsFromCache(reference);
     } catch {
       throw serverError;
     }
   }
+}
+
+/** A denied read is never converted into a successful cache read. */
+export function canUseOfflineCache(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error &&
+    (error.code === 'unavailable' || error.code === 'deadline-exceeded');
 }
 
 function boundedDocuments(snapshot: QuerySnapshot<DocumentData>, maximum: number, scope: string) {
@@ -308,8 +319,18 @@ export function createFirestoreWorkspaceReadRepositories(db: Firestore, workspac
         };
       },
       async listStructureByBuilding(buildingId) {
-        const snapshots = await readDocs(query(path('doors'), where('buildingId', '==', buildingId), limit(MAX_ZONE_DOORS + 1)));
-        return sortDoors(boundedDocuments(snapshots, MAX_ZONE_DOORS, `door structure in building ${buildingId}`).map((entry) => fromFirestoreDoor(entry.id, entry.data())));
+        const doors: Door[] = [];
+        let after: string | null = null;
+        do {
+          const constraints: QueryConstraint[] = [where('buildingId', '==', buildingId), orderBy(documentId())];
+          if (after) constraints.push(startAfter(after));
+          constraints.push(limit(100));
+          const snapshots = await readDocs(query(path('doors'), ...constraints));
+          doors.push(...snapshots.docs.map(entry => fromFirestoreDoor(entry.id, entry.data())));
+          if (doors.length > 10_000) throw new ReadLimitExceededError(`door structure in building ${buildingId}`, 10_000);
+          after = snapshots.size === 100 ? snapshots.docs.at(-1)!.id : null;
+        } while (after);
+        return sortDoors(doors);
       }
     },
     visits: {

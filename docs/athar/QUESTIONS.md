@@ -165,3 +165,13 @@ validation de contraste et d'usage en conditions nocturnes.
   et son périmètre sont déclarés par l'opérateur ; un extrait de démonstration ne peut pas servir de total.
 - Le producteur utilise un budget de 50 000 documents / 250 zones, avec résultat indisponible
   au dépassement. Mesurer le volume réel et les lectures avant d'étendre l'usage.
+# Lot C — décisions du parcours terrain
+
+- Hypothèse retenue : la recherche reste limitée aux bâtiments suivis de la zone.
+  Aucun service d’adresses externe n’est ajouté et aucune adresse n’est utilisée
+  comme identité cartographique.
+- Hypothèse retenue : le raccourci de marquage propose les bâtiments autour du centre
+  de la carte. Il ne prétend pas connaître la position GPS de l’utilisateur.
+- La préparation couvre le paquet cartographique disponible et la zone téléchargée,
+  avec une date explicite. L’échantillon des Carmes demeure une préparation partielle.
+- Contrat, fichiers et recette : [lot C](07-PARCOURS-TERRAIN.md).

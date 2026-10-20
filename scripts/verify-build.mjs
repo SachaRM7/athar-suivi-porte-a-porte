@@ -46,9 +46,11 @@ const precached = [...serviceWorker.matchAll(/'(\/[^']+\.(?:js|css|webmanifest|s
 for (const path of precached) {
   if (!existsSync(join(root, path))) fail(`Le service worker précache ${path}, absent du build.`);
 }
-for (const shell of ['/assets/app-v15.js', '/assets/app-v15.css']) {
-  if (!serviceWorker.includes(shell)) fail(`Le service worker ne connaît pas ${shell} (nom d’entrée Vite désaligné).`);
+for (const asset of Object.values(manifest).flatMap(item => [item.file, ...item.css ?? [], ...item.assets ?? []])) {
+  if (!serviceWorker.includes(JSON.stringify(`/${asset}`))) fail(`Le service worker ne prépare pas le composant différé ${asset}.`);
+  if (!existsSync(join(root, asset))) fail(`Ressource de préparation absente : ${asset}.`);
 }
+if (serviceWorker.includes('__ATHAR_BUILD_VERSION__') || serviceWorker.includes('__ATHAR_LAZY_ASSETS__')) fail('Le manifeste hors ligne du build n’a pas été généré.');
 try {
   const webManifest = JSON.parse(readFileSync(join(root, 'manifest.webmanifest'), 'utf8'));
   for (const icon of webManifest.icons ?? []) {
@@ -60,6 +62,7 @@ try {
 }
 const indexHtml = readFileSync(join(root, 'index.html'), 'utf8');
 if (!indexHtml.includes('manifest.webmanifest')) fail('index.html ne référence plus le manifeste PWA.');
+if (!/name="athar-build" content="[0-9a-f]{20}"/.test(indexHtml)) fail('La version hors ligne est absente de index.html.');
 if (!existsSync(join(root, 'fixtures/toulouse.pmtiles'))) fail('Fond de carte hors ligne fixtures/toulouse.pmtiles absent.');
 
 // 4. Déploiement : le bundle vise le projet attendu, jamais la recette locale.
