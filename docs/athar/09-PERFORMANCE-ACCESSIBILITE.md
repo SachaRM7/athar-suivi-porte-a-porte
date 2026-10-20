@@ -81,6 +81,8 @@ leur taille nominale à 16 px. Les mouvements respectent la réduction des anima
   restitution, GPS explicite, écran de 320 px avec texte 200 %, panne cartographique et reprise.
 - `npm run test:e2e:emulator:ci` : régressions authentifiées A/B/C puis zone de 276 bâtiments
   sur les deux moteurs, dernière page, retour de fiche et navigation précédente.
+  Le client des émulateurs utilise le long-polling : le flux HTTP ouvert de Firestore
+  reste tamponné par WebKit headless. La production conserve l’auto-détection du SDK.
 - CI : lint, typage, unités, Functions, règles/intégration, outils B, gardes de build,
   build production, laboratoire et les deux moteurs mobiles. La publication reste manuelle.
 

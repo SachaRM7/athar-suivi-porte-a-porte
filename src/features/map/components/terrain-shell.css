@@ -977,7 +977,7 @@
 .terrain-pagination button:disabled { color: var(--ink-soft); background: var(--sunk); cursor: default; }
 .terrain-read-alert { position: absolute; top: 88px; right: 16px; z-index: 5; max-width: min(330px, calc(100vw - 32px)); background: var(--paper); color: var(--ink); box-shadow: var(--shadow); border: 1px solid var(--hairline); border-radius: var(--r); padding: 12px; font: var(--t-125)/1.4 var(--font-ui); }
 .terrain-read-alert p { margin: 0 0 8px; }
-.terrain-shell button { min-height: var(--touch); }
+.terrain-shell button { min-height: var(--touch); min-width: var(--touch); }
 .terrain-shell button:focus-visible, .terrain-shell input:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .terrain-panel { padding-bottom: env(safe-area-inset-bottom); }
 @media (max-width: 380px) {

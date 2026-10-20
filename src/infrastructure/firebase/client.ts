@@ -25,6 +25,9 @@ export function getFirebaseClient(): FirebaseClient {
   const app = getApps().length > 0 ? getApp() : initializeApp(environment.firebase);
   const auth = getAuth(app);
   const firestore = initializeFirestore(app, {
+    // Le flux HTTP de l'émulateur reste tamponné par WebKit headless : terminer chaque
+    // réponse en recette. En production, conserver l'auto-détection native du SDK.
+    ...(environment.firebase.useEmulators ? { experimentalForceLongPolling: true } : {}),
     // Politique documentée (etat-projet, lot A1.4) : le cache IndexedDB de Firestore, qui
     // garde une zone préparée lisible dans une cage d'escalier, n'est activé que sur un
     // appareil déclaré de confiance. Ailleurs, le cache reste en mémoire : rien de métier
