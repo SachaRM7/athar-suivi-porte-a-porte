@@ -49,6 +49,10 @@ déclare pas la zone vide. Le dialogue conserve le focus et le rend à sa fermet
 
 Acceptation : perte de réseau → intention durable → retour à la zone avec attente
 visible → rechargement → même intention → reconnexion → un seul passage serveur.
+Si le premier appel échoue alors que le navigateur annonce déjà le réseau disponible,
+une relance automatique reprend après cinq secondes, sans exiger un nouvel événement
+de connexion. La file conserve son idempotence ; les erreurs serveur réessaient toutes les
+trente secondes, les conflits et refus d’accès restent à résoudre explicitement.
 Les règles DND, conflits, déconnexion et purge du lot A restent vérifiées.
 
 ## C3 — Préparer et vérifier une zone hors ligne

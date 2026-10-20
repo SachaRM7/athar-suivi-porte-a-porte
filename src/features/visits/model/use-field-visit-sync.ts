@@ -165,12 +165,15 @@ export function useFieldVisitSync(
     };
   }, [refresh, synchronize]);
 
-  // Serveur en difficulté ou réponse inattendue : nouvel essai automatique, sans perte.
+  // `online` peut précéder la disponibilité du transport. Un fetch refusé doit être
+  // réessayé même sans nouvel événement réseau ; les refus de session restent explicites.
+  // L'intervalle survit à deux échecs identiques, contrairement à un timeout dépendant
+  // uniquement d'une raison d'échec dont la valeur ne change pas.
   useEffect(() => {
-    if (deferral !== 'server' && !failure) return undefined;
-    const retry = window.setTimeout(() => { if (browserOnline()) void synchronize(); }, 30_000);
-    return () => window.clearTimeout(retry);
-  }, [deferral, failure, synchronize]);
+    if (!online || (deferral !== 'offline' && deferral !== 'server' && !failure)) return undefined;
+    const retry = window.setInterval(() => { if (browserOnline()) void synchronize(); }, deferral === 'offline' ? 5_000 : 30_000);
+    return () => window.clearInterval(retry);
+  }, [deferral, failure, online, synchronize]);
 
   const status = useMemo(
     () => summarizeFieldSync({ checking, localSaveFailure: localSaveFailure?.message, online, entries, pendingProfiles, deferral, failure }),

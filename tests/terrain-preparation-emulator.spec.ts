@@ -128,10 +128,18 @@ test('a prepared authenticated zone reopens offline with both archives and syncs
     await expect(page.getByRole('button', { name: address })).toBeVisible({ timeout: 20_000 });
     await page.getByRole('button', { name: address }).click();
     await expect(page.getByRole('button', { name: 'Porte 01, Absent' })).toBeVisible();
+    // navigator.onLine may turn true before the first request can reach Firestore.
+    // Repeated transport failures must retry without requiring another online event.
+    let transportRefusals = 0;
+    await page.route('http://127.0.0.1:8180/v1/**', async route => {
+      if (route.request().method() === 'GET' && route.request().url().endsWith('/doors/lot-c-door') && transportRefusals++ < 2) await route.abort('internetdisconnected');
+      else await route.continue();
+    });
     await context.setOffline(false);
     await expect.poll(async () => (await workspace.collection('doors').doc('lot-c-door').get()).get('revision'), { timeout: 20_000 }).toBe(1);
     const visits = await workspace.collection('visits').where('doorId', '==', 'lot-c-door').get();
     expect(visits.size).toBe(1);
+    expect(transportRefusals).toBeGreaterThanOrEqual(3);
     await expect(page.getByText('À jour', { exact: true })).toBeVisible();
   } finally { await context.close(); }
 });
