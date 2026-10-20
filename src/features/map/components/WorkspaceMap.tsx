@@ -379,7 +379,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     const deadline = window.setTimeout(() => { timedOut = true; controller.abort(); }, 30_000);
     try {
       do {
-        const page: import('../../../domain/workspace/read-pagination').ReadPage<Building> = await readTask(repositories.buildings.listPageByViewport(viewport, { cursor, pageSize: 25, signal: controller.signal }), controller.signal);
+        const page: import('../../../domain/workspace/read-pagination').ReadPage<Building> = await readTask(repositories.buildings.listPageByViewport(viewport, { cursor, pageSize: Math.min(25, 200 - buildings.size), signal: controller.signal }), controller.signal);
         completeSource = completeSource && page.metrics.fromCache !== true;
         const fresh = page.items.filter(building => !buildings.has(building.id));
         const result = await loadBuildingDoors(repositories, fresh, controller.signal);

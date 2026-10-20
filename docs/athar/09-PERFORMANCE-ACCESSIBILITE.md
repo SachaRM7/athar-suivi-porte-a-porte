@@ -9,8 +9,8 @@ schéma Firestore, index, service externe ou dépendance JavaScript. Aucun dépl
 - La liste charge **25 bâtiments par page** via les curseurs existants. Précédente/suivante
   permettent de parcourir une zone de plus de 250 bâtiments. Fermer une fiche conserve la page.
 - Les portes de chaque bâtiment sont entièrement lues avant tout calcul de statut, de suivi
-  ou toute action groupée. Au maximum **quatre bâtiments** sont lus simultanément, par pages
-  de 100 portes. Aucun total partiel n'est présenté comme complet.
+  ou toute action groupée. Au maximum **quatre bâtiments par chargement** sont lus
+  simultanément, par pages de 100 portes ; liste et cadrage peuvent fonctionner en parallèle. Aucun total partiel n'est présenté comme complet.
 - Recherche, tri, filtres, activité et leurs compteurs portent sur **la page affichée** ; ce
   périmètre est indiqué dès que plusieurs pages existent. Les résultats des autres pages
   ne sont pas annoncés absents. Les indicateurs officiels de zone continuent à lire `zoneStats`.
