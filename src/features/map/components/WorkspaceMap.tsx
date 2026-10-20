@@ -3,7 +3,7 @@ import { PMTiles, Protocol } from 'pmtiles';
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode, type GeoJSONStoreFeatures } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { geohashForLocation } from 'geofire-common';
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import type { FeatureCollection, Point, Polygon } from 'geojson';
 import { withBasePath } from '../../../app/config/public-paths';
 import type { Building, GeoPoint, Status, Zone, ZoneGeometry, ZoneStats } from '../../../domain/workspace/models';
@@ -49,7 +49,8 @@ import { AccountMenu } from './AccountMenu';
 import type { SelectBuildingOptions } from '../model/use-opened-building';
 import { LocalPmtilesSource } from '../infrastructure/local-pmtiles-source';
 import { firstAvailableArchive } from '../model/footprint-archive';
-import { TraceBar } from '../../../design/components';
+import { matchesAddress, markingCandidates } from '../model/field-navigation';
+import { Dialog, TraceBar } from '../../../design/components';
 import { terrainSession, type TerrainSession } from '../model/terrain-session';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './terrain-shell.css';
@@ -62,7 +63,7 @@ addProtocol('pmtiles', protocol.tile);
 const DEFAULT_ZONE_COLOR = '#16835F';
 
 /**
- * Tuileset d'emprises du lot WP6. Il pèse 72 Mo et vit hors de Git ; l'échantillon versionné
+ * Tuileset d'emprises du lot WP6, conservé hors de Git ; l'échantillon versionné
  * `batiments-carmes.pmtiles` prend le relais pour que la carte reste vérifiable sans lui.
  */
 export const TOULOUSE_FOOTPRINT_ARCHIVE = '/tiles/batiments-31.pmtiles';
@@ -88,6 +89,8 @@ const EMPTY_FEATURES = { type: 'FeatureCollection' as const, features: [] };
 type WorkspaceMapProps = {
   repositories: WorkspaceRepositories;
   authorId: string;
+  syncNotice?: ReactNode;
+  renderPreparation?: (zone: Zone) => ReactNode;
   canEditZones: boolean;
   initialZoneId?: string | null;
   canCreateBuildings?: boolean;
@@ -162,7 +165,7 @@ function geometryFromFeature(feature: GeoJSONStoreFeatures): ZoneGeometry | null
   return closePolygon(coordinates.map(([longitude, latitude]) => [longitude, latitude] as [number, number]));
 }
 
-export function WorkspaceMap({ repositories, authorId, canEditZones, initialZoneId = null, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect, reloadToken = 0, account }: WorkspaceMapProps): ReactElement {
+export function WorkspaceMap({ repositories, authorId, canEditZones, initialZoneId = null, canCreateBuildings = false, footprintArchives = DEFAULT_FOOTPRINT_ARCHIVES, onBuildingSelect, reloadToken = 0, account, syncNotice, renderPreparation }: WorkspaceMapProps): ReactElement {
   const element = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const map = useRef<MapInstance | null>(null);
@@ -185,6 +188,11 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const [listFilter, setListFilter] = useState<BuildingListFilter>('all');
   const [listSort, setListSort] = useState<BuildingListSort>('staleness');
   const [searchQuery, setSearchQuery] = useState('');
+  const [markingOpen, setMarkingOpen] = useState(false);
+  const [markingSearch, setMarkingSearch] = useState('');
+  const [markingCentre, setMarkingCentre] = useState<GeoPoint>({ latitude: 43.6064, longitude: 1.4468 });
+  const [zoneLoad, setZoneLoad] = useState<{ id: string | null; phase: 'loading' | 'ready' | 'error' }>({ id: null, phase: 'loading' });
+  const lastBuilding = useRef<string | null>(null);
   const [mode, setMode] = useState<'terrain' | 'edition'>('terrain');
   const [panelHeight, setPanelHeight] = useState<'peek' | 'full'>('peek');
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(initialZoneId);
@@ -206,11 +214,13 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const [message, setMessage] = useState('Fond Toulouse local pret.');
 
   const selectedZone = zoneList.find((zone) => zone.id === selectedZoneId) ?? null;
-  const normalizedSearch = searchQuery.trim().toLocaleLowerCase('fr-FR');
+  const normalizedSearch = searchQuery.trim();
+  const candidates = markingCandidates(zoneBuildings, markingCentre);
+  const listReady = zoneLoad.id === selectedZoneId && zoneLoad.phase === 'ready';
   const listedBuildings = sortBuildingList(
     zoneBuildings.filter((entry) => (
       matchesBuildingListFilter(entry, listFilter)
-      && (normalizedSearch.length === 0 || entry.building.addressLabel.toLocaleLowerCase('fr-FR').includes(normalizedSearch))
+      && matchesAddress(entry.building.addressLabel, normalizedSearch)
     )),
     listSort
   );
@@ -220,6 +230,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const selectZone = (zoneId: string | null) => {
     setSelectedZoneId(zoneId);
     setZoneDraft(null);
+    setMarkingOpen(false);
   };
 
   useEffect(() => { selectedZoneRef.current = selectedZoneId; }, [selectedZoneId]);
@@ -371,6 +382,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       setSession({ trace: [], markedCount: 0, durationLabel: null });
       return;
     }
+    setZoneLoad({ id: zone.id, phase: 'loading' });
     const buildings = await repositories.buildings.listByZone(zone.id);
     // Membership follows buildingId, including a doorway outside the polygon bbox.
     const doors = (await Promise.all(buildings.map(building => repositories.doors.listByBuilding(building.id)))).flat();
@@ -380,6 +392,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     setZoneBuildings(buildingListEntries(buildings, groupDoorsByBuilding(scopedDoors)));
     setSession(terrainSession(scopedDoors));
     setSessionZoneId(zone.id);
+    setZoneLoad({ id: zone.id, phase: 'ready' });
   }, [repositories]);
 
   /**
@@ -404,7 +417,11 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   useEffect(() => {
     let active = true;
     void refreshZone(loadedZoneId).catch((error: unknown) => {
-      if (active) setMessage(error instanceof Error ? `Liste de la zone indisponible : ${error.message}` : 'Liste de la zone indisponible.');
+      if (active) {
+        setZoneLoad({ id: loadedZoneId, phase: 'error' });
+        setMessage('Liste de la zone indisponible. Vérifie le réseau ou la préparation hors ligne, puis réessaie.');
+      }
+      void error;
     });
     const requestRef = zoneRequest;
     return () => { active = false; requestRef.current++; };
@@ -423,12 +440,14 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     const suggestion = cadastralSuggestion(feature.properties) ?? footprintSuggestions.current.get(identifier) ?? null;
     const existing = await repositories.buildings.get(identifier);
     if (existing) {
+      lastBuilding.current = existing.id;
       onBuildingSelect?.(existing, { persisted: true, suggestion });
       return;
     }
     const zone = footprintContext.current.zone;
     const ring = outerRing(feature);
     if (!zone || !ring) return;
+    lastBuilding.current = identifier;
     const [longitude, latitude] = centerOfRing(ring);
     onBuildingSelect?.({
       id: identifier,
@@ -504,7 +523,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       // Les libellés du fond passent au-dessus des emprises, mais sous la progression de zone.
       moveBasemapLabelsAboveOverlay(instance, ATHAR_LAYERS.zoneProgress);
       if (!footprintArchiveUrl) {
-        setMessage('Emprises indisponibles : generez public/tiles/batiments-31.pmtiles (voir scripts/carto/README.md).');
+        setMessage('Emprises indisponibles. Les bâtiments déjà suivis restent accessibles dans la liste.');
       }
 
       for (const layerId of CLICKABLE_FOOTPRINT_LAYERS) {
@@ -728,6 +747,21 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const progress = zoneDoorProgress(selectedStats, selectedZoneId ?? '');
   const todoCount = zoneBuildings.filter((entry) => matchesBuildingListFilter(entry, 'todo')).length;
   const staleCount = zoneBuildings.filter((entry) => entry.followUp.suggestedForRevisit).length;
+  const openListedBuilding = (building: Building) => {
+    lastBuilding.current = building.id;
+    setMarkingOpen(false);
+    flyToBuilding(building);
+    onBuildingSelect?.(building, { persisted: true, suggestion: footprintSuggestions.current.get(building.id) ?? null });
+  };
+  const startMarking = () => {
+    const centre = map.current?.getCenter();
+    if (centre) setMarkingCentre({ latitude: centre.lat, longitude: centre.lng });
+    const previous = candidates.find(entry => entry.building.id === lastBuilding.current);
+    const single = candidates.length === 1 ? candidates[0] : null;
+    if (previous || single) { openListedBuilding((previous ?? single)!.building); return; }
+    setMarkingSearch('');
+    setMarkingOpen(true);
+  };
   const zoneName = selectedZone?.name ?? 'Zone à choisir';
 
   return (
@@ -795,7 +829,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           </div>
         )}
 
-        <button aria-label="Chercher une adresse" className="terrain-mobile-action terrain-search-action" onClick={() => {
+        <button aria-label="Rechercher parmi les bâtiments suivis" className="terrain-mobile-action terrain-search-action" onClick={() => {
           setPanelHeight('full');
           window.setTimeout(() => searchInput.current?.focus(), 0);
         }} type="button">
@@ -824,6 +858,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           <button aria-expanded={panelHeight === 'full'} aria-label={panelHeight === 'full' ? 'Réduire le panneau' : 'Agrandir le panneau'} className="terrain-panel-grip" onClick={() => setPanelHeight((height) => height === 'full' ? 'peek' : 'full')} type="button"><i /></button>
 
           <div className="terrain-panel-head">
+            <div className="terrain-field-tools">{syncNotice}{selectedZone && renderPreparation?.(selectedZone)}</div>
             <div className="terrain-session-line">
               <span className="ds-microlabel">Activité du jour · zone</span>
               <span>{session.markedCount === 0
@@ -833,8 +868,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
             <TraceBar entries={session.trace} /><small>Derniers passages connus, tous auteurs · peut inclure des passages en attente sur cet appareil</small>
             <label className="terrain-search">
               <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></svg>
-              <span className="terrain-sr-only">Chercher une adresse</span>
-              <input ref={searchInput} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Chercher une adresse" value={searchQuery} />
+              <span className="terrain-sr-only">Rechercher parmi les bâtiments suivis</span>
+              <input ref={searchInput} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Adresse d’un bâtiment suivi" value={searchQuery} />
             </label>
           </div>
 
@@ -854,12 +889,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
                 </select>
               </label>
             </div>
-            {listedBuildings.length === 0
-              ? <p className="building-list-empty">{listFilter === 'stale' ? 'Aucun bâtiment vu il y a plus de trois mois. Tout est à jour ici.' : 'Aucun bâtiment décrit dans cette zone. Touche une emprise pour commencer.'}</p>
+            {!listReady ? <p className="building-list-empty" role="status">{zoneLoad.id === selectedZoneId && zoneLoad.phase === 'error' ? <>Liste indisponible. <button type="button" onClick={() => void refreshZone(selectedZoneId).catch(() => setZoneLoad({ id: selectedZoneId, phase: 'error' }))}>Réessayer</button></> : 'Chargement des bâtiments…'}</p> : listedBuildings.length === 0
+              ? <p className="building-list-empty">{normalizedSearch ? <>Aucune adresse correspondante parmi les bâtiments suivis de cette zone. <button type="button" onClick={() => { setSearchQuery(''); setListFilter('all'); }}>Effacer la recherche et les filtres</button></> : listFilter === 'stale' ? 'Aucun bâtiment ne correspond à ce filtre de revisite.' : listFilter === 'todo' ? 'Aucun bâtiment suivi ne correspond au filtre « Pas encore fait ».' : 'Aucun bâtiment décrit dans cette zone. Touche une emprise pour commencer.'}</p>
               : <ul className="building-list-rows">
                 {listedBuildings.map((entry) => (
                   <li key={entry.building.id}>
-                    <button className="building-row" onClick={() => { flyToBuilding(entry.building); onBuildingSelect(entry.building, { persisted: true, suggestion: footprintSuggestions.current.get(entry.building.id) ?? null }); }} type="button">
+                    <button className="building-row" onClick={() => openListedBuilding(entry.building)} type="button">
                       <span className={`terrain-building-pin terrain-building-pin--${entry.treatedCount === 0 ? 'todo' : entry.followUp.suggestedForRevisit ? 'away' : entry.followUp.outOfFollowUp ? 'linked' : 'open'}`} />
                       <span className="terrain-building-copy">
                         <span className="building-row-address">{entry.building.addressLabel}</span>
@@ -921,12 +956,20 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         <button aria-label="Cadrer sur les emprises" className="terrain-fab terrain-fab-ghost" onClick={() => map.current?.easeTo({ zoom: FOOTPRINT_MIN_ZOOM + 0.4, duration: motionDuration(450) })} type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5" /><circle cx="12" cy="12" r="8" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3" /></svg>
         </button>
-        <button className="terrain-fab terrain-fab-primary" onClick={() => setPanelHeight('full')} type="button">
+        <button className="terrain-fab terrain-fab-primary" disabled={!selectedZone || !listReady || !onBuildingSelect} onClick={startMarking} type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
           Marquer une porte
         </button>
       </div>
 
+      <Dialog open={markingOpen} title="Choisir un bâtiment pour marquer une porte" onClose={() => setMarkingOpen(false)}>
+        <p>Bâtiments suivis autour du centre de la carte. Choisis celui devant lequel tu te trouves.</p>
+        <label className="terrain-search"><span className="terrain-sr-only">Adresse du bâtiment à marquer</span><input placeholder="Adresse d’un bâtiment suivi" value={markingSearch} onChange={event => setMarkingSearch(event.target.value)} /></label>
+        <ul className="marking-candidates">{candidates.filter(entry => matchesAddress(entry.building.addressLabel, markingSearch)).map(entry => <li key={entry.building.id}><button type="button" onClick={() => openListedBuilding(entry.building)}>{entry.building.addressLabel}<small>{entry.doorCount} portes décrites</small></button></li>)}</ul>
+        {candidates.filter(entry => matchesAddress(entry.building.addressLabel, markingSearch)).length === 0 && <p>Aucun bâtiment suivi disponible pour ce choix. Les portes sorties du suivi ne sont pas proposées.</p>}
+        <button className="ds-button ds-button--brand" type="button" onClick={() => { setMarkingOpen(false); setPanelHeight('peek'); setMessage('Touche l’emprise du bâtiment sur la carte pour ouvrir sa fiche.'); }}>Choisir une emprise sur la carte</button>
+        <button className="ds-button ds-button--ghost" type="button" onClick={() => setMarkingOpen(false)}>Annuler</button>
+      </Dialog>
       <p className="terrain-status" role="status">{message}</p>
     </section>
   );

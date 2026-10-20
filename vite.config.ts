@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 import { loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { offlineBuild } from './scripts/offline-build';
 
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
@@ -10,7 +11,7 @@ export default defineConfig(({ command, mode }) => {
   const technicalRoutes = command === 'serve' || env.VITE_ATHAR_TECHNICAL_ROUTES === 'true';
   return {
     base: process.env.VITE_BASE_PATH ?? '/',
-    plugins: [react()],
+    plugins: [react(), offlineBuild()],
     resolve: technicalRoutes ? {} : {
       alias: [{ find: /^\.\/TechnicalRoutes$/, replacement: fileURLToPath(new URL('./src/app/TechnicalRoutes.disabled.tsx', import.meta.url)) }]
     },
@@ -21,9 +22,9 @@ export default defineConfig(({ command, mode }) => {
       manifest: true,
       rollupOptions: {
         output: {
-          entryFileNames: 'assets/app-v15.js',
+          entryFileNames: 'assets/app-[hash].js',
           chunkFileNames: 'assets/chunk-[name]-[hash].js',
-          assetFileNames: (asset) => asset.name?.endsWith('.css') ? 'assets/app-v15.css' : 'assets/[name][extname]'
+          assetFileNames: 'assets/[name]-[hash][extname]'
         }
       }
     },

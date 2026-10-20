@@ -894,7 +894,7 @@
   .terrain-fabs {
     right: 14px;
     bottom: calc(var(--h-peek) + 16px);
-    flex-direction: column;
+    flex-direction: row;
     transition: bottom var(--ease-sheet);
   }
 
@@ -902,7 +902,7 @@
     bottom: min(calc(var(--h-full) + 16px), calc(100dvh - 70px));
   }
 
-  .terrain-fab-primary { display: none; }
+  .terrain-fab-primary { display: inline-flex; }
 
   .terrain-status {
     right: auto;
@@ -948,4 +948,24 @@
   .terrain-panel { height: min(var(--h-peek), 42dvh); }
   .terrain-fabs { bottom: calc(min(var(--h-peek), 42dvh) + 12px); }
   .terrain-status { display: none; }
+}
+
+/* Lot C : sauvegarde et préparation accessibles avant d'ouvrir une porte. */
+.terrain-field-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.terrain-field-tools:empty { display: none; }
+.field-sync-notice { flex: 1; min-width: 140px; color: var(--brand); font: 400 var(--t-125)/1.35 var(--font-ui); }
+.field-sync-notice p { margin: 0; }
+.field-sync-notice small { display: block; margin-top: 4px; color: var(--ink-soft); font-size: var(--t-115); }
+.field-sync-notice[data-phase='attention'], .field-sync-notice[data-phase='storage-error'], .field-sync-notice[data-phase='save-error'] { border-left: 3px solid var(--ink); padding-left: 8px; }
+.terrain-offline-button { min-height: var(--touch); padding: 6px 10px; border: 1px solid var(--hairline); border-radius: var(--r-field); background: var(--paper); color: var(--brand); cursor: pointer; font: 500 var(--t-125)/1.2 var(--font-ui); }
+.offline-preparation-report { padding: 12px; margin: 12px 0; border: 1px solid var(--hairline); border-radius: var(--r-field); background: var(--sunk); }
+.offline-preparation-report ul { margin-bottom: 0; padding-left: 18px; }
+.marking-candidates { max-height: 40dvh; overflow-y: auto; margin: 12px 0; padding: 0; list-style: none; }
+.marking-candidates button { display: block; width: 100%; min-height: var(--touch); padding: 12px 8px; border: 0; border-bottom: 1px solid var(--hairline); background: var(--paper); text-align: left; color: var(--ink); font: 500 var(--t-135)/1.4 var(--font-data); cursor: pointer; }
+.marking-candidates small { display: block; color: var(--ink-soft); font: 400 var(--t-125)/1.4 var(--font-ui); }
+.terrain-fab:disabled { opacity: .55; cursor: default; }
+@media (max-width: 640px) {
+  .terrain-shell[data-panel='peek'] .terrain-panel-head > .terrain-session-line,
+  .terrain-shell[data-panel='peek'] .terrain-panel-head > .ds-trace,
+  .terrain-shell[data-panel='peek'] .terrain-panel-head > small { display: none; }
 }

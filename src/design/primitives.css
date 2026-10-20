@@ -241,6 +241,8 @@
   border-radius: var(--r-sheet-m) var(--r-sheet-m) 0 0;
   background: var(--paper);
   box-shadow: var(--shadow-lg);
+  color: var(--ink);
+  font: 400 var(--t-135)/1.5 var(--font-ui);
 }
 
 .ds-dialog__title {
