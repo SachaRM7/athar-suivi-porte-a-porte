@@ -17,7 +17,9 @@ schéma Firestore, index, service externe ou dépendance JavaScript. Aucun dépl
 - Le cadrage charge progressivement les bâtiments par pages de 25, jusqu'à 200 bâtiments
   ou 40 pages géographiques. Les pages vides avec un curseur sont traversées. Un cadrage
   incomplet demande de zoomer et représente les emprises encore inconnues en pointillés,
-  distinctement du gris « Pas encore fait ». Sous le zoom 16, aucune lecture de portes
+  distinctement du gris « Pas encore fait ». Une requête servie depuis le cache reste
+  prudente : son curseur terminé ne prouve pas que tout le serveur a été chargé.
+  Sous le zoom 16, aucune lecture de portes
   n'est lancée pour la carte.
 - Les lectures complètes ont un budget de 10 000 documents ; le dépassement est une erreur
   explicite. Une page déjà en vol peut dépasser le seuil avant détection, au plus quatre

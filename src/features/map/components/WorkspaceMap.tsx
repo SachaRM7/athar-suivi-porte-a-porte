@@ -373,12 +373,14 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     let cursor: string | null = null;
     let reads = 0;
     let documentsRead = 0;
+    let completeSource = true;
     const seen = new Set<string>();
     let timedOut = false;
     const deadline = window.setTimeout(() => { timedOut = true; controller.abort(); }, 30_000);
     try {
       do {
         const page: import('../../../domain/workspace/read-pagination').ReadPage<Building> = await readTask(repositories.buildings.listPageByViewport(viewport, { cursor, pageSize: 25, signal: controller.signal }), controller.signal);
+        completeSource = completeSource && page.metrics.fromCache !== true;
         const fresh = page.items.filter(building => !buildings.has(building.id));
         const result = await loadBuildingDoors(repositories, fresh, controller.signal);
         documentsRead += page.metrics.documentsRead + result.documentsRead;
@@ -389,9 +391,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         cursor = page.nextCursor;
         if (cursor && seen.has(cursor)) throw new Error('Lecture cartographique interrompue.');
         if (cursor) seen.add(cursor);
-        footprintContext.current = { ...context, zone: zones.current.find(zone => zone.id === selectedZoneRef.current) ?? null, buildings: new Map(buildings), doorsByBuilding: new Map(doorGroups), complete: cursor === null };
+        footprintContext.current = { ...context, zone: zones.current.find(zone => zone.id === selectedZoneRef.current) ?? null, buildings: new Map(buildings), doorsByBuilding: new Map(doorGroups), complete: cursor === null && completeSource };
         setVisibleBuildingCount(buildings.size);
-        setViewportPartial(cursor !== null);
+        setViewportPartial(cursor !== null || !completeSource);
         element.current?.setAttribute('data-documents-read', String(documentsRead));
         paintFootprints();
       } while (cursor && ++reads < 40 && buildings.size < 200);
@@ -1001,7 +1003,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         <button className="ds-button ds-button--ghost" type="button" onClick={() => setMarkingOpen(false)}>Annuler</button>
       </Dialog>
       <Dialog open={confirmZoneDeletion && selectedZone !== null} title="Supprimer cette zone ?" onClose={() => setConfirmZoneDeletion(false)}><p>Supprimer « {selectedZone?.name} » ? Aucun bâtiment, aucune porte et aucun passage ne sera supprimé.</p><button className="ds-button ds-button--brand" disabled={savingZone} onClick={() => void deleteSelectedZone(true)} type="button">Supprimer la zone</button><button className="ds-button ds-button--ghost" onClick={() => setConfirmZoneDeletion(false)} type="button">Annuler</button></Dialog>
-      {(mapError || metadataError || viewportPartial) && <aside className="terrain-read-alert" aria-label="État de la carte"><p>{mapError ? 'Carte indisponible. La liste reste utilisable.' : metadataError ? 'Zones indisponibles. Vérifie le réseau ou la préparation hors ligne.' : 'Données du cadrage incomplètes. Les pointillés indiquent les bâtiments à vérifier. Rapproche la carte.'}</p><button type="button" onClick={() => { if (mapError) setMapVersion(value => value + 1); else { metadata.current = null; void ensureMetadata().then(() => refreshViewport()).catch(() => undefined); } }}>Réessayer la carte</button></aside>}
+      {(mapError || metadataError || viewportPartial) && <aside className="terrain-read-alert" aria-label="État de la carte"><p>{mapError ? 'Carte indisponible. La liste reste utilisable.' : metadataError ? 'Zones indisponibles. Vérifie le réseau ou la préparation hors ligne.' : 'Données du cadrage incomplètes. Les pointillés indiquent les bâtiments à vérifier. Rapproche la carte ou vérifie la préparation hors ligne.'}</p><button type="button" onClick={() => { if (mapError) setMapVersion(value => value + 1); else { metadata.current = null; void ensureMetadata().then(() => refreshViewport()).catch(() => undefined); } }}>Réessayer la carte</button></aside>}
       <p className="terrain-status" role="status">{message}</p>
     </section>
   );

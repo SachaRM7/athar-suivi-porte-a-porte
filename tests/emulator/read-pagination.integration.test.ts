@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, getDoc, GeoPoint, writeBatch } from 'firebase/firestore';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { generateLoadWorkspace } from '../../src/infrastructure/load/generate-load-workspace';
 import { toFirestoreSeedDocuments } from '../../src/infrastructure/firestore/workspace-codecs';
 import { createFirestoreWorkspaceReadRepositories } from '../../src/infrastructure/firestore/firestore-workspace-read-repositories';
@@ -47,6 +47,17 @@ async function allPages<T>(read: (cursor: string | null) => Promise<{ items: rea
 }
 
 describe('paginated Firestore reads', () => {
+  it('identifies cached viewport pages even when their cursor is exhausted', async () => {
+    const repositories = createFirestoreWorkspaceReadRepositories(testEnv.authenticatedContext('load-member').firestore(), 'load', { source: 'server-first' });
+    const online = await repositories.buildings.listPageByViewport(viewport, { pageSize: 25 });
+    expect(online.metrics.fromCache).toBe(false);
+    vi.stubGlobal('navigator', { onLine: false });
+    try {
+      const offline = await repositories.buildings.listPageByViewport(viewport, { pageSize: 25 });
+      expect(offline.metrics.fromCache).toBe(true);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('pages zone, building and visit reads without a global collection query', async () => {
     const repositories = createFirestoreWorkspaceReadRepositories(testEnv.authenticatedContext('load-member').firestore(), 'load');
     const buildings = await allPages((cursor) => repositories.buildings.listPageByZone('load-zone', { cursor, pageSize: 50 }));

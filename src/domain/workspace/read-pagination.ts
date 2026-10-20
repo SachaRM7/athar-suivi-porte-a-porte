@@ -5,6 +5,8 @@ export type ReadRequest = {
 };
 
 export type ReadMetrics = {
+  /** Une requête de cache ne prouve pas la complétude des données du serveur. */
+  fromCache?: boolean;
   documentsRead: number;
   returnedCount: number;
   responseBytes: number;

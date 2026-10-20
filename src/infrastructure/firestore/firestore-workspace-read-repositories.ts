@@ -250,7 +250,7 @@ export function createFirestoreWorkspaceReadRepositories(db: Firestore, workspac
         const nextCursor = snapshots.size > size && last
           ? encodeReadCursor(scope, { rangeIndex, geohash: String(last.get('geohash')), id: last.id })
           : rangeIndex + 1 < ranges.length ? encodeReadCursor(scope, { rangeIndex: rangeIndex + 1 }) : null;
-        return { items, nextCursor, metrics: { documentsRead: snapshots.size, returnedCount: items.length, responseBytes: responseSizeBytes(items), rangeCount: 1, duplicateCount: 0, falsePositiveCount: consumedCandidates.length - items.length, durationMs: Math.round(performance.now() - startedAt) } };
+        return { items, nextCursor, metrics: { fromCache: snapshots.metadata.fromCache, documentsRead: snapshots.size, returnedCount: items.length, responseBytes: responseSizeBytes(items), rangeCount: 1, duplicateCount: 0, falsePositiveCount: consumedCandidates.length - items.length, durationMs: Math.round(performance.now() - startedAt) } };
       }
     },
     doors: {

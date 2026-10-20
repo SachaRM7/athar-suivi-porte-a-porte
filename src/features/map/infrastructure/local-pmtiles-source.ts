@@ -37,10 +37,10 @@ export class LocalPmtilesSource implements Source {
   async getBytes(offset: number, length: number, signal?: AbortSignal): Promise<RangeResponse> {
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1 || length > MAX_MAP_RANGE_BYTES) throw new Error('Plage cartographique invalide ou trop volumineuse.');
     const response = await fetch(this.url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, signal });
-    if (!response.ok || /text\/html/i.test(response.headers.get('content-type') ?? '')) throw new Error('Carte indisponible. Vérifie la connexion ou la préparation hors ligne.');
+    if (!response.ok || /text\/html/i.test(response.headers.get('content-type') ?? '')) { await response.body?.cancel(); throw new Error('Carte indisponible. Vérifie la connexion ou la préparation hors ligne.'); }
     if (response.status === 206) {
       const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') ?? '');
-      if (!range || Number(range[1]) !== offset || Number(range[2]) < offset || Number(range[2]) >= offset + length) throw new Error('Plage cartographique incohérente. Réessaie.');
+      if (!range || Number(range[1]) !== offset || Number(range[2]) < offset || Number(range[2]) >= offset + length) { await response.body?.cancel(); throw new Error('Plage cartographique incohérente. Réessaie.'); }
       const data = await boundedBody(response, length, signal);
       if (data.byteLength !== Number(range[2]) - offset + 1) throw new Error('Téléchargement cartographique incomplet.');
       return { data, etag: response.headers.get('etag') ?? undefined, cacheControl: response.headers.get('cache-control') ?? undefined, expires: response.headers.get('expires') ?? undefined };
