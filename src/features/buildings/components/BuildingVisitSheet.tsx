@@ -275,12 +275,24 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     setDoorVisits(await loadDoorVisits(door.id));
   }
 
+  /**
+   * Le profil enregistré (durable sur l'appareil) rejoint aussitôt la coupe : sans cela, la
+   * tuile perdait l'anneau rose et la fiche rouverte montrait l'ancienne composition.
+   */
+  function showDoorProfile(updated: Door): void {
+    const apply = (values: readonly Door[]) => values.map((candidate) => candidate.id === updated.id
+      ? { ...candidate, foyer: updated.foyer, sisters: updated.sisters }
+      : candidate);
+    setDoors(apply);
+    setStructureDoors(apply);
+  }
+
   /** Bascule le marqueur seul : aucun passage n'est créé, la révision ne bouge pas. */
   async function toggleSisters(door: Door, next: boolean, automatic: boolean): Promise<void> {
     setSisters(next);
     setAutoSisters(automatic);
     try {
-      await markDoorForSisters(repositories, markers, { doorId: door.id, sisters: next, authorId });
+      showDoorProfile(await markDoorForSisters(repositories, markers, { doorId: door.id, sisters: next, authorId }));
       await sync?.synchronize();
     } catch (error) {
       setSisters(!next);
@@ -311,7 +323,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     setSisters(nextSisters);
     setAutoSisters(value === 'femme' && !sisters);
     try {
-      await updateDoorProfile(repositories, markers, { doorId: door.id, foyer: value, sisters: nextSisters, authorId });
+      showDoorProfile(await updateDoorProfile(repositories, markers, { doorId: door.id, foyer: value, sisters: nextSisters, authorId }));
       await sync?.synchronize();
     } catch (error) {
       setFoyer(previousFoyer);

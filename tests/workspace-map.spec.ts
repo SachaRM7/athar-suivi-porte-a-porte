@@ -93,7 +93,7 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await plan.fill(`${originalPlan}\n2 | 21`);
   await page.getByRole('button', { name: 'Appliquer le plan manuel' }).click();
   await expect(page.getByText('Structure enregistrée : 1 ajoutée(s), 0 ajustée(s), 0 archivée(s).').first()).toBeVisible();
-  await expect(page.getByText('5 portes')).toBeVisible();
+  await expect(page.locator('.building-structure-summary')).toContainText('5 portes');
 });
 
 test('refuses to delete a zone while its buildings and doors are still attached', async ({ page }) => {
