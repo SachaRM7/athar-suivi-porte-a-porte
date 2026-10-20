@@ -30,3 +30,9 @@ test('orphans and duplicate paths prevent retirement', () => {
   const result = auditData([doc, doc], 'main'); assert.equal(result.retirementAllowed, false);
   assert.ok(result.issues.some(i => i.code === 'duplicate-path')); assert.ok(result.issues.some(i => i.code === 'orphan-visit'));
 });
+
+test('an empty or partial export never authorizes historical retirement', () => {
+  const result = auditData([], 'main');
+  assert.equal(result.diagnosticsClear, true);
+  assert.equal(result.retirementAllowed, false);
+});

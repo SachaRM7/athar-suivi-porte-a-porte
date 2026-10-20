@@ -282,7 +282,7 @@ progression des portes est exploitable et la couverture géographique est indisp
 ## Recette de l'implémentation complète
 
 Sous Node 22 : lint, typage et build de production vérifié ; **210 tests unitaires**, **14
-contrôles Functions**, **4 tests catalogue/diagnostic**, **6 contrôles de configuration**, **84
+contrôles Functions**, **5 tests catalogue/diagnostic**, **6 contrôles de configuration**, **84
 tests Firestore/Auth** et **10 parcours navigateur sur émulateurs** réussis. La reconstruction
 est testée à 900 portes, avec écriture entre les pages, publication concurrente, génération
 retardée, interruption, réparation, archivage et suppression de zone. Le navigateur vérifie

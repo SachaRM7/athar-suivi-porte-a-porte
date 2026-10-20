@@ -44,7 +44,9 @@ export function auditData(documents, workspaceId) {
   return { schemaVersion: 1, mode: 'read-only', workspaceId, counts: { zones: zones.length, buildings: buildings.length, doors: doors.length, visits: visits.length, historicalDocuments: legacy.length },
     issues: issues.sort((a, b) => a.reference.localeCompare(b.reference) || a.code.localeCompare(b.code)),
     projections: projections.map(p => ({ zoneReference: core.hash(p.zoneId), completeness: p.completeness, issues: p.issues })), migrationPlan,
-    retirementAllowed: legacy.length === 0 && issues.length === 0 && projections.every(p => p.completeness === 'complete') };
+    diagnosticsClear: legacy.length === 0 && issues.length === 0 && projections.every(p => p.completeness === 'complete'),
+    // An export can be partial: absence in this input is never authorization to delete.
+    retirementAllowed: false };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2); const arg = key => args.includes(key) ? args[args.indexOf(key) + 1] : undefined;
