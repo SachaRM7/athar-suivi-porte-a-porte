@@ -21,7 +21,7 @@
     "test:e2e:mobile": "npm run build:lab && playwright test --config playwright.mobile.config.ts --grep-invert @emulator",
     "test:emulator": "powershell -ExecutionPolicy Bypass -File scripts/run-emulator-tests.ps1",
     "test:emulator:ci": "firebase emulators:exec --project athar-local --only auth,firestore,functions \"npm run test:emulator:run\"",
-    "test:emulator:run": "vitest run --config vitest.emulator.config.ts tests/emulator/auth-functions.integration.test.ts tests/emulator/athar-wp2-derivations.integration.test.ts && vitest run --config vitest.emulator.config.ts --exclude tests/emulator/auth-functions.integration.test.ts --exclude tests/emulator/athar-wp2-derivations.integration.test.ts",
+    "test:emulator:run": "vitest run --config vitest.emulator.config.ts tests/emulator/auth-functions.integration.test.ts tests/emulator/pilotage-functions.integration.test.ts tests/emulator/athar-wp2-derivations.integration.test.ts && vitest run --config vitest.emulator.config.ts --exclude tests/emulator/auth-functions.integration.test.ts --exclude tests/emulator/pilotage-functions.integration.test.ts --exclude tests/emulator/athar-wp2-derivations.integration.test.ts",
     "test:load:emulator": "vitest run --config vitest.emulator.config.ts tests/emulator/read-pagination.integration.test.ts",
     "test:e2e:emulator": "powershell -ExecutionPolicy Bypass -File scripts/run-emulator-playwright-tests.ps1",
     "test:e2e:emulator:ci": "firebase emulators:exec --project athar-local --only auth,firestore,functions \"node scripts/ci/run-emulator-e2e.mjs\"",
@@ -37,7 +37,7 @@
     "pwa:icons": "powershell -ExecutionPolicy Bypass -File scripts/generate-pwa-icons.ps1",
     "test:functions": "npm --prefix functions test",
     "typecheck": "tsc -b",
-    "test:ci-scripts": "node --test scripts/ci/deploy-config.test.mjs",
+    "test:ci-scripts": "node --test scripts/ci/*.test.mjs",
     "test:lot-b": "node --test scripts/commissioning/lot-b.test.mjs",
     "stats:rebuild": "node scripts/commissioning/lot-b.mjs",
     "audit:data": "node scripts/commissioning/data-audit.mjs"

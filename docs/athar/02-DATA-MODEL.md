@@ -6,6 +6,10 @@
 > ci-dessous constituent la spécification historique WP2 ; leurs accès clients sont
 > fermés depuis le lot A. Elles ne doivent pas servir à implémenter les projections du workspace.
 
+> **Extension lot E :** sorties, participations et rattachement optionnel des visites
+> définis dans [10-PILOTAGE-INDUSTRIALISATION.md](10-PILOTAGE-INDUSTRIALISATION.md).
+> Les passages restent immuables et la couverture du lot B reste inchangée.
+
 ## Décision structurante
 
 Un bâtiment détecté sur la carte **n'a aucun document en base** tant que personne n'y est allé.

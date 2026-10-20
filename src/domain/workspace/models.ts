@@ -30,6 +30,7 @@ export type WorkspaceMember = {
   role: MemberRole;
   active: boolean;
   createdAt: string;
+  activeOuting?: { id: string; zoneId: string; title: string } | null;
 };
 
 export type Status = {
@@ -118,6 +119,7 @@ export type Door = {
 };
 
 export type Visit = {
+  outingId?: string | null;
   id: EntityId;
   doorId: EntityId;
   statusId: StatusId;

@@ -215,7 +215,7 @@ export function createTerrainSessionRepositories(input: {
         const combined = new Map([...visits.values()].filter(visit => visit.doorId === doorId).map(visit => [visit.id, visit]));
         for (const entry of await input.outbox.all().catch(() => [])) {
           if (entry.doorId === doorId) combined.set(entry.commandId, {
-            id: entry.commandId, doorId, statusId: entry.statusId, note: entry.note, authorId: entry.authorId,
+            ...(entry.outingId ? { outingId: entry.outingId } : {}), id: entry.commandId, doorId, statusId: entry.statusId, note: entry.note, authorId: entry.authorId,
             occurredAt: entry.createdAt, syncedAt: null, doorRevision: entry.expectedRevision + 1, replacesVisitId: null, voidedAt: null
           });
         }

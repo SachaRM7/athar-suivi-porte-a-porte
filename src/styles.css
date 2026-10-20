@@ -509,3 +509,21 @@ h2 { font-size: 22px; }
 }
 .map-load-failure, .workspace-map-loading { background: var(--paper); color: var(--ink); font: var(--t-15)/1.5 var(--font-ui); padding: 24px; }
 .map-load-failure button { min-height: var(--touch); padding: 12px; }
+
+/* Lot E — pilotage : jetons partagés, listes paginées, actions tactiles. */
+.pilotage-section { padding-block: 24px; border-bottom: 1px solid var(--hairline); overflow-wrap: anywhere; }
+.pilotage-list { list-style: none; margin: 0; padding: 0; }
+.pilotage-list > li { padding-block: 20px; border-bottom: 1px solid var(--hairline); }
+.pilotage-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-block: 12px; }
+.admin-shell { color: var(--ink); font-family: var(--font-ui); }
+.admin-shell h1, .admin-shell h2, .admin-shell h3 { font-family: var(--font-title); }
+.admin-shell h1 { font-size: var(--t-auth-title); }
+.admin-shell h2 { font-size: var(--t-19); }
+.admin-shell h3 { font-size: var(--t-17); }
+.admin-shell p, .admin-shell li { font-size: var(--t-15); }
+.admin-shell .admin-form { margin-block: 24px; }
+.admin-shell .admin-form label { color: var(--ink-soft); font: inherit; text-transform: none; }
+.admin-shell input, .admin-shell select, .ds-dialog input { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); font: inherit; padding: 12px; min-height: 44px; width: 100%; min-width: 0; }
+.admin-shell .text-link, .pilotage-section .text-link { display: inline-flex; min-height: 44px; align-items: center; }
+.admin-shell :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.admin-shell .dashboard-pagination { flex-wrap: wrap; gap: 12px; }

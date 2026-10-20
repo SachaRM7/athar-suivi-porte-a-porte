@@ -174,6 +174,7 @@ export function fromFirestoreVisit(id: string, data: DocumentData): Visit {
   if (data.voidedAt !== null && data.voidedAt !== undefined && !(data.voidedAt instanceof Timestamp)) throw new Error('Visit void date must be a Firestore Timestamp or null.');
   const visit: Visit = {
     id,
+    ...(typeof data.outingId === 'string' ? { outingId: data.outingId } : {}),
     doorId: requiredString(data, 'doorId'),
     statusId: requiredString(data, 'statusId'),
     note: requiredString(data, 'note'),
@@ -205,6 +206,7 @@ export function fromFirestoreMember(id: string, data: DocumentData): WorkspaceMe
     displayName,
     role,
     active: data.active,
-    createdAt: data.createdAt.toDate().toISOString()
+    createdAt: data.createdAt.toDate().toISOString(),
+    ...(data.activeOuting ? { activeOuting: { id: requiredString(data.activeOuting, 'id'), zoneId: requiredString(data.activeOuting, 'zoneId'), title: requiredString(data.activeOuting, 'title') } } : {})
   };
 }

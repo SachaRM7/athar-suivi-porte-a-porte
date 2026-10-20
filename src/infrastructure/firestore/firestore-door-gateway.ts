@@ -36,6 +36,7 @@ export class FirestoreDoorGateway implements DoorWriteGateway {
     const invalidDocumentId = (value: unknown) => typeof value !== 'string' || !value || value.length > 256 || value.includes('/') || value === '.' || value === '..';
     if (
       invalidDocumentId(intent.commandId) || invalidDocumentId(intent.authorId) ||
+      (intent.outingId != null && invalidDocumentId(intent.outingId)) ||
       invalidDocumentId(intent.doorId) || invalidDocumentId(intent.statusId) ||
       !Number.isInteger(intent.expectedRevision) || intent.expectedRevision < 0 ||
       !validNote || intent.note.length > 280 || containsUnsafeControl ||
@@ -54,6 +55,7 @@ export class FirestoreDoorGateway implements DoorWriteGateway {
     const batch = writeBatch(this.db);
 
     batch.set(visitRef, {
+      ...(intent.outingId ? { outingId: intent.outingId } : {}),
       doorId: intent.doorId,
       statusId: intent.statusId,
       note: intent.note,

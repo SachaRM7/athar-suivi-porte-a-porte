@@ -177,3 +177,25 @@ describe('local field visit recording', () => {
     await expect(repositories.doors.get('door-dalbad-02')).resolves.toMatchObject({ currentStatusId: 'contacted', revision: 2 });
   });
 });
+
+describe('outing association captured durably at recording time', () => {
+  it('preserves the outing through single and grouped intentions and conflict reapplication', async () => {
+    const zoneId = demoWorkspace.doors.find(door => door.id === 'door-dalbad-02')!.zoneId;
+    const repositories = createMemoryWorkspaceRepositories({ ...demoWorkspace, members: demoWorkspace.members.map(member => member.id === 'member-1' ? { ...member, activeOuting: { id: 'outing-test', zoneId, title: 'Terrain' } } : member) });
+    const outbox = new MemoryOutbox();
+    await recordLocalVisit(repositories, outbox, { authorId: 'member-1', doorId: 'door-dalbad-02', statusId: 'retry', note: '', createId: () => 'single-outing' });
+    expect((await outbox.all())[0].outingId).toBe('outing-test');
+    await outbox.markConflict('single-outing', { id: 'door-dalbad-02', revision: 5, currentStatusId: 'contacted', lastVisitId: 'remote', lastVisitAt: null });
+    await outbox.reapplyConflict('single-outing');
+    expect((await outbox.all())[0]).toMatchObject({ outingId: 'outing-test', expectedRevision: 5, state: 'pending' });
+    const other = demoWorkspace.doors.find(door => door.zoneId === zoneId && door.id !== 'door-dalbad-02' && door.active && !['linked','do-not-return'].includes(door.currentStatusId))!;
+    await recordLocalVisits(repositories, outbox, { authorId: 'member-1', doorIds: [other.id], statusId: 'retry', note: '', createId: () => 'group-outing' });
+    expect((await outbox.all()).find(entry => entry.commandId === 'group-outing')?.outingId).toBe('outing-test');
+  });
+  it('does not attach an unrelated zone or invent a sortie for historical activity', async () => {
+    const repositories = createMemoryWorkspaceRepositories({ ...demoWorkspace, members: demoWorkspace.members.map(member => ({ ...member, activeOuting: { id: 'elsewhere', zoneId: 'another-zone', title: 'Elsewhere' } })) });
+    const outbox = new MemoryOutbox();
+    const result = await recordLocalVisit(repositories, outbox, { authorId: 'member-1', doorId: 'door-dalbad-02', statusId: 'retry', note: '' });
+    expect(result.visit.outingId).toBeUndefined(); expect((await outbox.all())[0].outingId).toBeUndefined();
+  });
+});

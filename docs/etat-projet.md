@@ -1,12 +1,23 @@
 # Etat de passation
 
 Derniere mise a jour : 20 octobre 2026
-Etape terminee : **lot A — fiabilite, securite et coherence des acces** (branche `lot-a-fiabilite-securite`, non fusionnee)
-Rapport complet : `docs/audits/LOT-A-FIABILITE-SECURITE.md`
-Verdict : voir le rapport (§ verdict) ; aucun deploiement ni mutation cloud n'a ete fait.
-Prochaine etape : revue et fusion de la branche ; puis, sous autorisation explicite,
-inventaire des Functions en ligne (A3.4) et publication des regles Firestore. Ne pas
-commencer le lot B sans demande.
+État courant : **lot E — pilotage et industrialisation**, basé sur les lots A, B, C
+et D intégrés sur main. Les preuves de validation et d’intégration sont attachées aux PR.
+Contrat courant du lot E : [10-PILOTAGE-INDUSTRIALISATION.md](athar/10-PILOTAGE-INDUSTRIALISATION.md).
+Aucun déploiement ni mutation cloud réalisé. Les sections ci-dessous gardent l'historique
+des décisions ; les contrats B/C/D/E font foi pour le comportement actuel.
+
+## Lot E — passation
+
+- Administration des membres via Callables : liste, activation, rôle, mot de passe et dates.
+  Le document workspace reste l'autorité, y compris pour un administrateur nouvellement promu.
+- Sorties réelles dans `workspaces/*/outings`, rattachement optionnel immuable dans `visits`.
+  Démarrage/participation/clôture en ligne ; saisie durable hors ligne inchangée.
+- Bilan reproductible serveur, dates de lecture et limites explicites ; files locales
+  limitées au compte et à l'appareil courant, jamais interprétées comme total de l'équipe.
+- Publication manuelle : backend optionnel explicite, contrôle actif bloquant, reçu de
+  version et artefact. Une fusion sur main ne déploie rien.
+- Aucun besoin de migrer les anciennes visites : elles restent sans `outingId`.
 
 ## Lot A — ce qui change pour le prochain agent
 

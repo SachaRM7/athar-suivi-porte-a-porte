@@ -11,6 +11,8 @@ export type DoorSnapshot = {
 };
 
 export type VisitIntent = {
+  /** Capturée avant écriture durable ; conservée lors des reprises et conflits. */
+  outingId?: string | null;
   commandId: string;
   authorId: string;
   doorId: string;

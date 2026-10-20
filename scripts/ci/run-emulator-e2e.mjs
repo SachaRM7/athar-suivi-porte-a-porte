@@ -42,3 +42,6 @@ run('npx playwright test tests/terrain-preparation-emulator.spec.ts');
 
 // Grandes zones et gestes tactiles sur les deux moteurs mobiles.
 run('npx playwright test --config playwright.mobile.config.ts --grep @emulator');
+
+// Lot E : accès administrés et vraie sortie avec réception différée après clôture.
+run('npx playwright test tests/pilotage-emulator.spec.ts');

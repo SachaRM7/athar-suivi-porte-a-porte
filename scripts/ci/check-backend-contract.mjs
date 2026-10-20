@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { frontendCallables } from './frontend-callables.mjs';
 import { PRODUCTION_FUNCTIONS } from './deploy-config.mjs';
 
 /** Callables utilisées seulement en recette, derrière `environment.firebase.useEmulators`. */
@@ -35,8 +36,7 @@ function sourceFiles(directory) {
   });
 }
 
-const called = [...new Set(sourceFiles('src').flatMap((file) =>
-  [...readFileSync(file, 'utf8').matchAll(/httpsCallable(?:<[^>]*>)?\(\s*\w+\s*,\s*'([^']+)'/g)].map((match) => match[1])))].sort();
+const called = [...new Set(sourceFiles('src').flatMap(file => frontendCallables(readFileSync(file, 'utf8'), file)))].sort();
 
 const childEnv = { ...process.env, GCLOUD_PROJECT: 'athar-contract', FIREBASE_CONFIG: JSON.stringify({ projectId: 'athar-contract' }) };
 delete childEnv.FUNCTIONS_EMULATOR;
@@ -47,21 +47,27 @@ const errors = [];
 for (const name of called) {
   if (!exported.includes(name) && !EMULATOR_ONLY_CALLABLES.includes(name)) errors.push(`Le frontend appelle « ${name} », absente des Functions de production.`);
 }
+for (const name of PRODUCTION_FUNCTIONS) {
+  if (!exported.includes(name)) errors.push(`Function attendue absente : ${name}.`);
+}
 for (const name of exported) {
   if (!PRODUCTION_FUNCTIONS.includes(name)) errors.push(`La production exporterait « ${name} », non prévue.`);
 }
 
 const release = {
+  project: process.env.ATHAR_EXPECTED_PROJECT_ID ?? JSON.parse(readFileSync('.firebaserc', 'utf8')).projects.default,
+  indexesSha256: sha256('firestore.indexes.json'),
   commit: process.env.GITHUB_SHA ?? (() => { try { return String(execFileSync('git', ['rev-parse', 'HEAD'])).trim(); } catch { return null; } })(),
   rulesSha256: sha256('firestore.rules'),
-  functionsSha256: sha256(...readdirSync('functions').filter(name => name.endsWith('.js') || name === 'package-lock.json').sort().map(name => join('functions', name))),
+  functionsSha256: sha256(...readdirSync('functions').filter(name => name.endsWith('.js') || ['package.json', 'package-lock.json'].includes(name)).sort().map(name => join('functions', name))),
   productionFunctions: exported,
   callablesUsedByFrontend: called
 };
+// Ce fichier ancien reste informatif ; publish-release vérifie désormais l'état actif.
 const state = JSON.parse(readFileSync('deploy/backend-state.json', 'utf8'));
 const notices = [];
-if (state.rulesSha256 !== release.rulesSha256) notices.push(`Règles Firestore du dépôt (${release.rulesSha256.slice(0, 12)}) ≠ état déclaré publié (${state.rulesSha256?.slice(0, 12) ?? 'inconnu'}). Publication des règles à faire séparément, après autorisation.`);
-if (state.functionsSha256 !== release.functionsSha256) notices.push(`Functions du dépôt (${release.functionsSha256.slice(0, 12)}) ≠ état déclaré publié (${state.functionsSha256?.slice(0, 12) ?? 'inconnu'}). Vérifier les Functions réellement en ligne (procédure A3.4).`);
+if (state.rulesSha256 !== release.rulesSha256) notices.push(`Règles Firestore du dépôt (${release.rulesSha256.slice(0, 12)}) ≠ état déclaré publié (${state.rulesSha256?.slice(0, 12) ?? 'inconnu'}). Publication coordonnée à prévoir selon la procédure du lot E.`);
+if (state.functionsSha256 !== release.functionsSha256) notices.push(`Functions du dépôt (${release.functionsSha256.slice(0, 12)}) ≠ état déclaré publié (${state.functionsSha256?.slice(0, 12) ?? 'inconnu'}). La publication vérifie les Functions réellement actives (procédure du lot E).`);
 
 const writeIndex = process.argv.indexOf('--write');
 if (writeIndex > 0) {

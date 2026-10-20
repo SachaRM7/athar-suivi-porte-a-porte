@@ -5,8 +5,8 @@
 #   (inscription fermée, routes techniques absentes, purge de déconnexion), build vérifié.
 # - Seul un lancement manuel sur `main` avec `publish` coché publie, et seulement si
 #   `verifier` est vert ET si le build de déploiement passe ses gardes de configuration.
-# - Ce workflow ne publie QUE Hosting. Règles Firestore, index et Functions se publient à
-#   part, sur autorisation explicite (procédure : docs/audits/LOT-A-FIABILITE-SECURITE.md).
+# - Hosting exige un backend vérifié. L'option publish_backend autorise explicitement
+#   sa publication préalable (procédure : docs/athar/10-PILOTAGE-INDUSTRIALISATION.md).
 #
 # Secrets attendus dans Paramètres → Secrets and variables → Actions :
 #   FIREBASE_SERVICE_ACCOUNT_ATHAR_DEV31   clé JSON posée par `firebase init hosting:github`
@@ -27,10 +27,18 @@ on:
         type: boolean
         required: true
         default: false
+      publish_backend:
+        description: Publier aussi règles, index et Functions avant Hosting
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
 
 concurrency:
-  group: deploy-hosting-${{ github.ref }}
-  cancel-in-progress: true
+  group: athar-${{ github.event_name == 'workflow_dispatch' && 'publication' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   verifier:
@@ -66,6 +74,7 @@ jobs:
       # Build de production vérifié : laboratoires absents, PWA complète, carte différée.
       - run: npm run build
       - run: node scripts/verify-build.mjs
+      - run: node scripts/ci/check-backend-contract.mjs
 
       # Parcours critiques sur le build de production branché aux émulateurs.
       - run: npx playwright install --with-deps chromium webkit
@@ -75,6 +84,8 @@ jobs:
 
   publier:
     needs: verifier
+    environment: production
+    timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -98,9 +109,16 @@ jobs:
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Publier la version vérifiée
+        run: node scripts/ci/publish-release.mjs
+        env:
+          ATHAR_PUBLISH: ${{ inputs.publish }}
+          ATHAR_PUBLISH_BACKEND: ${{ inputs.publish_backend }}
+          ATHAR_FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ATHAR_DEV31 }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ATHAR_DEV31 }}
-          projectId: athar-dev31
-          channelId: live
+          name: release-${{ github.sha }}
+          path: dist/athar-release.json
+          retention-days: 90

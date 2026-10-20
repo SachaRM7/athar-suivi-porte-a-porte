@@ -64,6 +64,7 @@ export async function recordLocalVisit(
   const occurredAt = (input.now ?? new Date()).toISOString();
   const visitId = input.createId?.() ?? crypto.randomUUID();
   const visit: Visit = {
+    ...(member.activeOuting?.zoneId === door.zoneId ? { outingId: member.activeOuting.id } : {}),
     id: visitId,
     doorId: door.id,
     statusId: input.statusId,
@@ -88,6 +89,7 @@ export async function recordLocalVisit(
   // L'ordre compte : l'intention est durable avant que la projection affiche le passage.
   // Si le stockage refuse, rien n'est montré comme enregistré.
   await outbox.add({
+    ...(visit.outingId ? { outingId: visit.outingId } : {}),
     commandId: visit.id,
     authorId: input.authorId,
     doorId: door.id,
@@ -130,6 +132,7 @@ export async function recordLocalVisits(
   const occurredAt = (input.now ?? new Date()).toISOString();
   const results = resolvedDoors.map((door): RecordLocalVisitResult => {
     const visit: Visit = {
+      ...(member.activeOuting?.zoneId === door.zoneId ? { outingId: member.activeOuting.id } : {}),
       id: input.createId?.() ?? crypto.randomUUID(), doorId: door.id, statusId: input.statusId,
       note: normalizeNote(input.note), authorId: input.authorId, occurredAt, syncedAt: null,
       doorRevision: door.revision + 1, replacesVisitId: null, voidedAt: null
@@ -143,6 +146,7 @@ export async function recordLocalVisits(
   // Une seule transaction pour tout le groupe, avant la projection : un échec de stockage
   // n'en laisse aucun affiché comme enregistré, et un succès les rend tous durables.
   await outbox.addMany(results.map(({ visit, door }) => ({
+    ...(visit.outingId ? { outingId: visit.outingId } : {}),
     commandId: visit.id, authorId: input.authorId, doorId: door.id, statusId: input.statusId,
     note: visit.note, expectedRevision: door.revision - 1, createdAt: occurredAt
   })));
