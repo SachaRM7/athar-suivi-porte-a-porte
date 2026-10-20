@@ -1,73 +1,11 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Aucune restriction territoriale : tout membre agit sur n'importe quelle porte,
-    // partout. Ce qui protège l'historique, c'est l'immutabilité de `passages`, pas un
-    // périmètre géographique. Le claim Auth `role` vaut 'admin' ou 'member'.
-    function atharSignedIn() {
-      return request.auth != null;
-    }
-
-    function estMembre() {
-      return atharSignedIn() && request.auth.token.get('role', '') in ['admin', 'member'];
-    }
-
-    function estCoordinateur() {
-      return atharSignedIn() && request.auth.token.get('role', '') == 'admin';
-    }
-
-    function atharValidZone() {
-      let data = request.resource.data;
-      return data.keys().hasAll(['nom', 'couleur', 'polygon', 'createdBy', 'createdAt', 'stats']) &&
-        data.keys().hasOnly(['nom', 'couleur', 'polygon', 'createdBy', 'createdAt', 'stats']) &&
-        data.nom is string && data.nom.size() >= 1 && data.nom.size() <= 80 &&
-        data.couleur is string && data.couleur.matches('^#[0-9A-Fa-f]{6}$') &&
-        data.polygon is map && data.polygon.keys().hasOnly(['type', 'vertices']) &&
-        data.polygon.type == 'Polygon' && data.polygon.vertices is list &&
-        data.polygon.vertices.size() >= 4 && data.polygon.vertices.size() <= 500 &&
-        data.polygon.vertices[0] is latlng &&
-        data.polygon.vertices[data.polygon.vertices.size() - 1] == data.polygon.vertices[0] &&
-        data.createdBy is string && data.createdAt is timestamp && data.stats is map;
-    }
-
-    function atharValidBuilding() {
-      let data = request.resource.data;
-      return data.keys().hasAll(['zoneId', 'rnbId', 'adresse', 'complement', 'point', 'source', 'niveaux', 'createdBy', 'createdAt']) &&
-        data.keys().hasOnly(['zoneId', 'rnbId', 'adresse', 'complement', 'point', 'source', 'niveaux', 'createdBy', 'createdAt', 'derived']) &&
-        data.zoneId is string && data.rnbId is string && data.adresse is string &&
-        (data.complement == null || data.complement is string) && data.point is latlng &&
-        data.source in ['rnb', 'local'] && data.niveaux is int && data.niveaux >= 1 &&
-        data.createdBy is string && data.createdAt is timestamp;
-    }
-
-    function atharValidDoor() {
-      let data = request.resource.data;
-      return data.keys().hasAll(['etage', 'numero', 'ordre', 'foyer', 'aConfierAuxSoeurs']) &&
-        data.keys().hasOnly(['etage', 'numero', 'ordre', 'foyer', 'aConfierAuxSoeurs', 'derived']) &&
-        data.etage is int && data.etage >= 0 && data.numero is string && data.numero.size() >= 1 &&
-        data.numero.size() <= 32 && data.ordre is int && data.ordre >= 0 &&
-        (data.foyer == null || data.foyer in ['femme', 'homme', 'couple', 'famille']) &&
-        data.aConfierAuxSoeurs is bool;
-    }
-
-    function atharValidPassage() {
-      let data = request.resource.data;
-      return data.keys().hasAll(['statut', 'note', 'auteurUid', 'auteurNom', 'at']) &&
-        data.keys().hasOnly(['statut', 'note', 'auteurUid', 'auteurNom', 'at']) &&
-        data.statut in ['open', 'away', 'linked', 'dnd', 'locked'] &&
-        (data.note == null || data.note is string && data.note.size() <= 280) &&
-        data.auteurUid is string && data.auteurNom is string && data.auteurNom.size() >= 1 &&
-        data.auteurNom.size() <= 80 && data.at is timestamp;
-    }
-
-    function atharDerivedUnchanged() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['derived']);
-    }
-
-    function atharBuildingIdentityUnchanged() {
-      return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['rnbId', 'source', 'createdBy', 'createdAt']);
-    }
+    // Aucune restriction territoriale : tout membre actif agit sur n'importe quelle porte,
+    // partout. Ce qui protège l'historique, c'est l'immutabilité des passages (`visits`),
+    // pas un périmètre géographique. Le droit vient TOUJOURS du document membre du
+    // workspace (actif, rôle), jamais d'un claim Auth seul : un compte suspendu perd l'accès
+    // immédiatement, même s'il garde un ancien claim `role`.
 
     function memberPath(workspaceId, uid) {
       return /databases/$(database)/documents/workspaces/$(workspaceId)/members/$(uid);
@@ -202,7 +140,10 @@ service cloud.firestore {
         request.resource.data.structureRevision == 0 &&
         exists(/databases/$(database)/documents/workspaces/$(workspaceId)/zones/$(request.resource.data.zoneId));
       allow update: if activeMember(workspaceId) && validBuilding() && (
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'updatedAt']) &&
+        // Déplacer un bâtiment ou le changer de zone détache ses portes de leur position :
+        // opération de coordination, réservée à l'administrateur actif.
+        (admin(workspaceId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'updatedAt']) &&
           request.resource.data.structureRevision == resource.data.structureRevision) ||
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['structureRevision', 'updatedAt']) &&
           request.resource.data.structureRevision == resource.data.structureRevision + 1)
@@ -263,46 +204,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // WP2 — modèle Athar append-only. Ces collections racines coexistent
-    // temporairement avec /workspaces, qui appartient au socle antérieur.
+    // Schéma racine historique (WP2) : /zones, /buildings/{id}/doors/{id}/passages/{id}.
+    // L'application ne l'utilise plus : tout le parcours réel vit sous /workspaces/{id}.
+    // Ses anciennes règles reposaient sur le seul claim Auth `role` et laissaient un compte
+    // suspendu lire et écrire par ce chemin. Il est fermé à tout client (lot A3.5) ; les
+    // documents éventuels restent en place, l'Admin SDK et les dérivations n'étant pas
+    // soumis aux règles. Aucune donnée n'est supprimée ni migrée ici.
     match /zones/{zoneId} {
-      allow read: if estMembre();
-      allow create: if estCoordinateur() && atharValidZone() &&
-        request.resource.data.createdBy == request.auth.uid;
-      allow update: if estCoordinateur() && atharValidZone() &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdBy', 'createdAt']);
-      allow delete: if estCoordinateur();
+      allow read, write: if false;
     }
 
-    match /buildings/{buildingId} {
-      allow read: if estMembre();
-      allow create: if estMembre() &&
-        request.resource.data.createdBy == request.auth.uid && atharValidBuilding() &&
-        request.resource.data.rnbId == buildingId &&
-        exists(/databases/$(database)/documents/zones/$(request.resource.data.zoneId)) &&
-        !request.resource.data.keys().hasAny(['derived']);
-      allow update: if estMembre() && atharValidBuilding() &&
-        atharDerivedUnchanged() && atharBuildingIdentityUnchanged();
-      allow delete: if estCoordinateur();
-
-      match /doors/{doorId} {
-        allow read: if estMembre();
-        allow create: if estMembre() && atharValidDoor() &&
-          exists(/databases/$(database)/documents/buildings/$(buildingId)) &&
-          !request.resource.data.keys().hasAny(['derived']);
-        allow update: if estMembre() && atharValidDoor() && atharDerivedUnchanged();
-        allow delete: if estCoordinateur();
-
-        match /passages/{passageId} {
-          allow read: if estMembre();
-          // Seule barrière qui compte : on écrit sous son propre nom, et jamais deux fois.
-          allow create: if estMembre() && atharValidPassage() &&
-            exists(/databases/$(database)/documents/buildings/$(buildingId)) &&
-            exists(/databases/$(database)/documents/buildings/$(buildingId)/doors/$(doorId)) &&
-            request.resource.data.auteurUid == request.auth.uid;
-          allow update, delete: if false;
-        }
-      }
+    match /buildings/{legacyPath=**} {
+      allow read, write: if false;
     }
   }
 }

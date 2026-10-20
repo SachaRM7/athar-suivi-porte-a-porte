@@ -8,5 +8,8 @@
   "dependencies": {
     "firebase-admin": "latest",
     "firebase-functions": "latest"
+  },
+  "scripts": {
+    "test": "node --test test/exports.test.js"
   }
 }

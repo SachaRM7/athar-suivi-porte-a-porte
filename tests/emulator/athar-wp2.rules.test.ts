@@ -69,85 +69,41 @@ beforeAll(async () => {
 afterEach(async () => { await testEnv.clearFirestore(); });
 afterAll(async () => { await testEnv.cleanup(); });
 
-describe('WP2 — règles append-only Athar', () => {
-  it('autorise un passage de son auteur puis interdit sa mutation et sa suppression', async () => {
+/**
+ * Lot A3.5 — le schéma racine historique n'est plus utilisé par l'application. Ses règles
+ * reposaient sur le seul claim `role` : un compte suspendu dans le workspace, ou un compte
+ * portant un claim forgé hors du parcours d'invitation, y lisait et écrivait encore. Le
+ * chemin est désormais fermé à tout client, quel que soit le claim. Les documents restent.
+ */
+describe('Schéma racine historique — fermé aux clients', () => {
+  it('refuse toute lecture, même à un coordinateur ou un frère portant un claim', async () => {
+    await seed();
+    for (const db of [coordinator('coord-a'), brother('brother-a'), stranger('stranger-a')]) {
+      await assertFails(getDoc(doc(db, `zones/${zoneId}`)));
+      await assertFails(getDoc(doc(db, `buildings/${buildingId}`)));
+      await assertFails(getDoc(doc(db, `buildings/${buildingId}/doors/rdc-01`)));
+    }
+  });
+
+  it('refuse toute écriture : bâtiment, porte, passage, zone', async () => {
     await seed();
     const db = brother('brother-a');
-    const passageRef = doc(db, `buildings/${buildingId}/doors/rdc-01/passages/passage-a`);
-    await assertSucceeds(setDoc(passageRef, passage()));
-    await assertFails(updateDoc(passageRef, { note: 'Correction interdite' }));
-    await assertFails(deleteDoc(passageRef));
-    await assertFails(deleteDoc(doc(coordinator('coord-a'), passageRef.path)));
-  });
-
-  it('refuse un passage usurpant un autre auteur', async () => {
-    await seed();
-    await assertFails(setDoc(
-      doc(brother('brother-a'), `buildings/${buildingId}/doors/rdc-01/passages/foreign-author`),
-      passage({ auteurUid: 'brother-b' })
-    ));
-  });
-
-  /*
-   * Il n'y a pas de restriction territoriale : un frère agit partout. Ce qui protège
-   * l'historique est l'immutabilité de `passages`, vérifiée ci-dessus, pas un périmètre.
-   */
-  it('laisse tout membre agir sur un bâtiment quelconque, sans affectation de zone', async () => {
-    await seed();
-    const db = brother('brother-b');
-    await assertSucceeds(getDoc(doc(db, `buildings/${buildingId}`)));
-    await assertSucceeds(getDoc(doc(db, `zones/${zoneId}`)));
-    await assertSucceeds(setDoc(
-      doc(db, `buildings/${buildingId}/doors/rdc-01/passages/passage-b`),
-      passage({ auteurUid: 'brother-b', auteurNom: 'Frère B' })
-    ));
-  });
-
-  it('ferme la porte à un compte authentifié sans claim de rôle', async () => {
-    await seed();
-    const db = stranger('inconnu-a');
-    await assertFails(getDoc(doc(db, `buildings/${buildingId}`)));
-    await assertFails(setDoc(
-      doc(db, `buildings/${buildingId}/doors/rdc-01/passages/passage-inconnu`),
-      passage({ auteurUid: 'inconnu-a', auteurNom: 'Inconnu' })
-    ));
-  });
-
-  it('interdit au client de modifier ou supprimer les champs dérivés', async () => {
-    await seed();
-    const db = brother('brother-a');
-    const buildingRef = doc(db, `buildings/${buildingId}`);
-    const doorRef = doc(db, `buildings/${buildingId}/doors/rdc-01`);
-    await assertFails(updateDoc(buildingRef, { 'derived.statut': 'linked' }));
-    await assertFails(updateDoc(buildingRef, { derived: deleteField() }));
-    await assertFails(updateDoc(doorRef, { 'derived.statut': 'linked' }));
-    await assertFails(updateDoc(doorRef, { derived: deleteField() }));
-  });
-
-  it('fige l’identité du bâtiment et refuse les sous-documents orphelins', async () => {
-    await seed();
-    const db = brother('brother-a');
-    const buildingRef = doc(db, `buildings/${buildingId}`);
-    await assertSucceeds(updateDoc(buildingRef, { adresse: '2 rue de test' }));
-    await assertFails(updateDoc(buildingRef, { rnbId: 'RNB_USURPE' }));
-    await assertFails(updateDoc(buildingRef, { createdBy: 'brother-b' }));
-
-    await assertFails(setDoc(doc(db, 'buildings/ABSENT/doors/rdc-01'), {
-      etage: 0, numero: '01', ordre: 0, foyer: null, aConfierAuxSoeurs: false
+    await assertFails(setDoc(doc(db, `buildings/${buildingId}/doors/rdc-01/passages/p1`), passage()));
+    await assertFails(updateDoc(doc(db, `buildings/${buildingId}/doors/rdc-01`), { foyer: 'femme', aConfierAuxSoeurs: true }));
+    await assertFails(setDoc(doc(db, `buildings/RNB_NEW`), {
+      zoneId, rnbId: 'RNB_NEW', adresse: '2 rue', complement: null, point: new GeoPoint(43.6, 1.44),
+      source: 'rnb', niveaux: 1, createdBy: 'brother-a', createdAt: Timestamp.now()
     }));
-    await assertFails(setDoc(
-      doc(db, `buildings/${buildingId}/doors/absente/passages/orphelin`),
-      passage()
-    ));
+    const admin = coordinator('coord-a');
+    await assertFails(deleteDoc(doc(admin, `buildings/${buildingId}`)));
+    await assertFails(updateDoc(doc(admin, `zones/${zoneId}`), { nom: 'Renommée' }));
+    await assertFails(updateDoc(doc(admin, `buildings/${buildingId}`), { derived: deleteField() }));
   });
 
-  it('réserve la création d’une zone au coordinateur', async () => {
-    const data = {
-      nom: 'Nouvelle zone', couleur: '#16324F', polygon: polygon(),
-      createdBy: 'coord-a', createdAt: Timestamp.now(), stats: {}
-    };
-    await assertFails(setDoc(doc(brother('brother-a'), 'zones/new-zone'), data));
-    await assertSucceeds(setDoc(doc(coordinator('coord-a'), 'zones/new-zone'), data));
-    await assertFails(setDoc(doc(coordinator('coord-a'), 'zones/spoofed-zone'), { ...data, createdBy: 'other-admin' }));
+  it('laisse les documents existants intacts : la fermeture ne supprime rien', async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await assertSucceeds(getDoc(doc(context.firestore(), `buildings/${buildingId}/doors/rdc-01`)));
+    });
   });
 });
