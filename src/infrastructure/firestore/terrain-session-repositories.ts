@@ -1,6 +1,8 @@
+import { readTask, readSession } from '../../shared/async/read-task';
+import type { DoorMarkerOutbox } from '../../domain/sync/door-marker-outbox';
 import type { Outbox } from '../../domain/sync/outbox';
 import type { BuildingStructureDiff } from '../../domain/workspace/building-structure';
-import type { Building, Door, Status, Visit, WorkspaceMember, Zone } from '../../domain/workspace/models';
+import type { Building, Door, Visit, WorkspaceMember, Zone } from '../../domain/workspace/models';
 import type { ReadPage, ReadRequest } from '../../domain/workspace/read-pagination';
 import { throwIfReadAborted } from '../../domain/workspace/read-pagination';
 import type { WorkspaceReadRepositories, WorkspaceRepositories } from '../../domain/workspace/repositories';
@@ -31,18 +33,24 @@ async function collectPages<T>(
   read: (request: ReadRequest) => Promise<ReadPage<T>>,
   signal?: AbortSignal
 ): Promise<readonly T[]> {
-  const items: T[] = [];
-  const seenCursors = new Set<string>();
-  let cursor: string | null = null;
-  do {
-    throwIfReadAborted(signal);
-    const page = await read({ cursor, pageSize: 100, signal });
-    items.push(...page.items);
-    cursor = page.nextCursor;
-    if (cursor && seenCursors.has(cursor)) throw new Error('Firestore pagination returned a repeated cursor.');
-    if (cursor) seenCursors.add(cursor);
-  } while (cursor);
-  return items;
+  return readSession(async activeSignal => {
+    const items: T[] = [];
+    let documentsRead = 0;
+    const seenCursors = new Set<string>();
+    let cursor: string | null = null;
+    do {
+      throwIfReadAborted(activeSignal);
+      const page: ReadPage<T> = await readTask(read({ cursor, pageSize: 100, signal: activeSignal }), activeSignal);
+      throwIfReadAborted(activeSignal);
+      documentsRead += page.metrics.documentsRead;
+      if (documentsRead > 10_000 || seenCursors.size >= 100) throw new Error("Lecture trop volumineuse. Choisis un secteur plus petit.");
+      items.push(...page.items);
+      cursor = page.nextCursor;
+      if (cursor && seenCursors.has(cursor)) throw new Error('Firestore pagination returned a repeated cursor.');
+      if (cursor) seenCursors.add(cursor);
+    } while (cursor);
+    return items;
+  }, signal);
 }
 
 function sortedDoors(doors: readonly Door[]): Door[] {
@@ -64,28 +72,25 @@ export function createTerrainSessionRepositories(input: {
   remote: WorkspaceReadRepositories;
   member: WorkspaceMember;
   outbox: Outbox;
+  markers?: DoorMarkerOutbox;
   structureWriter: StructureWriter;
   zoneWriter: ZoneWriter;
   buildingWriter: BuildingWriter;
 }): WorkspaceRepositories {
-  const statuses = new Map<string, Status>();
-  const zones = new Map<string, Zone>();
-  const buildings = new Map<string, Building>();
   const doors = new Map<string, Door>();
   const visits = new Map<string, Visit>();
 
-  const cacheStatuses = (values: readonly Status[]) => {
-    for (const value of values) statuses.set(value.id, { ...value });
-    return [...values];
-  };
-  const cacheZones = (values: readonly Zone[]) => {
-    for (const value of values) zones.set(value.id, structuredClone(value));
-    return values.map((value) => structuredClone(value));
-  };
-  const cacheBuildings = (values: readonly Building[]) => {
-    for (const value of values) buildings.set(value.id, { ...value, location: { ...value.location } });
-    return values.map((value) => ({ ...value, location: { ...value.location } }));
-  };
+  // Ces caches ne sont pas un stockage durable : les intentions restent dans IndexedDB.
+  function cacheDoor(value: Door) {
+    doors.delete(value.id); doors.set(value.id, value);
+    if (doors.size > 2_000) doors.delete(doors.keys().next().value!);
+  }
+  function cacheVisit(value: Visit) {
+    visits.delete(value.id); visits.set(value.id, value);
+    if (visits.size > 1_000) visits.delete(visits.keys().next().value!);
+  }
+  const cacheZones = (values: readonly Zone[]) => values.map(value => structuredClone(value));
+  const cacheBuildings = (values: readonly Building[]) => values.map(value => ({ ...value, location: { ...value.location } }));
 
   function projectDoor(serverDoor: Door, outboxEntries: Awaited<ReturnType<Outbox['all']>>): Door {
     let projected = { ...serverDoor, location: { ...serverDoor.location } };
@@ -110,8 +115,13 @@ export function createTerrainSessionRepositories(input: {
     // structure. Si IndexedDB est endommagé, les portes Firestore doivent rester visibles
     // au lieu d'être remplacées par un faux état « Bâtiment non décrit ».
     const outboxEntries = await input.outbox.all().catch(() => []);
-    const projected = values.map((door) => projectDoor(door, outboxEntries));
-    for (const value of projected) doors.set(value.id, value);
+    const markers = await input.markers?.pending().catch(() => []) ?? [];
+    const profiles = new Map(markers.map(marker => [marker.doorId, marker]));
+    const projected = values.map((door) => {
+      const profile = profiles.get(door.id);
+      return { ...projectDoor(door, outboxEntries), ...(profile ? { sisters: profile.sisters, foyer: profile.foyer } : {}) };
+    });
+    for (const value of projected) cacheDoor(value);
     return sortedDoors(projected).map((value) => ({ ...value, location: { ...value.location } }));
   }
 
@@ -125,7 +135,7 @@ export function createTerrainSessionRepositories(input: {
     },
     statuses: {
       async list() {
-        return cacheStatuses(requirePreparedOfflineData(await input.remote.statuses.list()));
+        return requirePreparedOfflineData(await input.remote.statuses.list());
       }
     },
     zones: {
@@ -140,7 +150,6 @@ export function createTerrainSessionRepositories(input: {
       },
       async delete(zoneId) {
         await input.zoneWriter.delete(zoneId);
-        zones.delete(zoneId);
       }
     },
     buildings: {
@@ -156,7 +165,6 @@ export function createTerrainSessionRepositories(input: {
       },
       async delete(buildingId) {
         await input.buildingWriter.delete(buildingId);
-        buildings.delete(buildingId);
       },
       async listByZone(zoneId) {
         return cacheBuildings(await collectPages((request) => input.remote.buildings.listPageByZone(zoneId, request)));
@@ -204,12 +212,19 @@ export function createTerrainSessionRepositories(input: {
     visits: {
       async listByDoor(doorId) {
         const remoteVisits = await collectPages((request) => input.remote.visits.listPageByDoor(doorId, request));
-        for (const visit of remoteVisits) visits.set(visit.id, { ...visit });
-        return sortedVisits([...visits.values()].filter((visit) => visit.doorId === doorId)).map((visit) => ({ ...visit }));
+        const combined = new Map([...visits.values()].filter(visit => visit.doorId === doorId).map(visit => [visit.id, visit]));
+        for (const entry of await input.outbox.all().catch(() => [])) {
+          if (entry.doorId === doorId) combined.set(entry.commandId, {
+            id: entry.commandId, doorId, statusId: entry.statusId, note: entry.note, authorId: entry.authorId,
+            occurredAt: entry.createdAt, syncedAt: null, doorRevision: entry.expectedRevision + 1, replacesVisitId: null, voidedAt: null
+          });
+        }
+        for (const visit of remoteVisits) { combined.set(visit.id, visit); cacheVisit({ ...visit }); }
+        return sortedVisits([...combined.values()]).map(visit => ({ ...visit }));
       },
       async listPageByDoor(doorId, request) {
         const page = await input.remote.visits.listPageByDoor(doorId, request);
-        for (const visit of page.items) visits.set(visit.id, { ...visit });
+        for (const visit of page.items) cacheVisit({ ...visit });
         return { ...page, items: page.items.map((visit) => ({ ...visit })) };
       }
     },
@@ -217,11 +232,11 @@ export function createTerrainSessionRepositories(input: {
       if (visit.doorId !== door.id || visit.doorRevision !== door.revision || door.lastVisitId !== visit.id) {
         throw new Error('Local visit and door projection do not form one coherent revision.');
       }
-      visits.set(visit.id, { ...visit });
-      doors.set(door.id, { ...door, location: { ...door.location } });
+      cacheVisit({ ...visit });
+      cacheDoor({ ...door, location: { ...door.location } });
     },
     async commitDoorMarker(door) {
-      doors.set(door.id, { ...door, location: { ...door.location } });
+      cacheDoor({ ...door, location: { ...door.location } });
     },
     async commitVisitsAndDoors(entries) {
       for (const { visit, door } of entries) {
@@ -230,14 +245,14 @@ export function createTerrainSessionRepositories(input: {
         }
       }
       for (const { visit, door } of entries) {
-        visits.set(visit.id, { ...visit });
-        doors.set(door.id, { ...door, location: { ...door.location } });
+        cacheVisit({ ...visit });
+        cacheDoor({ ...door, location: { ...door.location } });
       }
     },
     async reconcileDoorSnapshot(snapshot) {
       const existing = doors.get(snapshot.id);
       if (!existing || existing.revision > snapshot.revision) return;
-      doors.set(snapshot.id, {
+      cacheDoor({
         ...existing,
         currentStatusId: snapshot.currentStatusId,
         revision: snapshot.revision,
@@ -255,15 +270,14 @@ export function createTerrainSessionRepositories(input: {
     },
     async applyBuildingStructure(structureInput) {
       const diff = await input.structureWriter.apply(structureInput);
-      buildings.set(diff.building.id, { ...diff.building, location: { ...diff.building.location } });
-      for (const door of diff.created) doors.set(door.id, { ...door, location: { ...door.location } });
+      for (const door of diff.created) cacheDoor({ ...door, location: { ...door.location } });
       for (const update of diff.updated) {
         const existing = doors.get(update.doorId);
-        if (existing) doors.set(existing.id, { ...existing, ...update });
+        if (existing) cacheDoor({ ...existing, ...update });
       }
       for (const doorId of diff.archivedDoorIds) {
         const existing = doors.get(doorId);
-        if (existing) doors.set(doorId, { ...existing, active: false });
+        if (existing) cacheDoor({ ...existing, active: false });
       }
       return structuredClone(diff);
     }

@@ -222,14 +222,14 @@ test('keeps the map full-frame and moves the mobile controls with the bottom she
 
   const map = await page.getByLabel('Carte MapLibre des zones').boundingBox();
   const panelBefore = await page.getByLabel('Batiments visibles').boundingBox();
-  const fabBefore = await page.getByRole('button', { name: 'Cadrer sur les emprises' }).boundingBox();
+  const fabBefore = await page.getByRole('button', { name: 'Ma position' }).boundingBox();
   expect(map).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
   expect(panelBefore?.height).toBeCloseTo(306, 0);
 
   await page.getByRole('button', { name: 'Agrandir le panneau' }).click();
   await expect.poll(async () => (await page.getByLabel('Batiments visibles').boundingBox())?.height).toBeCloseTo(620, 0);
   const panelAfter = await page.getByLabel('Batiments visibles').boundingBox();
-  const fabAfter = await page.getByRole('button', { name: 'Cadrer sur les emprises' }).boundingBox();
+  const fabAfter = await page.getByRole('button', { name: 'Ma position' }).boundingBox();
   expect(panelAfter?.height).toBeCloseTo(620, 0);
   expect(fabAfter?.y ?? 0).toBeLessThan(fabBefore?.y ?? 0);
 
@@ -239,7 +239,7 @@ test('keeps the map full-frame and moves the mobile controls with the bottom she
   expect(await page.getByLabel('Carte MapLibre des zones').boundingBox()).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
   await expect(page.locator('.building-floor-label')).toHaveText(['1er', 'RDC']);
   await page.getByRole('button', { name: 'Porte 11, Contact établi' }).click();
-  expect(await page.getByRole('dialog', { name: 'Detail du batiment' }).boundingBox()).toMatchObject({ x: 0, y: 452, width: 390, height: 392 });
+  expect(await page.getByRole('dialog', { name: 'Detail du batiment' }).boundingBox()).toMatchObject({ x: 0, y: 224, width: 390, height: 620 });
   await page.close();
 });
 

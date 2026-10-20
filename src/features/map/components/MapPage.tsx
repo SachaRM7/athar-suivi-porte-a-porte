@@ -1,3 +1,5 @@
+import { MapLoadingBoundary } from './MapLoadingBoundary';
+import { readTask } from '../../../shared/async/read-task';
 import { lazy, Suspense, useCallback, useMemo, useState, type ReactElement } from 'react';
 import { useAuth } from '../../../app/providers/auth-context';
 import { environment } from '../../../app/config/environment';
@@ -18,7 +20,7 @@ import { useGuardedSignOut } from '../../auth/components/GuardedSignOut';
 import { ZonePreparationControl } from '../../offline/components/ZonePreparationControl';
 import { FieldSyncNotice } from '../../visits/components/FieldSyncNotice';
 
-const WorkspaceMap = lazy(async () => ({ default: (await import('./WorkspaceMap')).WorkspaceMap }));
+const WorkspaceMap = lazy(async () => ({ default: (await readTask(import('./WorkspaceMap'), undefined, 30_000)).WorkspaceMap }));
 
 export function MapPage(): ReactElement {
   const { state } = useAuth();
@@ -42,6 +44,7 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
       remote: createFirestoreWorkspaceReadRepositories(client.firestore, environment.workspaceId, { source: 'server-first' }),
       member,
       outbox,
+      markers,
       structureWriter: new FirestoreBuildingStructureGateway(
         client.firestore,
         environment.workspaceId,
@@ -60,7 +63,7 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
         () => client.auth.currentUser?.uid ?? null
       )
     });
-  }, [member, outbox]);
+  }, [member, outbox, markers]);
   const sync = useFieldVisitSync(member.id, outbox, markers, repositories);
   const guardedSignOut = useGuardedSignOut({ onSynchronize: sync.synchronize });
   const requestSignOut = guardedSignOut.request;
@@ -98,7 +101,7 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
   }, []);
   return (
     <main className="map-page">
-      <Suspense fallback={<div className="workspace-map-loading" aria-label="Chargement de la carte" />}>
+      <MapLoadingBoundary><Suspense fallback={<div className="workspace-map-loading" role="status">Chargement de la carte…</div>}>
         <WorkspaceMap
           account={account}
           authorId={member.id}
@@ -111,7 +114,7 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
           syncNotice={!opened.building && <><FieldSyncNotice sync={sync} onResolve={() => void openSyncIssue()} />{issueMessage && <p role="status">{issueMessage}</p>}</>}
           renderPreparation={zone => <ZonePreparationControl key={`${member.id}:${zone.id}`} zone={zone} userId={member.id} />}
         />
-      </Suspense>
+      </Suspense></MapLoadingBoundary>
       <BuildingVisitSheet
         authorId={member.id}
         building={opened.building}

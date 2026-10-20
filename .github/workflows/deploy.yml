@@ -68,7 +68,9 @@ jobs:
       - run: node scripts/verify-build.mjs
 
       # Parcours critiques sur le build de production branché aux émulateurs.
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:e2e
+      - run: npm run test:e2e:mobile
       - run: npm run test:e2e:emulator:ci
 
   publier:

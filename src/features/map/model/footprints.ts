@@ -50,12 +50,15 @@ export function isInsideZone(zone: Zone | null, center: readonly [number, number
 export type FootprintState = {
   inZone: boolean;
   tracked: boolean;
+  known: boolean;
   color: string;
   sisters: boolean;
 };
 
 export type FootprintContext = {
   zone: Zone | null;
+  /** Une absence ne signifie jamais « jamais visité » pendant une lecture partielle. */
+  complete?: boolean;
   buildings: ReadonlyMap<string, Building>;
   doorsByBuilding: ReadonlyMap<string, readonly Door[]>;
   statuses: ReadonlyMap<string, Status>;
@@ -70,6 +73,7 @@ export function footprintState(rnbId: string, center: readonly [number, number],
   return {
     inZone: isInsideZone(context.zone, center),
     tracked: building !== undefined,
+    known: building !== undefined || context.complete !== false,
     color: (statusId ? context.statuses.get(statusId)?.color : undefined) ?? context.untouchedColor,
     // `02-DATA-MODEL.md` : le bâtiment porte le marqueur dès qu'une seule de ses portes
     // le porte. Seul l'anneau rose sort sur la carte, jamais la composition du foyer.

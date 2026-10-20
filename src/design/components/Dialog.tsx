@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactElement, type ReactNode } from 'react';
+import { useRef, type ReactElement, type ReactNode } from 'react';
+import { useModalFocus } from '../hooks/use-modal-focus';
 import { createPortal } from 'react-dom';
 
 export type DialogProps = {
@@ -18,31 +19,7 @@ export type DialogProps = {
 export function Dialog({ open, title, sub, eyebrow, onClose, children, footer }: DialogProps): ReactElement | null {
   const panel = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
-
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    panel.current?.focus();
-    function trap(event: KeyboardEvent) {
-      if (event.key !== 'Tab' || !panel.current) return;
-      const controls = [...panel.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]')].filter(control => control.getClientRects().length > 0);
-      const first = controls[0];
-      const last = controls.at(-1);
-      if (!first) { event.preventDefault(); panel.current.focus(); return; }
-      if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === panel.current)) { event.preventDefault(); first.focus(); }
-    }
-    document.addEventListener('keydown', trap);
-    return () => { document.removeEventListener('keydown', trap); if (previous?.isConnected) previous.focus(); };
-  }, [open]);
+  useModalFocus(panel, open, onClose);
 
   if (!open) return null;
 

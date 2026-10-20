@@ -35,7 +35,9 @@ function visibleWhen(condition: ExpressionSpecification, opacity = 1): Expressio
   return ['case', condition, opacity, 0];
 }
 
-const TODO: ExpressionSpecification = ['all', IN_ZONE, ['!', TRACKED]];
+const KNOWN: ExpressionSpecification = ['boolean', ['feature-state', 'known'], false];
+const UNKNOWN: ExpressionSpecification = ['all', IN_ZONE, ['!', KNOWN]];
+const TODO: ExpressionSpecification = ['all', IN_ZONE, KNOWN, ['!', TRACKED]];
 const SUIVI: ExpressionSpecification = ['all', IN_ZONE, TRACKED];
 
 export const ATHAR_LAYERS = {
@@ -43,6 +45,8 @@ export const ATHAR_LAYERS = {
   zoneLine: 'athar-zone-line',
   zoneProgress: 'athar-zone-progress',
   outOfZone: 'athar-batiments-hors-zone',
+  unknown: 'athar-batiments-non-charges',
+  unknownLine: 'athar-batiments-non-charges-contour',
   todo: 'athar-batiments-todo',
   todoLine: 'athar-batiments-todo-contour',
   tracked: 'athar-batiments-suivis',
@@ -55,7 +59,7 @@ export const ATHAR_LAYERS = {
 } as const;
 
 /** Couches sur lesquelles un appui ouvre la vue bâtiment. Jamais `outOfZone`. */
-export const CLICKABLE_FOOTPRINT_LAYERS: readonly string[] = [ATHAR_LAYERS.todo, ATHAR_LAYERS.tracked, ATHAR_LAYERS.local];
+export const CLICKABLE_FOOTPRINT_LAYERS: readonly string[] = [ATHAR_LAYERS.unknown, ATHAR_LAYERS.todo, ATHAR_LAYERS.tracked, ATHAR_LAYERS.local];
 
 export type AtharLayerSources = {
   zones: string;
@@ -89,6 +93,12 @@ export function createAtharLayers(sources: AtharLayerSources): LayerSpecificatio
     ...footprint(ATHAR_LAYERS.outOfZone, {
       type: 'fill',
       paint: { 'fill-color': TOKENS.footOut, 'fill-opacity': visibleWhen(['!', IN_ZONE]) }
+    }),
+    ...footprint(ATHAR_LAYERS.unknown, {
+      type: 'fill', paint: { 'fill-color': TOKENS.paper, 'fill-opacity': visibleWhen(UNKNOWN, 0.5) }
+    }),
+    ...footprint(ATHAR_LAYERS.unknownLine, {
+      type: 'line', paint: { 'line-color': TOKENS.inkSoft, 'line-width': 1.3, 'line-dasharray': [2, 2], 'line-opacity': visibleWhen(UNKNOWN) }
     }),
     // 4 — détectées dans la zone, aucun document Firestore.
     ...footprint(ATHAR_LAYERS.todo, {

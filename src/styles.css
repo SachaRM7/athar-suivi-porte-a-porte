@@ -482,3 +482,29 @@ h2 { font-size: 22px; }
 .dnd-correction-actions { display: flex; gap: 8px; }
 .dnd-correction-actions button { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-field); cursor: pointer; font: inherit; min-height: var(--touch); padding: 6px 12px; }
 .dnd-correction-actions button:first-child { border-color: var(--st-dnd); color: var(--st-dnd); }
+
+/* Lot D : focus visible, texte agrandi, clavier et encoches des téléphones. */
+:where(.building-sheet, .structure-sheet, .ds-dialog) :is(button, input, select) { min-height: var(--touch); }
+:where(.building-sheet, .structure-sheet, .ds-dialog) :is(button, input, textarea, select):focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.building-sheet, .structure-sheet, .ds-dialog { overscroll-behavior: contain; overflow-wrap: anywhere; }
+.building-sheet button, .structure-sheet button { white-space: normal; }
+.structure-sheet { overflow-y: auto; }
+.building-meta-row, .building-floor-heading { flex-wrap: wrap; }
+.building-header-actions { flex-wrap: wrap; }
+.building-floor-content { min-width: 0; }
+.door-history { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .building-sheet, .structure-sheet, .ds-dialog { padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+  .building-sheet--door-detail { height: min(620px, calc(100dvh - 32px)); }
+  .door-detail-sheet { max-height: calc(100dvh - 48px); }
+}
+@media (max-width: 380px) {
+  .building-identity { padding: 16px 12px; }
+  .building-floor { grid-template-columns: 36px minmax(0, 1fr); }
+  .door-detail-sheet .status-palette { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
+.map-load-failure, .workspace-map-loading { background: var(--paper); color: var(--ink); font: var(--t-15)/1.5 var(--font-ui); padding: 24px; }
+.map-load-failure button { min-height: var(--touch); padding: 12px; }

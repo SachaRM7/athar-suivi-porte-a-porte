@@ -18,6 +18,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:e2e": "npm run build:lab && playwright test --grep-invert @emulator",
+    "test:e2e:mobile": "npm run build:lab && playwright test --config playwright.mobile.config.ts --grep-invert @emulator",
     "test:emulator": "powershell -ExecutionPolicy Bypass -File scripts/run-emulator-tests.ps1",
     "test:emulator:ci": "firebase emulators:exec --project athar-local --only auth,firestore,functions \"npm run test:emulator:run\"",
     "test:emulator:run": "vitest run --config vitest.emulator.config.ts tests/emulator/auth-functions.integration.test.ts tests/emulator/athar-wp2-derivations.integration.test.ts && vitest run --config vitest.emulator.config.ts --exclude tests/emulator/auth-functions.integration.test.ts --exclude tests/emulator/athar-wp2-derivations.integration.test.ts",

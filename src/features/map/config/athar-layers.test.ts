@@ -9,6 +9,8 @@ describe('createAtharLayers', () => {
       ATHAR_LAYERS.zoneFill,
       ATHAR_LAYERS.zoneLine,
       ATHAR_LAYERS.outOfZone,
+      ATHAR_LAYERS.unknown,
+      ATHAR_LAYERS.unknownLine,
       ATHAR_LAYERS.todo,
       ATHAR_LAYERS.todoLine,
       ATHAR_LAYERS.tracked,

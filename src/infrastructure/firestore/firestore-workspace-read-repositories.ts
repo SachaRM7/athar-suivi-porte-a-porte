@@ -1,3 +1,4 @@
+import { readTask, readSession } from '../../shared/async/read-task';
 import {
   collection,
   onSnapshot,
@@ -319,18 +320,21 @@ export function createFirestoreWorkspaceReadRepositories(db: Firestore, workspac
         };
       },
       async listStructureByBuilding(buildingId) {
-        const doors: Door[] = [];
-        let after: string | null = null;
-        do {
-          const constraints: QueryConstraint[] = [where('buildingId', '==', buildingId), orderBy(documentId())];
-          if (after) constraints.push(startAfter(after));
-          constraints.push(limit(100));
-          const snapshots = await readDocs(query(path('doors'), ...constraints));
-          doors.push(...snapshots.docs.map(entry => fromFirestoreDoor(entry.id, entry.data())));
-          if (doors.length > 10_000) throw new ReadLimitExceededError(`door structure in building ${buildingId}`, 10_000);
-          after = snapshots.size === 100 ? snapshots.docs.at(-1)!.id : null;
-        } while (after);
-        return sortDoors(doors);
+        return readSession(async signal => {
+          const doors: Door[] = [];
+          let after: string | null = null;
+          do {
+            throwIfReadAborted(signal);
+            const constraints: QueryConstraint[] = [where('buildingId', '==', buildingId), orderBy(documentId())];
+            if (after) constraints.push(startAfter(after));
+            constraints.push(limit(100));
+            const snapshots = await readTask(readDocs(query(path('doors'), ...constraints)), signal);
+            doors.push(...snapshots.docs.map(entry => fromFirestoreDoor(entry.id, entry.data())));
+            if (doors.length > 10_000) throw new ReadLimitExceededError(`door structure in building ${buildingId}`, 10_000);
+            after = snapshots.size === 100 ? snapshots.docs.at(-1)!.id : null;
+          } while (after);
+          return sortDoors(doors);
+        });
       }
     },
     visits: {

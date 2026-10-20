@@ -175,3 +175,16 @@ validation de contraste et d'usage en conditions nocturnes.
 - La préparation couvre le paquet cartographique disponible et la zone téléchargée,
   avec une date explicite. L’échantillon des Carmes demeure une préparation partielle.
 - Contrat, fichiers et recette : [lot C](07-PARCOURS-TERRAIN.md).
+
+## Lot D — hypothèses de performance et recette
+
+- HYPOTHÈSE : 25 bâtiments/page, quatre lectures de portes simultanées, 200 bâtiments/cadrage,
+  budget de 10 000 documents ; recherche/tri/filtres explicitement limités à la page.
+  La recherche globale avec index dédié reste une évolution distincte, pas un chargement
+  silencieux de toute la zone. Ce périmètre remplace l'hypothèse de recherche du lot C.
+- HYPOTHÈSE : une position ponctuelle sans haute précision forcée suffit pour « Ma position ».
+- Les tailles typographiques utilisent des rem équivalents aux px nominaux pour suivre
+  l'agrandissement du texte. Aucun nouveau jeton visuel.
+- Les tests mobiles automatisés utilisent Chromium et WebKit. La recette sur appareils
+  physiques, lecteurs d'écran et batterie est explicitement non réalisée ici.
+- Contrat, budgets et recette : [lot D](09-PERFORMANCE-ACCESSIBILITE.md).

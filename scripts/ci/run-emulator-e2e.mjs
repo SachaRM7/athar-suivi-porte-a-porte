@@ -39,3 +39,6 @@ run('npx playwright test tests/field-sync-emulator.spec.ts --grep "desktop dashb
 // La recette admin supprime volontairement un statut ; repartir d'une configuration valide.
 run('node scripts/seed-playwright-emulator.mjs');
 run('npx playwright test tests/terrain-preparation-emulator.spec.ts');
+
+// Grandes zones et gestes tactiles sur les deux moteurs mobiles.
+run('npx playwright test --config playwright.mobile.config.ts --grep @emulator');

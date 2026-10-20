@@ -1,9 +1,9 @@
 import { Map as MapLibreMap, NavigationControl, addProtocol, type GeoJSONFeature, type GeoJSONSource, type Map as MapInstance } from 'maplibre-gl';
-import { PMTiles, Protocol } from 'pmtiles';
+import { PMTiles, Protocol, SharedPromiseCache } from 'pmtiles';
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode, type GeoJSONStoreFeatures } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { geohashForLocation } from 'geofire-common';
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import type { FeatureCollection, Point, Polygon } from 'geojson';
 import { withBasePath } from '../../../app/config/public-paths';
 import type { Building, GeoPoint, Status, Zone, ZoneGeometry, ZoneStats } from '../../../domain/workspace/models';
@@ -40,8 +40,7 @@ import {
   buildingListEntries,
   matchesBuildingListFilter,
   sortBuildingList,
-  type BuildingListEntry,
-  type BuildingListFilter,
+    type BuildingListFilter,
   type BuildingListSort,
 } from '../../buildings/model/building-staleness';
 import { cadastralSuggestion, type CadastralSuggestion } from '../../buildings/model/cadastral-structure';
@@ -51,13 +50,15 @@ import { LocalPmtilesSource } from '../infrastructure/local-pmtiles-source';
 import { firstAvailableArchive } from '../model/footprint-archive';
 import { matchesAddress, markingCandidates } from '../model/field-navigation';
 import { Dialog, TraceBar } from '../../../design/components';
-import { terrainSession, type TerrainSession } from '../model/terrain-session';
+import { terrainSession } from '../model/terrain-session';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './terrain-shell.css';
+import { useTerrainPage } from '../model/use-terrain-page';
+import { loadBuildingDoors } from '../model/terrain-reads';
+import { readTask, mapLimited } from '../../../shared/async/read-task';
+import { locateOnce } from '../model/locate-once';
 
 const protocol = new Protocol();
-const archive = new PMTiles(new LocalPmtilesSource(withBasePath('/fixtures/toulouse.pmtiles'), 'athar-toulouse-local'));
-protocol.add(archive);
 addProtocol('pmtiles', protocol.tile);
 // Glyphs are bundled locally so street labels remain available after PWA preparation.
 const DEFAULT_ZONE_COLOR = '#16835F';
@@ -174,30 +175,27 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const placingBuilding = useRef(false);
   const zones = useRef<readonly Zone[]>([]);
   const selectedZoneRef = useRef<string | null>(initialZoneId);
-  const footprintContext = useRef<FootprintContext>({ zone: null, buildings: new Map(), doorsByBuilding: new Map(), statuses: new Map(), untouchedColor: UNTOUCHED_COLOR });
+  const footprintContext = useRef<FootprintContext>({ complete: false, zone: null, buildings: new Map(), doorsByBuilding: new Map(), statuses: new Map(), untouchedColor: UNTOUCHED_COLOR });
   /** Bâtiments posés pendant cette session, encore absents de Firestore. */
   const pendingLocalBuildings = useRef(new Map<string, Building>());
   /** Suggestions cadastrales lues sur les tuiles, indexées par ID-RNB. Jamais appliquées seules. */
   const footprintSuggestions = useRef(new Map<string, CadastralSuggestion>());
   const [zoneList, setZoneList] = useState<readonly Zone[]>([]);
   const [zoneStats, setZoneStats] = useState<ReadonlyMap<string, ZoneStats | null>>(new Map());
-  /** Tous les bâtiments de la zone choisie, cadrage ou pas : la liste sert à naviguer. */
-  const [zoneBuildingsState, setZoneBuildings] = useState<readonly BuildingListEntry[]>([]);
-  const [sessionZoneId, setSessionZoneId] = useState<string | null>(null);
-  const [sessionState, setSession] = useState<TerrainSession>({ trace: [], markedCount: 0, durationLabel: null });
   const [listFilter, setListFilter] = useState<BuildingListFilter>('all');
   const [listSort, setListSort] = useState<BuildingListSort>('staleness');
   const [searchQuery, setSearchQuery] = useState('');
   const [markingOpen, setMarkingOpen] = useState(false);
   const [markingSearch, setMarkingSearch] = useState('');
   const [markingCentre, setMarkingCentre] = useState<GeoPoint>({ latitude: 43.6064, longitude: 1.4468 });
-  const [zoneLoad, setZoneLoad] = useState<{ id: string | null; phase: 'loading' | 'ready' | 'error' }>({ id: null, phase: 'loading' });
   const lastBuilding = useRef<string | null>(null);
   const [mode, setMode] = useState<'terrain' | 'edition'>('terrain');
   const [panelHeight, setPanelHeight] = useState<'peek' | 'full'>('peek');
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(initialZoneId);
-  const zoneBuildings = zoneBuildingsState.filter(entry => entry.building.zoneId === selectedZoneId);
-  const session = sessionZoneId === selectedZoneId ? sessionState : { trace: [], markedCount: 0, durationLabel: null };
+  const loadedZoneId = zoneList.some(zone => zone.id === selectedZoneId) ? selectedZoneId : null;
+  const terrainPage = useTerrainPage(repositories, loadedZoneId, reloadToken);
+  const zoneBuildings = useMemo(() => buildingListEntries(terrainPage.buildings, groupDoorsByBuilding(terrainPage.doors)), [terrainPage.buildings, terrainPage.doors]);
+  const session = useMemo(() => terrainSession(terrainPage.doors), [terrainPage.doors]);
   const [zoneMenuOpen, setZoneMenuOpen] = useState(false);
   const zonePicker = useRef<HTMLDivElement>(null);
   const [visibleBuildingCount, setVisibleBuildingCount] = useState(0);
@@ -211,12 +209,21 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
    */
   const [zoneDraft, setZoneDraft] = useState<{ name: string; color: string } | null>(null);
   const [savingZone, setSavingZone] = useState(false);
-  const [message, setMessage] = useState('Fond Toulouse local pret.');
+  const [message, setMessage] = useState('Chargement de la carte…');
+  const [mapError, setMapError] = useState(false);
+  const [mapVersion, setMapVersion] = useState(0);
+  const [metadataError, setMetadataError] = useState(false);
+  const [viewportPartial, setViewportPartial] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const locationRequest = useRef<AbortController | null>(null);
+  const metadata = useRef<Promise<{ nextZones: readonly Zone[]; statuses: readonly Status[] }> | null>(null);
+  const paintedIds = useRef(new Set<string>());
+  const [confirmZoneDeletion, setConfirmZoneDeletion] = useState(false);
 
   const selectedZone = zoneList.find((zone) => zone.id === selectedZoneId) ?? null;
   const normalizedSearch = searchQuery.trim();
   const candidates = markingCandidates(zoneBuildings, markingCentre);
-  const listReady = zoneLoad.id === selectedZoneId && zoneLoad.phase === 'ready';
+  const listReady = terrainPage.phase === 'ready' && loadedZoneId !== null;
   const listedBuildings = sortBuildingList(
     zoneBuildings.filter((entry) => (
       matchesBuildingListFilter(entry, listFilter)
@@ -287,6 +294,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     if (!instance) return;
     const context = footprintContext.current;
     const tiled = new Set<string>();
+    footprintSuggestions.current.clear();
     try {
       if (instance.getSource(FOOTPRINT_SOURCE)) {
         for (const feature of instance.querySourceFeatures(FOOTPRINT_SOURCE, { sourceLayer: FOOTPRINT_SOURCE_LAYER })) {
@@ -306,12 +314,39 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     } catch {
       // Tuiles pas encore chargées : le prochain « sourcedata » repassera.
     }
+    if (instance.getSource(FOOTPRINT_SOURCE)) {
+      for (const id of paintedIds.current) if (!tiled.has(id)) instance.removeFeatureState({ source: FOOTPRINT_SOURCE, sourceLayer: FOOTPRINT_SOURCE_LAYER, id });
+    }
+    paintedIds.current = tiled;
     const localCandidates = new Map(context.buildings);
     for (const [id, building] of pendingLocalBuildings.current) localCandidates.set(id, building);
     const untiled = [...localCandidates.values()].filter((building) => !tiled.has(building.id));
     (instance.getSource(LOCAL_BUILDING_SOURCE) as GeoJSONSource | undefined)?.setData(localBuildingFeatures(untiled, context));
     element.current?.setAttribute('data-footprints', String(tiled.size));
   }, []);
+
+  const ensureMetadata = useCallback(() => {
+    metadata.current ??= (async () => {
+      const [nextZones, statuses] = await readTask(Promise.all([repositories.zones.list(), repositories.statuses.list()]));
+      zones.current = nextZones;
+      setZoneList(nextZones);
+      setMetadataError(false);
+      const requested = selectedZoneRef.current;
+      const active = nextZones.some(zone => zone.id === requested) ? requested : nextZones[0]?.id ?? null;
+      selectedZoneRef.current = active;
+      setSelectedZoneId(active);
+      // Production subscribes once; panning does not reread every zone projection.
+      if (!repositories.zones.subscribeStats) {
+        const stats = await mapLimited(nextZones, 4, new AbortController().signal, async zone => {
+          try { return [zone.id, await readTask(repositories.zones.getStats(zone.id))] as const; }
+          catch { return [zone.id, null] as const; }
+        });
+        setZoneStats(new Map(stats));
+      }
+      return { nextZones, statuses };
+    })().catch(error => { metadata.current = null; setMetadataError(true); throw error; });
+    return metadata.current;
+  }, [repositories]);
 
   const refreshViewport = useCallback(async () => {
     const instance = map.current;
@@ -322,85 +357,58 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     const bounds = instance.getBounds();
     const viewport = { north: bounds.getNorth(), south: bounds.getSouth(), east: bounds.getEast(), west: bounds.getWest() };
     element.current?.setAttribute('data-viewport', JSON.stringify(viewport));
-    const [nextZones, buildings, statuses] = await Promise.all([
-      repositories.zones.list(),
-      repositories.buildings.listByViewport(viewport, { signal: controller.signal }),
-      repositories.statuses.list()
-    ]);
-    if (controller.signal.aborted || viewportRequest.current !== controller) return;
-    const stats = await Promise.all(nextZones.map(async (zone) => {
-      try {
-        return [zone.id, await repositories.zones.getStats(zone.id)] as const;
-      } catch {
-        // Une projection absente ou ancienne ne doit jamais empêcher l'entrée sur la carte.
-        return [zone.id, null] as const;
-      }
-    }));
-    if (viewportRequest.current !== controller) return;
-    zones.current = nextZones;
-    setZoneList(nextZones);
-    const statsByZone = new Map(stats);
-    setZoneStats(current => new Map([...statsByZone].map(([id, stats]) => {
-      const existing = current.get(id);
-      return [id, existing && stats && existing.updatedAt > stats.updatedAt ? existing : stats];
-    })));
-    const requestedZoneId = selectedZoneRef.current;
-    const activeZoneId = nextZones.some((zone) => zone.id === requestedZoneId) ? requestedZoneId : nextZones[0]?.id ?? null;
-    if (activeZoneId !== selectedZoneRef.current) {
-      selectedZoneRef.current = activeZoneId;
-      setSelectedZoneId(activeZoneId);
-    }
-    const doors = (await Promise.all(buildings.map(building => repositories.doors.listByBuilding(building.id)))).flat();
-    if (controller.signal.aborted || viewportRequest.current !== controller) return;
-    const grouped = groupDoorsByBuilding(doors);
-    footprintContext.current = {
-      zone: nextZones.find((zone) => zone.id === activeZoneId) ?? null,
-      buildings: new Map(buildings.map((building) => [building.id, building])),
-      doorsByBuilding: grouped,
-      statuses: new Map<string, Status>(statuses.map((status) => [status.id, status])),
-      untouchedColor: UNTOUCHED_COLOR
+    const { nextZones, statuses } = await ensureMetadata();
+    if (controller.signal.aborted) return;
+    const context: FootprintContext = {
+      zone: nextZones.find(zone => zone.id === selectedZoneRef.current) ?? null,
+      buildings: new Map(), doorsByBuilding: new Map(), statuses: new Map(statuses.map(status => [status.id, status])), untouchedColor: UNTOUCHED_COLOR, complete: false
     };
-    setVisibleBuildingCount(buildings.length);
-    setSelectedZoneId((current) => current ?? nextZones[0]?.id ?? null);
+    footprintContext.current = context;
+    setVisibleBuildingCount(0);
+    setViewportPartial(false);
     paintFootprints();
-  }, [paintFootprints, repositories]);
+    if (instance.getZoom() < FOOTPRINT_MIN_ZOOM) return;
+    const buildings = new Map<string, Building>();
+    const doorGroups = new Map<string, readonly import('../../../domain/workspace/models').Door[]>();
+    let cursor: string | null = null;
+    let reads = 0;
+    let documentsRead = 0;
+    const seen = new Set<string>();
+    let timedOut = false;
+    const deadline = window.setTimeout(() => { timedOut = true; controller.abort(); }, 30_000);
+    try {
+      do {
+        const page: import('../../../domain/workspace/read-pagination').ReadPage<Building> = await readTask(repositories.buildings.listPageByViewport(viewport, { cursor, pageSize: 25, signal: controller.signal }), controller.signal);
+        const fresh = page.items.filter(building => !buildings.has(building.id));
+        const result = await loadBuildingDoors(repositories, fresh, controller.signal);
+        documentsRead += page.metrics.documentsRead + result.documentsRead;
+        if (documentsRead > 10_000) throw new Error('Lecture trop volumineuse. Rapproche la carte.');
+        if (viewportRequest.current !== controller || controller.signal.aborted) return;
+        for (const building of fresh) buildings.set(building.id, building);
+        for (const [id, doors] of groupDoorsByBuilding(result.doors)) doorGroups.set(id, doors);
+        cursor = page.nextCursor;
+        if (cursor && seen.has(cursor)) throw new Error('Lecture cartographique interrompue.');
+        if (cursor) seen.add(cursor);
+        footprintContext.current = { ...context, zone: zones.current.find(zone => zone.id === selectedZoneRef.current) ?? null, buildings: new Map(buildings), doorsByBuilding: new Map(doorGroups), complete: cursor === null };
+        setVisibleBuildingCount(buildings.size);
+        setViewportPartial(cursor !== null);
+        element.current?.setAttribute('data-documents-read', String(documentsRead));
+        paintFootprints();
+      } while (cursor && ++reads < 40 && buildings.size < 200);
+    } catch (error) {
+      if (viewportRequest.current === controller && (timedOut || !controller.signal.aborted)) {
+        setViewportPartial(true);
+        setMessage('Données de carte incomplètes. Rapproche la carte ou réessaie ; la liste reste accessible.');
+      }
+      throw error;
+    } finally { window.clearTimeout(deadline); }
+  }, [ensureMetadata, paintFootprints, repositories]);
 
-  // Un bâtiment retiré depuis sa fiche doit quitter la liste sans attendre un déplacement de carte.
-  useEffect(() => { void refreshViewport().catch(() => undefined); }, [reloadToken, refreshViewport]);
+  useEffect(() => {
+    metadata.current = null;
+    void ensureMetadata().then(() => refreshViewport()).catch(() => undefined);
+  }, [reloadToken, ensureMetadata, refreshViewport]);
 
-  /**
-   * La liste ne suit pas le cadrage mais la zone : on doit pouvoir parcourir tous ses
-   * bâtiments et sauter de l'un à l'autre, y compris hors de l'écran. Les portes sont
-   * lues par rattachement au bâtiment, même si une entrée est hors de la bbox.
-   */
-  const zoneRequest = useRef(0);
-  const refreshZone = useCallback(async (zoneId: string | null) => {
-    const request = ++zoneRequest.current;
-    const zone = zones.current.find((candidate) => candidate.id === zoneId) ?? null;
-    if (!zone) {
-      setZoneBuildings([]);
-      setSession({ trace: [], markedCount: 0, durationLabel: null });
-      return;
-    }
-    setZoneLoad({ id: zone.id, phase: 'loading' });
-    const buildings = await repositories.buildings.listByZone(zone.id);
-    // Membership follows buildingId, including a doorway outside the polygon bbox.
-    const doors = (await Promise.all(buildings.map(building => repositories.doors.listByBuilding(building.id)))).flat();
-    if (request !== zoneRequest.current) return;
-    const zoneBuildingIds = new Set(buildings.map((building) => building.id));
-    const scopedDoors = doors.filter((door) => zoneBuildingIds.has(door.buildingId));
-    setZoneBuildings(buildingListEntries(buildings, groupDoorsByBuilding(scopedDoors)));
-    setSession(terrainSession(scopedDoors));
-    setSessionZoneId(zone.id);
-    setZoneLoad({ id: zone.id, phase: 'ready' });
-  }, [repositories]);
-
-  /**
-   * Tant que les zones ne sont pas chargées, il n'y a rien à lire : `?zone=` posait un
-   * identifiant dès le montage, la lecture partait à vide et ne repassait jamais puisque
-   * l'identifiant, lui, ne changeait plus. On attend donc que la zone existe vraiment.
-   */
-  const loadedZoneId = zoneList.some((zone) => zone.id === selectedZoneId) ? selectedZoneId : null;
   const statsZoneIds = zoneList.map(zone => zone.id).sort().join('|');
   useEffect(() => {
     const stop = statsZoneIds.split('|').filter(Boolean).map(id => repositories.zones.subscribeStats?.(id,
@@ -413,20 +421,6 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       new Map(zones.current.map(zone => [zone.id, zoneProgressLabel(zone, zoneStats.get(zone.id) ?? null)]))));
   }, [zoneStats]);
 
-  // Une liste de zone illisible n'est pas une zone vide : l'erreur est dite, pas avalée.
-  useEffect(() => {
-    let active = true;
-    void refreshZone(loadedZoneId).catch((error: unknown) => {
-      if (active) {
-        setZoneLoad({ id: loadedZoneId, phase: 'error' });
-        setMessage('Liste de la zone indisponible. Vérifie le réseau ou la préparation hors ligne, puis réessaie.');
-      }
-      void error;
-    });
-    const requestRef = zoneRequest;
-    return () => { active = false; requestRef.current++; };
-  }, [refreshZone, reloadToken, loadedZoneId]);
-
   /**
    * Un appui sur une emprise ouvre la vue bâtiment, jamais un formulaire de création :
    * l'emprise existe déjà. Sans document Firestore, la fiche s'ouvre sur l'état vide et
@@ -438,7 +432,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     // La suggestion cadastrale voyage avec l'emprise : elle pré-remplit le dialogue de
     // structure sans jamais créer de porte, cf. `03-CARTO.md`.
     const suggestion = cadastralSuggestion(feature.properties) ?? footprintSuggestions.current.get(identifier) ?? null;
-    const existing = await repositories.buildings.get(identifier);
+    const existing = await readTask(repositories.buildings.get(identifier));
     if (existing) {
       lastBuilding.current = existing.id;
       onBuildingSelect?.(existing, { persisted: true, suggestion });
@@ -464,20 +458,32 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
 
   useEffect(() => {
     if (!element.current || map.current) return;
-    const instance = new MapLibreMap({
+    // Un nouvel essai doit aussi oublier les promesses PMTiles rejetées.
+    const archive = new PMTiles(new LocalPmtilesSource(withBasePath('/fixtures/toulouse.pmtiles'), 'athar-toulouse-local'), new SharedPromiseCache(64));
+    protocol.add(archive);
+    const suggestions = footprintSuggestions.current;
+    let instance: MapLibreMap;
+    try { instance = new MapLibreMap({
       container: element.current,
       // Zoom 16 minimum : en dessous, `03-CARTO.md` n'affiche plus les emprises individuelles.
       center: [1.4468, 43.6064], zoom: 16.1, pitch: 0, bearing: 0,
       attributionControl: { compact: true },
-      style: localMapStyle
+      style: localMapStyle, maxTileCacheSize: 64, maxTileCacheZoomLevels: 2
     });
+    } catch { queueMicrotask(() => setMapError(true)); return; }
     map.current = instance;
     element.current.dataset.basemap = 'local-pmtiles';
-    instance.on('error', (event) => console.error('Workspace map error', event.error?.message ?? event.error));
+    let disposed = false;
+    let moveTimer: ReturnType<typeof setTimeout> | undefined;
+    const initRequest = new AbortController();
+    const mapFailed = () => { if (!disposed) { setMapError(true); setMessage('Carte indisponible. Réessaie ou utilise la liste des bâtiments.'); } };
+    instance.on('error', mapFailed);
+    instance.getCanvas().addEventListener('webglcontextlost', mapFailed);
     const initializeWorkspaceLayers = async () => {
       if (instance.getSource(ZONE_SOURCE)) return;
       {
-        const header = await archive.getHeader();
+        const header = await readTask(archive.getHeader(), initRequest.signal);
+        if (disposed) return;
         instance.addSource('protomaps', {
           type: 'vector', tiles: ['pmtiles://athar-toulouse-local/{z}/{x}/{y}'],
           minzoom: header.minZoom, maxzoom: header.maxZoom,
@@ -498,11 +504,13 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       instance.addSource(LOCAL_BUILDING_SOURCE, { type: 'geojson', data: EMPTY_FEATURES });
       instance.addSource(POSITION_SOURCE, { type: 'geojson', data: EMPTY_FEATURES });
 
-      const footprintArchiveUrl = await firstAvailableArchive(footprintArchives.map((path) => withBasePath(path as `/${string}`)));
+      const footprintArchiveUrl = await firstAvailableArchive(footprintArchives.map((path) => withBasePath(path as `/${string}`)), undefined, initRequest.signal);
+      if (disposed) return;
       if (footprintArchiveUrl) {
-        const footprints = new PMTiles(footprintArchiveUrl);
+        const footprints = new PMTiles(new LocalPmtilesSource(footprintArchiveUrl, footprintArchiveUrl), new SharedPromiseCache(64));
         protocol.add(footprints);
-        const header = await footprints.getHeader();
+        const header = await readTask(footprints.getHeader(), initRequest.signal);
+        if (disposed) return;
         instance.addSource(FOOTPRINT_SOURCE, {
           type: 'vector',
           tiles: [`pmtiles://${footprintArchiveUrl}/{z}/{x}/{y}`],
@@ -553,6 +561,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
             structureRevision: 0
           };
           pendingLocalBuildings.current.set(building.id, building);
+          if (pendingLocalBuildings.current.size > 25) pendingLocalBuildings.current.delete(pendingLocalBuildings.current.keys().next().value!);
           paintFootprints();
           setMode('terrain');
           onBuildingSelect?.(building, { persisted: false, suggestion: null });
@@ -567,7 +576,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           .find((feature) => feature.source === LOCAL_BUILDING_SOURCE || feature.state?.inZone === true);
         // Appui dans le vide : aucune création, aucune écriture.
         if (!hit) return;
-        void openFootprint(hit);
+        void openFootprint(hit).catch(() => setMessage('Bâtiment indisponible. Vérifie le réseau ou la préparation hors ligne puis réessaie.'));
       });
 
       // paintFootprints met à jour une source GeoJSON, ce qui déclenche un nouveau rendu.
@@ -575,31 +584,49 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       // Les tuiles chargées et les lectures du viewport déclenchent déjà cette mise à jour.
       instance.on('sourcedata', (event) => { if (event.sourceId === FOOTPRINT_SOURCE && event.isSourceLoaded) paintFootprints(); });
       instance.addControl(new NavigationControl({ showCompass: false }), 'top-right');
-      setMessage((current) => current.startsWith('Emprises indisponibles') ? current : 'Fond Toulouse local pret.');
-      void refreshViewport().catch((error) => { if (!(error instanceof Error) || error.name !== 'ReadAbortedError') setMessage(error instanceof Error ? error.message : 'Lecture de carte indisponible.'); });
+      setMapError(false);
+      setMessage((current) => current.startsWith('Emprises indisponibles') ? current : 'Fond Toulouse local prêt.');
+      void refreshViewport().catch((error) => { if (!(error instanceof Error) || error.name !== 'ReadAbortedError') setMessage('Données de carte incomplètes. Rapproche la carte ou réessaie.'); });
     };
     const initializeAfterStyleLoad = () => {
       void initializeWorkspaceLayers().catch((error: unknown) => {
-        setMessage(error instanceof Error ? error.message : 'Carte indisponible.');
+        void error; mapFailed();
       });
     };
     if (instance.isStyleLoaded()) initializeAfterStyleLoad();
     else instance.once('style.load', initializeAfterStyleLoad);
-    instance.on('moveend', () => { void refreshViewport().catch((error) => { if (!(error instanceof Error) || error.name !== 'ReadAbortedError') setMessage(error instanceof Error ? error.message : 'Lecture de carte indisponible.'); }); });
-    return () => { viewportRequest.current?.abort(); draw.current?.stop(); draw.current = null; map.current?.remove(); map.current = null; };
-  }, [authorId, footprintArchives, onBuildingSelect, openFootprint, paintFootprints, refreshViewport]);
+    instance.on('moveend', () => {
+      viewportRequest.current?.abort();
+      clearTimeout(moveTimer);
+      moveTimer = setTimeout(() => { void refreshViewport().catch(() => undefined); }, 180);
+    });
+    return () => {
+      disposed = true; initRequest.abort(); clearTimeout(moveTimer); viewportRequest.current?.abort();
+      draw.current?.stop(); draw.current = null; instance.remove(); map.current = null;
+      suggestions.clear(); paintedIds.current.clear();
+    };
+  }, [authorId, footprintArchives, onBuildingSelect, openFootprint, paintFootprints, refreshViewport, mapVersion]);
 
-  /** Couche 7 de `03-CARTO.md` : la position réelle, seul autre usage du safran. */
-  useEffect(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
-    const watchId = navigator.geolocation.watchPosition((position) => {
-      const data: FeatureCollection<Point> = {
-        type: 'FeatureCollection',
-        features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [position.coords.longitude, position.coords.latitude] } }]
-      };
+  const locate = async () => {
+    if (!navigator.geolocation) { setMessage('Ce navigateur ne propose pas la localisation. Continue avec la carte.'); return; }
+    locationRequest.current?.abort();
+    const controller = new AbortController(); locationRequest.current = controller;
+    setLocating(true); setMessage('Recherche de ta position…');
+    try {
+      const position = await locateOnce(navigator.geolocation, controller.signal);
+      if (controller.signal.aborted) return;
+      const data: FeatureCollection<Point> = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [position.longitude, position.latitude] } }] };
       (map.current?.getSource(POSITION_SOURCE) as GeoJSONSource | undefined)?.setData(data);
-    }, undefined, { enableHighAccuracy: true });
-    return () => navigator.geolocation.clearWatch(watchId);
+      map.current?.easeTo({ center: [position.longitude, position.latitude], zoom: Math.max(map.current.getZoom(), FOOTPRINT_MIN_ZOOM + .4), duration: motionDuration(450) });
+      setMessage(`Position relevée · précision d’environ ${Math.ceil(position.accuracy)} m. Le suivi GPS est arrêté.`);
+    } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Position indisponible. Réessaie.'); }
+    finally { if (locationRequest.current === controller) setLocating(false); }
+  };
+  useEffect(() => {
+    const current = locationRequest;
+    const pause = () => { if (document.visibilityState === 'hidden') { current.current?.abort(); setLocating(false); } };
+    document.addEventListener('visibilitychange', pause);
+    return () => { document.removeEventListener('visibilitychange', pause); current.current?.abort(); };
   }, []);
 
   /** Le changement de zone active redéfinit ce qui est « dans la zone ». */
@@ -718,7 +745,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     }
   };
 
-  const deleteSelectedZone = async () => {
+  const deleteSelectedZone = async (confirmed = false) => {
     if (!selectedZone || editing !== null) return;
     try {
       setSavingZone(true);
@@ -727,7 +754,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         setMessage(`Suppression impossible : ${buildings.length} bâtiment(s) sont encore rattaché(s) à cette zone. Aucun bâtiment, aucune porte et aucun passage n’a été supprimé.`);
         return;
       }
-      if (!window.confirm(`Supprimer la zone « ${selectedZone.name} » ? Aucun bâtiment, aucune porte et aucun passage ne sera supprimé.`)) return;
+      if (!confirmed) { setConfirmZoneDeletion(true); return; }
+      setConfirmZoneDeletion(false);
       await repositories.zones.delete(selectedZone.id);
       selectZone(null);
       setAttachedBuildingCount(null);
@@ -860,12 +888,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           <div className="terrain-panel-head">
             <div className="terrain-field-tools">{syncNotice}{selectedZone && renderPreparation?.(selectedZone)}</div>
             <div className="terrain-session-line">
-              <span className="ds-microlabel">Activité du jour · zone</span>
-              <span>{session.markedCount === 0
+              <span className="ds-microlabel">Activité du jour · {terrainPage.partial ? 'page chargée' : 'zone'}</span>
+              <span>{!listReady ? 'activité indisponible pendant la lecture' : session.markedCount === 0
                 ? 'aucune porte marquée'
                 : `${session.markedCount} marqué${session.markedCount > 1 ? 's' : ''} · dernières visites connues`}</span>
             </div>
-            <TraceBar entries={session.trace} /><small>Derniers passages connus, tous auteurs · peut inclure des passages en attente sur cet appareil</small>
+            <TraceBar entries={listReady ? session.trace : []} /><small>Derniers passages connus, tous auteurs · peut inclure des passages en attente sur cet appareil</small>
             <label className="terrain-search">
               <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></svg>
               <span className="terrain-sr-only">Rechercher parmi les bâtiments suivis</span>
@@ -873,12 +901,13 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
             </label>
           </div>
 
-          <div className="terrain-panel-scroll">
+          <div className="terrain-panel-scroll" aria-busy={terrainPage.phase === 'loading'}>
+            {terrainPage.partial && <p className="terrain-page-scope">Recherche, filtres, tri et activité sur cette page de bâtiments. Consulte les autres pages pour poursuivre.</p>}
             <div className="building-list-controls">
               <div className="building-list-filters" role="group" aria-label="Filtrer les bâtiments">
                 {BUILDING_LIST_FILTERS.map((filter) => (
-                  <button aria-pressed={listFilter === filter.id} className="building-list-filter" key={filter.id} onClick={() => setListFilter(filter.id)} type="button">
-                    {filter.label}<b>{filter.id === 'all' ? zoneBuildingCount : filter.id === 'todo' ? todoCount : staleCount}</b>
+                  <button disabled={!listReady} aria-pressed={listFilter === filter.id} className="building-list-filter" key={filter.id} onClick={() => setListFilter(filter.id)} type="button">
+                    {filter.label}<b>{!listReady ? '—' : filter.id === 'all' ? zoneBuildingCount : filter.id === 'todo' ? todoCount : staleCount}</b>
                   </button>
                 ))}
               </div>
@@ -889,8 +918,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
                 </select>
               </label>
             </div>
-            {!listReady ? <p className="building-list-empty" role="status">{zoneLoad.id === selectedZoneId && zoneLoad.phase === 'error' ? <>Liste indisponible. <button type="button" onClick={() => void refreshZone(selectedZoneId).catch(() => setZoneLoad({ id: selectedZoneId, phase: 'error' }))}>Réessayer</button></> : 'Chargement des bâtiments…'}</p> : listedBuildings.length === 0
-              ? <p className="building-list-empty">{normalizedSearch ? <>Aucune adresse correspondante parmi les bâtiments suivis de cette zone. <button type="button" onClick={() => { setSearchQuery(''); setListFilter('all'); }}>Effacer la recherche et les filtres</button></> : listFilter === 'stale' ? 'Aucun bâtiment ne correspond à ce filtre de revisite.' : listFilter === 'todo' ? 'Aucun bâtiment suivi ne correspond au filtre « Pas encore fait ».' : 'Aucun bâtiment décrit dans cette zone. Touche une emprise pour commencer.'}</p>
+            {!listReady ? <p className="building-list-empty" role="status">{terrainPage.phase === 'error' ? <>Liste indisponible. Vérifie le réseau ou la préparation hors ligne. <button type="button" onClick={terrainPage.retry}>Réessayer</button></> : !loadedZoneId && !metadataError ? 'Choisis une zone pour voir ses bâtiments.' : 'Chargement des bâtiments…'}</p> : listedBuildings.length === 0
+              ? <p className="building-list-empty">{normalizedSearch ? <>Aucune adresse correspondante parmi les bâtiments chargés. <button type="button" onClick={() => { setSearchQuery(''); setListFilter('all'); }}>Effacer la recherche et les filtres</button></> : listFilter === 'stale' ? 'Aucun bâtiment ne correspond à ce filtre de revisite.' : listFilter === 'todo' ? 'Aucun bâtiment suivi ne correspond au filtre « Pas encore fait ».' : terrainPage.partial ? 'Aucun résultat sur cette page. Consulte la suivante ou change les filtres.' : 'Aucun bâtiment décrit dans cette zone. Touche une emprise pour commencer.'}</p>
               : <ul className="building-list-rows">
                 {listedBuildings.map((entry) => (
                   <li key={entry.building.id}>
@@ -905,8 +934,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
                   </li>
                 ))}
               </ul>}
+            {(terrainPage.partial || terrainPage.index > 0) && <nav className="terrain-pagination" aria-label="Pages des bâtiments"><button disabled={terrainPage.index === 0 || terrainPage.phase === 'loading'} onClick={terrainPage.previous} type="button">Précédente</button><span>Page {terrainPage.index + 1}</span><button disabled={!terrainPage.nextCursor || terrainPage.phase !== 'ready'} onClick={terrainPage.next} type="button">Suivante</button></nav>}
             <span className="terrain-visible-count">
-              {zoneBuildingCount} bâtiment(s) suivis · {visibleBuildingCount} à l’écran
+              {listReady ? `${zoneBuildingCount} bâtiment(s) ${terrainPage.partial ? 'sur cette page' : 'suivis'}` : 'Liste en attente de lecture'} · {mapError ? 'carte indisponible' : `${visibleBuildingCount} chargés à l’écran`}
               {attachedBuildingCount !== null && <> · {attachedBuildingCount} rattache(s)</>}
             </span>
             <p className="terrain-visible-count">{zoneProgressDate(progress)}. Les nouveaux passages peuvent ne pas encore être comptés. {zoneBuildingCoverage(selectedStats)}. {zoneStatsProvenance(selectedStats)}</p>
@@ -953,7 +983,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       )}
 
       <div className="terrain-fabs">
-        <button aria-label="Cadrer sur les emprises" className="terrain-fab terrain-fab-ghost" onClick={() => map.current?.easeTo({ zoom: FOOTPRINT_MIN_ZOOM + 0.4, duration: motionDuration(450) })} type="button">
+        <button aria-label={locating ? 'Recherche de position en cours' : 'Ma position'} disabled={locating} className="terrain-fab terrain-fab-ghost" onClick={() => void locate()} type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5" /><circle cx="12" cy="12" r="8" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3" /></svg>
         </button>
         <button className="terrain-fab terrain-fab-primary" disabled={!selectedZone || !listReady || !onBuildingSelect} onClick={startMarking} type="button">
@@ -963,13 +993,15 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       </div>
 
       <Dialog open={markingOpen} title="Choisir un bâtiment pour marquer une porte" onClose={() => setMarkingOpen(false)}>
-        <p>Bâtiments suivis autour du centre de la carte. Choisis celui devant lequel tu te trouves.</p>
+        <p>Bâtiments {terrainPage.partial ? 'de la page chargée' : 'suivis'} autour du centre de la carte. Choisis celui devant lequel tu te trouves.</p>
         <label className="terrain-search"><span className="terrain-sr-only">Adresse du bâtiment à marquer</span><input placeholder="Adresse d’un bâtiment suivi" value={markingSearch} onChange={event => setMarkingSearch(event.target.value)} /></label>
         <ul className="marking-candidates">{candidates.filter(entry => matchesAddress(entry.building.addressLabel, markingSearch)).map(entry => <li key={entry.building.id}><button type="button" onClick={() => openListedBuilding(entry.building)}>{entry.building.addressLabel}<small>{entry.doorCount} portes décrites</small></button></li>)}</ul>
         {candidates.filter(entry => matchesAddress(entry.building.addressLabel, markingSearch)).length === 0 && <p>Aucun bâtiment suivi disponible pour ce choix. Les portes sorties du suivi ne sont pas proposées.</p>}
         <button className="ds-button ds-button--brand" type="button" onClick={() => { setMarkingOpen(false); setPanelHeight('peek'); setMessage('Touche l’emprise du bâtiment sur la carte pour ouvrir sa fiche.'); }}>Choisir une emprise sur la carte</button>
         <button className="ds-button ds-button--ghost" type="button" onClick={() => setMarkingOpen(false)}>Annuler</button>
       </Dialog>
+      <Dialog open={confirmZoneDeletion && selectedZone !== null} title="Supprimer cette zone ?" onClose={() => setConfirmZoneDeletion(false)}><p>Supprimer « {selectedZone?.name} » ? Aucun bâtiment, aucune porte et aucun passage ne sera supprimé.</p><button className="ds-button ds-button--brand" disabled={savingZone} onClick={() => void deleteSelectedZone(true)} type="button">Supprimer la zone</button><button className="ds-button ds-button--ghost" onClick={() => setConfirmZoneDeletion(false)} type="button">Annuler</button></Dialog>
+      {(mapError || metadataError || viewportPartial) && <aside className="terrain-read-alert" aria-label="État de la carte"><p>{mapError ? 'Carte indisponible. La liste reste utilisable.' : metadataError ? 'Zones indisponibles. Vérifie le réseau ou la préparation hors ligne.' : 'Données du cadrage incomplètes. Les pointillés indiquent les bâtiments à vérifier. Rapproche la carte.'}</p><button type="button" onClick={() => { if (mapError) setMapVersion(value => value + 1); else { metadata.current = null; void ensureMetadata().then(() => refreshViewport()).catch(() => undefined); } }}>Réessayer la carte</button></aside>}
       <p className="terrain-status" role="status">{message}</p>
     </section>
   );
