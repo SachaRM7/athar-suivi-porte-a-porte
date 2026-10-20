@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const { localOnboardingEnabled } = require('../runtime-mode');
-const projectionExports = ['projectWorkspaceDoor', 'projectWorkspaceVisit', 'projectWorkspaceBuilding', 'projectWorkspaceZone', 'projectWorkspaceCatalogue', 'rebuildZoneStats'];
+const projectionExports = ['listMembers', 'manageMember', 'manageOuting', 'listOutings', 'getOutingReport', 'recordMemberActivity', 'projectWorkspaceDoor', 'projectWorkspaceVisit', 'projectWorkspaceBuilding', 'projectWorkspaceZone', 'projectWorkspaceCatalogue', 'rebuildZoneStats'];
 const productionExports = ['createMember', ...projectionExports].sort();
 
 function exportedFunctions(extraEnv) {

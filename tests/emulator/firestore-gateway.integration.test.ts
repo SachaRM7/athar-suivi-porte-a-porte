@@ -207,3 +207,29 @@ describe('FirestoreDoorGateway against emulator rules', () => {
     await expect(gateway.commit(intent({ commandId: 'nested/visit' }))).rejects.toMatchObject({ category: 'invalid-intent' } satisfies Partial<SyncRejectedError>);
   });
 });
+
+describe('Lot E outing links are protected without blocking late synchronization', () => {
+  it('accepts a participant late arrival in the outing zone and keeps the link immutable', async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await setDoc(doc(context.firestore(), `${workspace}/outings/outing-a`), { zoneId: 'zone-a', endedAt: Timestamp.now(), participants: { 'member-a': { joinedAt: Timestamp.now() } } });
+    });
+    const db = testEnv.authenticatedContext('member-a').firestore();
+    const gateway = new FirestoreDoorGateway(db, 'main', () => 'member-a');
+    await gateway.commit(intent({ outingId: 'outing-a' }));
+    expect((await getDoc(doc(db, `${workspace}/visits/visit-adapter`))).data()?.outingId).toBe('outing-a');
+    await assertFails(setDoc(doc(db, `${workspace}/visits/visit-adapter`), { outingId: 'another' }, { merge: true }));
+    await assertFails(setDoc(doc(db, `${workspace}/outings/outing-a`), { endedAt: null }, { merge: true }));
+    await assertFails(setDoc(doc(db, `${workspace}/members/member-a`), { activeOuting: { id: 'outing-a' } }, { merge: true }));
+  });
+  it('rejects nonparticipants, missing outings and other zones without advancing the door', async () => {
+    await seed();
+    await testEnv.withSecurityRulesDisabled(async context => {
+      await setDoc(doc(context.firestore(), `${workspace}/outings/not-participant`), { zoneId: 'zone-a', participants: { 'member-b': {} } });
+      await setDoc(doc(context.firestore(), `${workspace}/outings/wrong-zone`), { zoneId: 'zone-b', participants: { 'member-a': {} } });
+    });
+    const gateway = new FirestoreDoorGateway(testEnv.authenticatedContext('member-a').firestore(), 'main', () => 'member-a');
+    for (const outingId of ['not-participant','wrong-zone','missing']) await expect(gateway.commit(intent({ outingId }))).rejects.toBeInstanceOf(SyncRejectedError);
+    expect(await readRevision()).toBe(1);
+  });
+});

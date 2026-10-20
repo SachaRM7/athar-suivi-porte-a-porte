@@ -1,3 +1,4 @@
+import { AppLink } from '../../../app/routes/router';
 import { MapLoadingBoundary } from './MapLoadingBoundary';
 import { readTask } from '../../../shared/async/read-task';
 import { lazy, Suspense, useCallback, useMemo, useState, type ReactElement } from 'react';
@@ -112,7 +113,7 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
           reloadToken={dataVersion}
           repositories={repositories}
           syncNotice={!opened.building && <><FieldSyncNotice sync={sync} onResolve={() => void openSyncIssue()} />{issueMessage && <p role="status">{issueMessage}</p>}</>}
-          renderPreparation={zone => <ZonePreparationControl key={`${member.id}:${zone.id}`} zone={zone} userId={member.id} />}
+          renderPreparation={zone => <><AppLink className="text-link" href={`/outings?zone=${encodeURIComponent(zone.id)}`}>{member.activeOuting ? `Sortie : ${member.activeOuting.title}${member.activeOuting.zoneId !== zone.id ? ' (autre zone)' : ''}` : 'Démarrer ou rejoindre une sortie'}</AppLink><ZonePreparationControl key={`${member.id}:${zone.id}`} zone={zone} userId={member.id} /></>}
         />
       </Suspense></MapLoadingBoundary>
       <BuildingVisitSheet

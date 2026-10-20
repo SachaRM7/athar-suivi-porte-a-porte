@@ -98,7 +98,7 @@ function bootstrapHashBuffer(value) {
 }
 
 exports.createMember = onCall(async (request) => {
-  if (request.auth?.token.role !== 'admin') {
+  if (!request.auth?.uid) {
     throw new HttpsError('permission-denied', 'Admin role required.');
   }
 
@@ -320,3 +320,6 @@ if (LOCAL_ONBOARDING) {
 
 // Lot B: only canonical workspace projections are exported in production.
 Object.assign(exports, require('./stats-triggers'));
+
+// Lot E : administration et sorties du workspace canonique.
+Object.assign(exports, require('./member-management'), require('./outings'));

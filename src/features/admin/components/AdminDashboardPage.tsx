@@ -1,3 +1,5 @@
+import { DeviceSyncSummary } from '../../outings/components/DeviceSyncSummary';
+import { readTask } from '../../../shared/async/read-task';
 import { useEffect, useMemo, useState, type CSSProperties, type ReactElement } from 'react';
 import { useAuth } from '../../../app/providers/auth-context';
 import { environment } from '../../../app/config/environment';
@@ -32,6 +34,7 @@ export function AdminDashboardPage(): ReactElement {
   const { state } = useAuth();
   const guardedSignOut = useGuardedSignOut();
   if (state.status !== 'active') throw new Error('AdminDashboardPage requires an active session.');
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [data, setData] = useState<DashboardData | null>(null);
   const [zoneDetails, setZoneDetails] = useState<ZoneDetails | null>(null);
   const [selectedZoneId, setSelectedZoneId] = useState('');
@@ -51,7 +54,7 @@ export function AdminDashboardPage(): ReactElement {
   useEffect(() => {
     let mounted = true;
     void repositories.then(async (workspace) => {
-      const [zones, statuses] = await Promise.all([workspace.zones.list(), workspace.statuses.list()]);
+      const [zones, statuses] = await readTask(Promise.all([workspace.zones.list(), workspace.statuses.list()]));
       if (!mounted) return;
       setData({ zones, statuses });
       setSelectedZoneId((current) => current || zones[0]?.id || '');
@@ -59,7 +62,7 @@ export function AdminDashboardPage(): ReactElement {
       if (mounted) setError('Les donnees de pilotage ne peuvent pas etre lues pour le moment.');
     });
     return () => { mounted = false; };
-  }, [repositories]);
+  }, [repositories, refreshVersion]);
 
   useEffect(() => {
     if (!selectedZoneId) return;
@@ -67,8 +70,8 @@ export function AdminDashboardPage(): ReactElement {
     const controller = new AbortController();
     void repositories.then(async (workspace) => {
       const [statsResult, buildingsResult] = await Promise.allSettled([
-        workspace.zones.getStats(selectedZoneId),
-        workspace.buildings.listPageByZone(selectedZoneId, { cursor: buildingCursor, pageSize: 50, signal: controller.signal })
+        readTask(workspace.zones.getStats(selectedZoneId), controller.signal),
+        readTask(workspace.buildings.listPageByZone(selectedZoneId, { cursor: buildingCursor, pageSize: 50, signal: controller.signal }), controller.signal)
       ]);
       if (!mounted) return;
       if (buildingsResult.status === 'rejected') {
@@ -88,7 +91,7 @@ export function AdminDashboardPage(): ReactElement {
       if (mounted) setZoneIssue({ zoneId: selectedZoneId, message: 'Les donnees de cette zone ne peuvent pas etre lues pour le moment.' });
     });
     return () => { mounted = false; controller.abort(); };
-  }, [buildingCursor, repositories, selectedZoneId]);
+  }, [buildingCursor, repositories, selectedZoneId, refreshVersion]);
 
   const [liveStats, setLiveStats] = useState<{ zoneId: string; stats: ZoneStats | null; invalid: boolean } | null>(null);
   useEffect(() => {
@@ -116,6 +119,7 @@ export function AdminDashboardPage(): ReactElement {
     .some(([id, count]) => count > 0 && !data?.statuses.some((status) => status.id === id));
 
   function selectZone(zoneId: string): void {
+    setZoneDetails(null); setZoneIssue(null);
     setSelectedZoneId(zoneId);
     setBuildingCursor(null);
     setPreviousBuildingCursors([]);
@@ -124,10 +128,12 @@ export function AdminDashboardPage(): ReactElement {
   function nextBuildingPage(): void {
     if (!selectedDetails?.nextCursor) return;
     setPreviousBuildingCursors((current) => [...current, buildingCursor]);
+    setZoneDetails(null);
     setBuildingCursor(selectedDetails.nextCursor);
   }
 
   function previousBuildingPage(): void {
+    setZoneDetails(null);
     setBuildingCursor(previousBuildingCursors.at(-1) ?? null);
     setPreviousBuildingCursors((current) => current.slice(0, -1));
   }
@@ -141,12 +147,16 @@ export function AdminDashboardPage(): ReactElement {
         </div>
         <nav aria-label="Navigation administration" className="dashboard-nav">
           <AppLink className="text-link" href="/">Carte terrain</AppLink>
+          <AppLink className="text-link" href="/outings">Sorties et bilans</AppLink>
           <AppLink className="text-link" href="/admin/members">Membres</AppLink>
           <button className="secondary-action" onClick={guardedSignOut.request} type="button">Se deconnecter</button>
           {guardedSignOut.dialog}
         </nav>
       </header>
 
+      <DeviceSyncSummary userId={state.session.member.id} />
+      <button className="secondary-action" onClick={() => { setData(null); setZoneDetails(null); setZoneIssue(null); setError(null); setRefreshVersion(value => value + 1); }} type="button">Actualiser le pilotage</button>
+      {data?.zones.length === 0 && <p>Crée une zone depuis le mode Édition de la carte pour commencer le pilotage.</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
       {!data && !error && <p className="dashboard-loading" role="status">Lecture des zones et projections...</p>}
       {data && selectedZone && (
@@ -182,7 +192,9 @@ export function AdminDashboardPage(): ReactElement {
               <span>{zoneProgressSummary(progress)}</span>
             </div>
           </section>
-          <p className="dashboard-projection-note">Couverture des bâtiments de la zone : indisponible tant que leur inventaire complet n’est pas connu.</p>
+          <p className="dashboard-projection-note">{zoneBuildingCoverage(selectedStats)}.</p>
+
+          <section className="pilotage-section" aria-label="Qualité des données"><h2>Qualité des données</h2><p>{selectedStats?.schemaVersion === 2 ? `${selectedStats.buildingCount ?? 'Indisponible'} bâtiments suivis · ${selectedStats.describedBuildingCount ?? 'Indisponible'} décrits · ${selectedStats.visitedBuildingCount ?? 'Indisponible'} avec passage` : 'Reconstruction vérifiée indisponible. Les valeurs historiques ne prouvent pas une couverture complète.'}</p><p>{selectedStats?.schemaVersion === 2 && selectedStats.buildingCount != null && selectedStats.describedBuildingCount != null ? `${selectedStats.buildingCount - selectedStats.describedBuildingCount} bâtiments suivis à décrire.` : 'Bâtiments à décrire : indisponible.'} Les bâtiments du catalogue encore absents de Firestore sont comptés uniquement si le catalogue complet est connu.</p></section>
 
           <section className="dashboard-metrics" aria-label="Compteurs de zone">
             <article><span>Portes suivies</span><strong data-testid="zone-door-count">{selectedStats?.doorCount ?? '-'}</strong></article>
@@ -206,7 +218,7 @@ export function AdminDashboardPage(): ReactElement {
               <span>{selectedBuildings.length} affiches / {selectedDetails?.metrics.documentsRead ?? 0} lus</span>
             </div>
             <ul>
-              {selectedBuildings.map((building) => <li key={building.id}><span>{building.addressLabel}</span><small>structure r.{building.structureRevision}</small></li>)}
+              {selectedBuildings.map((building) => <li key={building.id}><span>{building.addressLabel}</span><AppLink className="text-link" href={`/?zone=${encodeURIComponent(building.zoneId)}`}>Ouvrir la zone</AppLink></li>)}
             </ul>
             <nav aria-label="Pages de batiments" className="dashboard-pagination">
               <button className="secondary-action" disabled={previousBuildingCursors.length === 0 || zoneLoading} onClick={previousBuildingPage} type="button">Precedents</button>

@@ -188,3 +188,18 @@ validation de contraste et d'usage en conditions nocturnes.
 - Les tests mobiles automatisés utilisent Chromium et WebKit. La recette sur appareils
   physiques, lecteurs d'écran et batterie est explicitement non réalisée ici.
 - Contrat, budgets et recette : [lot D](09-PERFORMANCE-ACCESSIBILITE.md).
+
+## Lot E — décisions de pilotage
+
+- HYPOTHÈSE : une participation active par compte, sur une zone ; 50 participants
+  maximum et pas de réouverture d'une participation quittée. Aucun suivi GPS individuel.
+- HYPOTHÈSE : le démarrage, la participation et la clôture sont confirmés en ligne ;
+  les passages associés gardent la durabilité hors ligne A/C et l'idempotence existante.
+- Les passages hors période sont conservés mais isolés du bilan ; une réception tardive
+  d'un passage daté dans la période complète le bilan même après clôture.
+- Les files des autres appareils restent inconnues. Ne jamais présenter leur absence
+  de télémétrie comme « zéro passage en attente ».
+- La publication reste manuelle, avec option backend explicite et contrôle de l'état
+  actif bloquant. Les droits cloud et protections de l'environnement GitHub production
+  n'ont pas été vérifiés dans cette session ; aucun déploiement exécuté.
+- Contrats, budgets, reprise et recette : [lot E](10-PILOTAGE-INDUSTRIALISATION.md).

@@ -157,6 +157,7 @@ async function sendVisitWithRest(
       update: {
         name: visitName,
         fields: {
+          ...(intent.outingId ? { outingId: { stringValue: intent.outingId } } : {}),
           doorId: { stringValue: intent.doorId },
           statusId: { stringValue: intent.statusId },
           note: { stringValue: intent.note },

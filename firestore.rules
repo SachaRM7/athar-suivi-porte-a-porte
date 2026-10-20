@@ -106,7 +106,7 @@ service cloud.firestore {
     function validVisit() {
       let data = request.resource.data;
       return data.keys().hasAll(['doorId', 'statusId', 'note', 'authorId', 'occurredAt', 'syncedAt', 'doorRevision']) &&
-        data.keys().hasOnly(['doorId', 'statusId', 'note', 'authorId', 'occurredAt', 'syncedAt', 'doorRevision', 'replacesVisitId', 'voidedAt']) &&
+        data.keys().hasOnly(['doorId', 'statusId', 'note', 'authorId', 'occurredAt', 'syncedAt', 'doorRevision', 'replacesVisitId', 'voidedAt', 'outingId']) &&
         data.doorId is string && data.statusId is string && data.note is string && data.note.size() <= 280 &&
         data.authorId == request.auth.uid && data.occurredAt is timestamp && data.syncedAt is timestamp &&
         data.doorRevision is int && data.doorRevision >= 1 &&
@@ -186,9 +186,29 @@ service cloud.firestore {
       allow delete: if admin(workspaceId);
     }
 
+    // Le rattachement est immuable. Une arrivée tardive reste acceptée, même après
+    // clôture ; le bilan isole les dates hors période au lieu de perdre un passage.
+    function validOutingLink(workspaceId) {
+      let data = request.resource.data;
+      let outing = /databases/$(database)/documents/workspaces/$(workspaceId)/outings/$(data.get('outingId', '_'));
+      return data.get('outingId', null) == null ||
+        (data.outingId is string && exists(outing) &&
+          request.auth.uid in get(outing).data.participants &&
+          get(outing).data.zoneId == getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/doors/$(data.doorId)).data.zoneId);
+    }
+
+    match /workspaces/{workspaceId}/outings/{outingId} {
+      allow read: if activeMember(workspaceId);
+      allow write: if false;
+    }
+    match /workspaces/{workspaceId}/memberAudit/{eventId} {
+      allow read: if admin(workspaceId);
+      allow write: if false;
+    }
+
     match /workspaces/{workspaceId}/visits/{visitId} {
       allow read: if activeMember(workspaceId);
-      allow create: if activeMember(workspaceId) && validVisit() &&
+      allow create: if activeMember(workspaceId) && validVisit() && validOutingLink(workspaceId) &&
         exists(/databases/$(database)/documents/workspaces/$(workspaceId)/statuses/$(request.resource.data.statusId)) &&
         get(/databases/$(database)/documents/workspaces/$(workspaceId)/statuses/$(request.resource.data.statusId)).data.active == true &&
         getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/doors/$(request.resource.data.doorId)).data.lastVisitId == visitId;

@@ -7,8 +7,8 @@
  */
 export const REQUIRED_WEB_CONFIG = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_APP_ID'];
 
-/** Seule Function que le frontend de production peut appeler. */
-export const PRODUCTION_FUNCTIONS = ['createMember', 'projectWorkspaceDoor', 'projectWorkspaceVisit', 'projectWorkspaceBuilding', 'projectWorkspaceZone', 'projectWorkspaceCatalogue', 'rebuildZoneStats'];
+/** Surface serveur de production attendue, testée sans les fonctions de recette. */
+export const PRODUCTION_FUNCTIONS = ['createMember', 'listMembers', 'manageMember', 'manageOuting', 'listOutings', 'getOutingReport', 'recordMemberActivity', 'projectWorkspaceDoor', 'projectWorkspaceVisit', 'projectWorkspaceBuilding', 'projectWorkspaceZone', 'projectWorkspaceCatalogue', 'rebuildZoneStats'];
 
 export function deployConfigErrors(env, { expectedProjectId, productionFunctions }) {
   const errors = [];
