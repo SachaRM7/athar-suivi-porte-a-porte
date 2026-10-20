@@ -7,6 +7,7 @@ import { signInErrorMessage } from '../../../domain/auth/sign-in-error';
 import type { Zone, ZoneStats } from '../../../domain/workspace/models';
 import { AccessState } from './AccessState';
 import { AuthBackdrop } from './AuthBackdrop';
+import { useGuardedSignOut } from './GuardedSignOut';
 
 type ZoneEntry = { zone: Zone; stats: ZoneStats | null };
 
@@ -91,7 +92,7 @@ function ActiveEntry(): ReactElement {
 }
 
 function NoAccess({ signedIn = false }: { signedIn?: boolean }): ReactElement {
-  const { signOut } = useAuth();
+  const guardedSignOut = useGuardedSignOut();
   const [returning, setReturning] = useState(false);
   if (returning && !signedIn) return <LoginForm />;
   return (
@@ -109,14 +110,15 @@ function NoAccess({ signedIn = false }: { signedIn?: boolean }): ReactElement {
         <li><span>3</span><p>Il te transmet ton accès initial de façon privée.</p></li>
       </ol>
       {signedIn
-        ? <button className="auth-secondary" onClick={() => void signOut()} type="button">Se connecter avec un autre compte</button>
+        ? <button className="auth-secondary" onClick={guardedSignOut.request} type="button">Se connecter avec un autre compte</button>
         : <button className="auth-secondary" onClick={() => setReturning(true)} type="button">Revenir à la connexion</button>}
+      {guardedSignOut.dialog}
     </AuthBackdrop>
   );
 }
 
 function LoginForm(): ReactElement {
-  const { signIn } = useAuth();
+  const { signIn, localDataIssue, retryLocalPurge } = useAuth();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -143,6 +145,10 @@ function LoginForm(): ReactElement {
       <p className="auth-microlabel">Porte-à-porte · Toulouse</p>
       <h1 id="login-title">Reprendre là où la zone s’est arrêtée.</h1>
       <p className="auth-lede">L’accès est réservé aux frères ajoutés par un coordinateur.</p>
+      {localDataIssue && <div className="local-data-issue" role="alert">
+        <p>La dernière déconnexion n’a pas pu effacer toutes les données Athar de cet appareil ({localDataIssue.join(', ')}). Ferme les autres onglets Athar, puis réessaie.</p>
+        <button className="auth-secondary" onClick={() => void retryLocalPurge()} type="button">Réessayer l’effacement</button>
+      </div>}
       <form className="auth-form" onSubmit={(event) => void submit(event)}>
         <label>
           <span className="auth-microlabel">Adresse e-mail ou identifiant</span>

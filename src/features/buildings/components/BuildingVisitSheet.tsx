@@ -14,6 +14,14 @@ import { CADASTRAL_SUGGESTION_NOTICE, type CadastralSuggestion } from '../model/
 import { buildingStaleness } from '../model/building-staleness';
 import { Stepper } from '../../../design/components';
 import { firestoreWriteErrorMessage } from '../../../infrastructure/firebase/firestore-errors';
+import { localWriteErrorMessage } from '../../visits/model/field-sync-status';
+
+const REJECTION_MESSAGES: Readonly<Record<string, string>> = {
+  'inactive-member': 'ce compte n’est plus actif',
+  'author-mismatch': 'il a été saisi sous un autre compte',
+  'invalid-intent': 'le statut ou la porte ne sont plus valides',
+  security: 'les règles de sécurité l’ont refusé'
+};
 
 type BuildingVisitSheetProps = {
   authorId: string;
@@ -215,12 +223,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     ?? sync?.entries.find((entry) => entry.state !== 'pending')
     ?? sync?.entries.find((entry) => entry.doorId === selectedDoorId && entry.state === 'pending');
   const pendingEntries = sync?.entries.filter((entry) => entry.state === 'pending').length ?? pendingCount;
-  const syncLabel = !sync ? `${pendingCount} attente(s)`
-    : !sync.online ? 'Hors ligne'
-      : selectedEntry?.state === 'conflict' ? 'Conflit a resoudre'
-        : selectedEntry?.state === 'rejected' ? 'Ecriture rejetee'
-          : pendingEntries > 0 ? `${pendingEntries} changement(s) en attente`
-            : 'A jour';
+  const syncLabel = !sync ? (pendingEntries > 0 ? `${pendingEntries} changement(s) en attente` : 'À jour') : sync.status.label;
+  const syncDetail = sync?.status.detail ?? null;
 
   const loadDoorVisits = useCallback(async (doorId: string): Promise<readonly (Visit & { authorName: string })[]> => {
     const visits = await repositories.visits.listByDoor(doorId);
@@ -237,12 +241,13 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
 
   async function record(door: Door, statusId: string): Promise<boolean> {
     try {
-      const result = await recordLocalVisit(repositories, outbox, { authorId, doorId: door.id, statusId, note });
+      await recordLocalVisit(repositories, outbox, { authorId, doorId: door.id, statusId, note });
       setNote('');
-      setMessage(`Porte ${door.label}: passage ${result.visit.id.slice(0, 8)} cree, revision ${result.door.revision}.`);
+      // Enregistré sur l'appareil, pas encore confirmé : l'état de synchronisation le dira.
+      setMessage(`Porte ${door.label} : passage enregistré sur l’appareil.`);
       return true;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Passage local refuse.');
+      setMessage(localWriteErrorMessage(error));
       return false;
     }
   }
@@ -277,7 +282,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       setSisters(!next);
       setAutoSisters(false);
       await refresh().catch(() => undefined);
-      setMessage(error instanceof Error ? error.message : 'Le marqueur n a pas pu etre enregistre.');
+      setMessage(localWriteErrorMessage(error).replace('Le passage n’a pas été enregistré', 'Le marqueur n’a pas été enregistré'));
     }
   }
 
@@ -301,7 +306,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       setSisters(previousSisters);
       setAutoSisters(false);
       await refresh().catch(() => undefined);
-      setMessage(error instanceof Error ? error.message : 'La composition du foyer n a pas pu etre enregistree.');
+      setMessage(localWriteErrorMessage(error).replace('Le passage n’a pas été enregistré', 'La composition du foyer n’a pas été enregistrée'));
     }
   }
 
@@ -318,9 +323,10 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       });
       await refresh();
       await sync?.synchronize();
-      setMessage(`${results.length} passage(s) « Absent » enregistres pour cet etage.`);
+      setMessage(`${results.length} passage(s) « Absent » enregistrés sur l’appareil pour cet étage.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Les passages groupes ont echoue.');
+      // Groupe atomique : en cas d'échec, aucune porte n'a été marquée.
+      setMessage(`${localWriteErrorMessage(error)} Aucune porte de l’étage n’a été marquée.`);
     }
   }
 
@@ -537,7 +543,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
             <span aria-hidden="true" className="building-progress-track"><i style={{ width: `${total.ratio * 100}%` }} /></span>
             <span className="building-progress-count">{total.treatedCount} / {total.doorCount}</span>
           </div>
-          <p aria-live="polite" className="building-sync-state">{syncLabel}</p>
+          <p aria-live="polite" className="building-sync-state" data-phase={sync?.status.phase}>{syncLabel}</p>
+          {syncDetail && <p className="building-sync-detail">{syncDetail}</p>}
           </>}
         </section>
 
@@ -575,8 +582,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
 
         {editing && <div className="building-edit-bar"><p><strong>Modification de la structure</strong><span>Les portes visitées gardent leur historique sauf suppression confirmée.</span></p><button onClick={() => { setEditing(false); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">Terminé</button></div>}
 
-        {sync && selectedEntry?.state === 'conflict' && selectedEntry.conflict && <section className="sync-resolution" aria-label="Resolution du conflit"><p className="eyebrow">Conflit a resoudre</p><p>Serveur : statut {selectedEntry.conflict.currentStatusId}, revision {selectedEntry.conflict.revision}.</p><div className="sync-resolution-actions"><button className="primary-action" disabled={sync.syncing} onClick={() => void sync.reapplyConflict(selectedEntry.commandId)} type="button">Reappliquer</button><button className="secondary-action" disabled={sync.syncing} onClick={() => void sync.abandonConflict(selectedEntry.commandId)} type="button">Abandonner la chaine</button></div></section>}
-        {sync && selectedEntry?.state === 'rejected' && <p className="sync-rejection" role="status">Ecriture rejetee : {selectedEntry.rejection}. Elle ne peut pas etre reappliquee comme un conflit.</p>}
+        {sync && selectedEntry?.state === 'conflict' && selectedEntry.conflict && <section className="sync-resolution" aria-label="Resolution du conflit"><p className="eyebrow">Conflit à résoudre</p><p>Un autre frère a marqué cette porte entre-temps : elle est maintenant « {statusesById.get(selectedEntry.conflict.currentStatusId)?.label ?? 'statut inconnu'} » sur le serveur. Ton passage est conservé sur l’appareil.</p><div className="sync-resolution-actions"><button className="primary-action" disabled={sync.syncing} onClick={() => void sync.reapplyConflict(selectedEntry.commandId)} type="button">Réappliquer mon passage</button><button className="secondary-action" disabled={sync.syncing} onClick={() => void sync.abandonConflict(selectedEntry.commandId)} type="button">Garder la version du serveur</button></div></section>}
+        {sync && selectedEntry?.state === 'rejected' && <p className="sync-rejection" role="status">Passage refusé par le serveur : {REJECTION_MESSAGES[selectedEntry.rejection ?? ''] ?? 'raison inconnue'}. Il reste sur l’appareil, rien n’est effacé.</p>}
         {sync && <div className="sync-controls"><button className="secondary-action" disabled={!sync.online || sync.syncing} onClick={() => void sync.synchronize()} type="button">Synchroniser</button><label className="trusted-device-control"><input checked={trustedDevice} onChange={(event) => { const trusted = event.target.checked; setTrustedDeviceState(trusted); setTrustedDevice(trusted); window.location.reload(); }} type="checkbox" />Appareil de confiance</label></div>}
         <p className="workspace-map-message" role="status">{message}</p>
 

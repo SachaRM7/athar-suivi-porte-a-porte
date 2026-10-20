@@ -24,6 +24,14 @@ function intent(overrides: Record<string, unknown> = {}) {
   };
 }
 
+async function readRevision(): Promise<number> {
+  let revision = -1;
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    revision = Number((await getDoc(doc(context.firestore(), `${workspace}/doors/door-a`))).data()?.revision);
+  });
+  return revision;
+}
+
 async function seed(active = true) {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
@@ -147,11 +155,15 @@ describe('FirestoreDoorGateway against emulator rules', () => {
     await expect(gateway.commit(intent())).rejects.toMatchObject({ category: 'inactive-member' } satisfies Partial<SyncRejectedError>);
   });
 
-  it('classifies a different authenticated author before sending a batch', async () => {
+  it('never sends a queued visit under another authenticated author and keeps it waiting for its owner', async () => {
     await seed();
     const gateway = new FirestoreDoorGateway(testEnv.authenticatedContext('member-a').firestore(), 'main', () => 'member-b');
 
-    await expect(gateway.commit(intent())).rejects.toMatchObject({ category: 'author-mismatch' } satisfies Partial<SyncRejectedError>);
+    const revisionBefore = await readRevision();
+    await expect(gateway.commit(intent())).rejects.toMatchObject({ name: 'NetworkUnavailableError', reason: 'session' });
+    const signedOut = new FirestoreDoorGateway(testEnv.authenticatedContext('member-a').firestore(), 'main', () => null);
+    await expect(signedOut.commit(intent())).rejects.toMatchObject({ name: 'NetworkUnavailableError', reason: 'session' });
+    await expect(readRevision()).resolves.toBe(revisionBefore);
   });
 
   it('classifies an invalid visit after the rules reject it', async () => {

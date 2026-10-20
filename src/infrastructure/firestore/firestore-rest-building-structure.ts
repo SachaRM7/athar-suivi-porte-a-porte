@@ -5,7 +5,7 @@ import {
   type DoorStructureTarget
 } from '../../domain/workspace/building-structure';
 import type { Building, Door, DoorFoyer } from '../../domain/workspace/models';
-import type { FirestoreRestAuth } from './firestore-rest-auth';
+import { firestoreRestApi, type FirestoreRestAuth } from './firestore-rest-auth';
 
 type RestValue = {
   stringValue?: string;
@@ -170,7 +170,7 @@ export async function applyBuildingStructureWithRest(
   const workspace = encodeURIComponent(input.workspaceId);
   const buildingId = encodeURIComponent(input.buildingId);
   const databaseName = `projects/${auth.projectId}/databases/(default)`;
-  const documentsRoot = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
+  const documentsRoot = `${firestoreRestApi(auth)}/projects/${project}/databases/(default)/documents`;
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const buildingResponse = await fetch(`${documentsRoot}/workspaces/${workspace}/buildings/${buildingId}`, { headers });
   const buildingDocument = await readJson(buildingResponse) as RestDocument;
@@ -237,7 +237,7 @@ export async function applyBuildingStructureWithRest(
     }))
   ];
   if (writes.length > 450) throw new Error('The structure diff exceeds the safe Firestore mutation limit.');
-  const commitResponse = await fetch(`https://firestore.googleapis.com/v1/${databaseName}/documents:commit`, {
+  const commitResponse = await fetch(`${firestoreRestApi(auth)}/${databaseName}/documents:commit`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ writes })

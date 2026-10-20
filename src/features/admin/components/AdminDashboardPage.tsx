@@ -5,6 +5,7 @@ import { AppLink } from '../../../app/routes/router';
 import type { Building, Status, Zone, ZoneStats } from '../../../domain/workspace/models';
 import { createFirestoreWorkspaceReadRepositories } from '../../../infrastructure/firestore/firestore-workspace-read-repositories';
 import type { ReadMetrics } from '../../../domain/workspace/read-pagination';
+import { useGuardedSignOut } from '../../auth/components/GuardedSignOut';
 
 type DashboardData = {
   zones: readonly Zone[];
@@ -37,7 +38,8 @@ function formatUpdatedAt(stats: ZoneStats | null): string {
 }
 
 export function AdminDashboardPage(): ReactElement {
-  const { state, signOut } = useAuth();
+  const { state } = useAuth();
+  const guardedSignOut = useGuardedSignOut();
   if (state.status !== 'active') throw new Error('AdminDashboardPage requires an active session.');
   const [data, setData] = useState<DashboardData | null>(null);
   const [zoneDetails, setZoneDetails] = useState<ZoneDetails | null>(null);
@@ -134,7 +136,8 @@ export function AdminDashboardPage(): ReactElement {
         <nav aria-label="Navigation administration" className="dashboard-nav">
           <AppLink className="text-link" href="/">Carte terrain</AppLink>
           <AppLink className="text-link" href="/admin/members">Membres</AppLink>
-          <button className="secondary-action" onClick={() => void signOut()} type="button">Se deconnecter</button>
+          <button className="secondary-action" onClick={guardedSignOut.request} type="button">Se deconnecter</button>
+          {guardedSignOut.dialog}
         </nav>
       </header>
 

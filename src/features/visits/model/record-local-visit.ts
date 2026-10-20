@@ -51,9 +51,13 @@ export async function recordLocalVisit(
   if (entries.some((entry) => entry.doorId === door.id && entry.state !== 'pending')) {
     throw new Error('Resolve the existing door conflict before adding another visit.');
   }
-  const pendingForDoor = entries.filter((entry) => entry.doorId === door.id && entry.state === 'pending');
-  if (pendingForDoor.length > 0) {
-    throw new Error('A local visit is already waiting for this door.');
+  // Plusieurs passages hors ligne sur une même porte forment une chaîne de révisions :
+  // la projection locale doit déjà porter le dernier maillon en attente.
+  const lastPending = entries
+    .filter((entry) => entry.doorId === door.id && entry.state === 'pending')
+    .reduce<number | null>((latest, entry) => latest === null || entry.expectedRevision > latest ? entry.expectedRevision : latest, null);
+  if (lastPending !== null && door.revision !== lastPending + 1) {
+    throw new Error('The local door projection is behind its pending visits.');
   }
 
   const occurredAt = (input.now ?? new Date()).toISOString();
@@ -80,6 +84,8 @@ export async function recordLocalVisit(
 
   assertDoor(nextDoor);
   assertVisit(visit);
+  // L'ordre compte : l'intention est durable avant que la projection affiche le passage.
+  // Si le stockage refuse, rien n'est montré comme enregistré.
   await outbox.add({
     commandId: visit.id,
     authorId: input.authorId,
@@ -129,9 +135,12 @@ export async function recordLocalVisits(
     return { door: nextDoor, visit };
   });
 
+  // Une seule transaction pour tout le groupe, avant la projection : un échec de stockage
+  // n'en laisse aucun affiché comme enregistré, et un succès les rend tous durables.
+  await outbox.addMany(results.map(({ visit, door }) => ({
+    commandId: visit.id, authorId: input.authorId, doorId: door.id, statusId: input.statusId,
+    note: visit.note, expectedRevision: door.revision - 1, createdAt: occurredAt
+  })));
   await repositories.commitVisitsAndDoors(results.map(({ visit, door }) => ({ visit, door })));
-  for (const { visit, door } of results) {
-    await outbox.add({ commandId: visit.id, authorId: input.authorId, doorId: door.id, statusId: input.statusId, note: visit.note, expectedRevision: door.revision - 1, createdAt: occurredAt });
-  }
   return results;
 }

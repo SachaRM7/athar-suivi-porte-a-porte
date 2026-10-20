@@ -9,7 +9,11 @@ import type { DoorMarkerIntent } from '../doors/contracts';
 export interface DoorMarkerOutbox {
   add(intent: DoorMarkerIntent): Promise<void>;
   pending(): Promise<DoorMarkerIntent[]>;
-  markSynced(doorId: string): Promise<void>;
+  /**
+   * Retire l'intention de la porte. Avec `commandId`, seulement si elle n'a pas été
+   * remplacée entre-temps : une modification faite pendant l'envoi ne doit pas disparaître.
+   */
+  markSynced(doorId: string, commandId?: string): Promise<void>;
 }
 
 export type DoorMarkerWriter = {
@@ -29,7 +33,8 @@ export class MemoryDoorMarkerOutbox implements DoorMarkerOutbox {
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.doorId.localeCompare(right.doorId));
   }
 
-  async markSynced(doorId: string): Promise<void> {
+  async markSynced(doorId: string, commandId?: string): Promise<void> {
+    if (commandId && this.intents.get(doorId)?.commandId !== commandId) return;
     this.intents.delete(doorId);
   }
 }
@@ -49,7 +54,7 @@ export async function flushDoorMarkers(outbox: DoorMarkerOutbox, writer: DoorMar
   for (const intent of await outbox.pending()) {
     try {
       await writer.apply(intent);
-      await outbox.markSynced(intent.doorId);
+      await outbox.markSynced(intent.doorId, intent.commandId);
       synced.push(intent.doorId);
     } catch (error) {
       failed.push({ doorId: intent.doorId, reason: error instanceof Error ? error.message : 'Écriture du marqueur refusée.' });

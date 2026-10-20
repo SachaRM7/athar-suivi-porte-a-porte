@@ -74,13 +74,13 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await page.getByRole('button', { name: 'Porte 11, Contact établi' }).click();
   await expect(page.getByRole('dialog', { name: 'Fiche de la porte 11' })).toBeVisible();
   await page.getByRole('button', { name: 'Absent', exact: true }).click();
-  await expect(page.getByText(/Porte 11: passage .* cree, revision 2\./)).toBeVisible();
+  await expect(page.getByText('Porte 11 : passage enregistré sur l’appareil.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Porte 11, Absent' })).toBeVisible();
 
   await page.getByRole('button', { name: 'tout marquer absent' }).first().click();
-  await expect(page.getByText('1 passage(s) « Absent » enregistres pour cet etage.')).toBeVisible();
+  await expect(page.getByText('1 passage(s) « Absent » enregistrés sur l’appareil pour cet étage.')).toBeVisible();
   await expect(page.locator('.building-floor').first().getByText('terminé', { exact: true })).toBeVisible();
-  await expect(page.getByText('2 attente(s)')).toBeVisible();
+  await expect(page.getByText('2 changement(s) en attente')).toBeVisible();
 
   await page.getByRole('button', { name: 'Configurer le batiment' }).click();
   await page.getByRole('button', { name: 'Ajustement manuel' }).click();
@@ -88,11 +88,11 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   const originalPlan = await plan.inputValue();
   await plan.fill(originalPlan.replace('1 | 12 | door-dalbad-12', '1 | 12A | door-dalbad-12'));
   await page.getByRole('button', { name: 'Appliquer le plan manuel' }).click();
-  await expect(page.getByText('Structure bloquee: synchronisez ou resolvez les passages locaux des portes concernees.')).toBeVisible();
+  await expect(page.getByText('Structure bloquée : synchronise ou résous les passages locaux des portes concernées.').first()).toBeVisible();
 
   await plan.fill(`${originalPlan}\n2 | 21`);
   await page.getByRole('button', { name: 'Appliquer le plan manuel' }).click();
-  await expect(page.getByText('Structure enregistree: 1 ajoutee(s), 0 ajustee(s), 0 archivee(s).')).toBeVisible();
+  await expect(page.getByText('Structure enregistrée : 1 ajoutée(s), 0 ajustée(s), 0 archivée(s).').first()).toBeVisible();
   await expect(page.getByText('5 portes')).toBeVisible();
 });
 

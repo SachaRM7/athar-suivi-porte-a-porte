@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyDoorProfileWithRest, commitVisitWithRest } from './firestore-rest-door-writes';
+import { NetworkUnavailableError, RevisionConflictError, SyncRejectedError } from '../../domain/sync/sync-service';
+
+const visit = {
+  commandId: 'visit-a', authorId: 'member-a', doorId: 'door-a', statusId: 'retry', note: '',
+  expectedRevision: 0, createdAt: '2026-08-09T20:01:00.000Z'
+};
 
 const auth = { projectId: 'athar-test', getIdToken: async () => 'member-token' };
 const doorDocument = {
@@ -55,5 +61,54 @@ describe('Firestore REST door writes', () => {
       update: { fields: { foyer: { stringValue: 'couple' }, aConfierAuxSoeurs: { booleanValue: true } } },
       updateMask: { fieldPaths: ['aConfierAuxSoeurs', 'foyer'] }
     }] });
+  });
+
+  it('keeps the intent pending when the network is down', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    const error = await commitVisitWithRest(auth, 'main', visit).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(NetworkUnavailableError);
+    expect((error as NetworkUnavailableError).reason).toBe('offline');
+  });
+
+  it('defers on a server outage and on an expired session instead of rejecting', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: { status: 'UNAVAILABLE' } }, { status: 503 })));
+    await expect(commitVisitWithRest(auth, 'main', visit)).rejects.toMatchObject({ name: 'NetworkUnavailableError', reason: 'server' });
+
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: { status: 'UNAUTHENTICATED' } }, { status: 401 })));
+    await expect(commitVisitWithRest(auth, 'main', visit)).rejects.toMatchObject({ name: 'NetworkUnavailableError', reason: 'session' });
+  });
+
+  it('classifies a security refusal of a suspended member as a visible rejection', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/members/member-a')) return Response.json({ name: 'm', fields: { active: { booleanValue: false } } });
+      return Response.json({ error: { status: 'PERMISSION_DENIED' } }, { status: 403 });
+    }));
+    const error = await commitVisitWithRest(auth, 'main', visit).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(SyncRejectedError);
+    expect((error as SyncRejectedError).category).toBe('inactive-member');
+  });
+
+  it('reports a newer server revision as a conflict, never as an overwrite', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ...doorDocument, fields: { ...doorDocument.fields, revision: { integerValue: '3' }, currentStatusId: { stringValue: 'do-not-return' } } })));
+    await expect(commitVisitWithRest(auth, 'main', visit)).rejects.toBeInstanceOf(RevisionConflictError);
+  });
+
+  it('recognises an already accepted visit after a lost response, without writing it twice', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ...doorDocument, fields: { currentStatusId: { stringValue: 'retry' }, revision: { integerValue: '1' }, lastVisitId: { stringValue: 'visit-a' }, lastVisitAt: { timestampValue: visit.createdAt } } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(commitVisitWithRest(auth, 'main', visit)).resolves.toMatchObject({ revision: 1, lastVisitId: 'visit-a' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('targets the Firestore emulator when the local origin is configured', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      urls.push(String(input));
+      if (String(input).endsWith('/doors/door-a')) return Response.json(doorDocument);
+      return Response.json({ writeResults: [] });
+    }));
+    await commitVisitWithRest({ ...auth, origin: 'http://127.0.0.1:8180' }, 'main', visit);
+    expect(urls.every((url) => url.startsWith('http://127.0.0.1:8180/v1/'))).toBe(true);
   });
 });

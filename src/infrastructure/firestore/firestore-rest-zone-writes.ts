@@ -1,5 +1,5 @@
 import type { Zone } from '../../domain/workspace/models';
-import type { FirestoreRestAuth } from './firestore-rest-auth';
+import { firestoreRestApi, type FirestoreRestAuth } from './firestore-rest-auth';
 
 type RestErrorBody = { error?: { message?: string; status?: string } };
 type TransactionBody = { transaction?: string };
@@ -36,7 +36,7 @@ async function authenticatedRequest(auth: FirestoreRestAuth): Promise<{
   return {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     databaseName: `projects/${auth.projectId}/databases/(default)`,
-    documentsRoot: `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`
+    documentsRoot: `${firestoreRestApi(auth)}/projects/${project}/databases/(default)/documents`
   };
 }
 
@@ -76,7 +76,7 @@ function zoneFields(zone: Zone) {
 export async function saveZoneWithRest(auth: FirestoreRestAuth, workspaceId: string, zone: Zone): Promise<void> {
   const request = await authenticatedRequest(auth);
   const zoneName = `${request.databaseName}/documents/workspaces/${workspaceId}/zones/${zone.id}`;
-  await readJson(await fetch(`https://firestore.googleapis.com/v1/${request.databaseName}/documents:commit`, {
+  await readJson(await fetch(`${firestoreRestApi(auth)}/${request.databaseName}/documents:commit`, {
     method: 'POST',
     headers: request.headers,
     body: JSON.stringify({ writes: [{ update: { name: zoneName, fields: zoneFields(zone) } }] })
@@ -85,14 +85,14 @@ export async function saveZoneWithRest(auth: FirestoreRestAuth, workspaceId: str
 
 export async function deleteEmptyZoneWithRest(auth: FirestoreRestAuth, workspaceId: string, zoneId: string): Promise<void> {
   const request = await authenticatedRequest(auth);
-  const beginUrl = `https://firestore.googleapis.com/v1/${request.databaseName}/documents:beginTransaction`;
+  const beginUrl = `${firestoreRestApi(auth)}/${request.databaseName}/documents:beginTransaction`;
   const { transaction } = await readJson<TransactionBody>(await fetch(beginUrl, {
     method: 'POST', headers: request.headers, body: '{}'
   }));
   if (!transaction) throw new Error('Firestore did not start the zone deletion transaction.');
 
   const rollback = async () => {
-    await fetch(`https://firestore.googleapis.com/v1/${request.databaseName}/documents:rollback`, {
+    await fetch(`${firestoreRestApi(auth)}/${request.databaseName}/documents:rollback`, {
       method: 'POST', headers: request.headers, body: JSON.stringify({ transaction })
     }).catch(() => undefined);
   };
@@ -123,7 +123,7 @@ export async function deleteEmptyZoneWithRest(auth: FirestoreRestAuth, workspace
     }
 
     const zoneName = `${request.databaseName}/documents/workspaces/${workspaceId}/zones/${zoneId}`;
-    await readJson(await fetch(`https://firestore.googleapis.com/v1/${request.databaseName}/documents:commit`, {
+    await readJson(await fetch(`${firestoreRestApi(auth)}/${request.databaseName}/documents:commit`, {
       method: 'POST',
       headers: request.headers,
       body: JSON.stringify({

@@ -470,3 +470,15 @@ h2 { font-size: 22px; }
 .building-row-age.alert { color: var(--st-away); }
 /* Le cadastre propose, il ne dispose : la mention accompagne des steppers modifiables. */
 .structure-suggestion { color: var(--ink-soft); font: var(--t-115) var(--font-ui); margin: 0; }
+
+/* LOT A1 — états de sauvegarde et déconnexion protégée. */
+.building-sync-detail { color: var(--ink-soft); font: var(--t-115) var(--font-ui); margin: 2px 0 0; }
+.building-sync-state[data-phase="attention"], .building-sync-state[data-phase="storage-error"] { color: var(--st-dnd); font-weight: 600; }
+.signout-guard-copy { color: var(--ink-soft); font: var(--t-135) var(--font-ui); margin: 0 0 12px; }
+.signout-guard-actions { display: flex; flex-direction: column; gap: 8px; }
+.signout-guard-actions button { min-height: var(--touch); }
+.local-data-issue { border: 1px solid var(--st-dnd); border-radius: var(--r-field); color: var(--ink); font: var(--t-135) var(--font-ui); margin: 0 0 12px; padding: 10px 12px; }
+.dnd-correction { border: 1px solid var(--st-dnd); border-radius: var(--r-field); display: grid; font: var(--t-135) var(--font-ui); gap: 6px; margin: 8px 0; padding: 10px 12px; }
+.dnd-correction-actions { display: flex; gap: 8px; }
+.dnd-correction-actions button { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-field); cursor: pointer; font: inherit; min-height: var(--touch); padding: 6px 12px; }
+.dnd-correction-actions button:first-child { border-color: var(--st-dnd); color: var(--st-dnd); }
