@@ -290,8 +290,14 @@ test('the desktop dashboard, map and zone choice share a dated projection and di
   await expect(carmes.locator('.auth-zone-ring')).toHaveText('50%');
   await expect(carmes).toContainText('Relevé du');
 
+  const unvisitedUrl = 'http://127.0.0.1:8180/v1/projects/athar-local/databases/(default)/documents/workspaces/main/statuses/unvisited';
+  expect((await fetch(unvisitedUrl, { method: 'DELETE', headers: { Authorization: 'Bearer owner' } })).ok).toBe(true);
+  await page.goto('/admin');
+  await expect(page.getByTestId('zone-recorded-progress')).toHaveText('50%');
+  await expect(page.getByRole('status')).toContainText('La liste des statuts est incomplète');
+
   expect((await fetch(statsUrl, { method: 'DELETE', headers: { Authorization: 'Bearer owner' } })).ok).toBe(true);
-  await page.reload();
+  await page.goto('/login');
   await expect(carmes.locator('.auth-zone-ring')).toHaveText('—');
   await expect(carmes).toContainText('Statistiques indisponibles');
   await page.goto('/?zone=carmes');

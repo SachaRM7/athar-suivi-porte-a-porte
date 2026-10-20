@@ -99,6 +99,8 @@ export function AdminDashboardPage(): ReactElement {
   const progress = zoneDoorProgress(selectedStats, selectedZoneId);
   const selectedStatus = data?.statuses.find((status) => status.id === selectedStatusId) ?? null;
   const selectedStatusCount = !selectedStats ? '-' : selectedStatus ? selectedStats.countsByStatus[selectedStatus.id] ?? 0 : selectedStats.doorCount;
+  const missingStatusLabels = selectedStats && Object.entries(selectedStats.countsByStatus)
+    .some(([id, count]) => count > 0 && !data?.statuses.some((status) => status.id === id));
 
   function selectZone(zoneId: string): void {
     setSelectedZoneId(zoneId);
@@ -154,6 +156,7 @@ export function AdminDashboardPage(): ReactElement {
           {zoneLoading && <p className="dashboard-loading" role="status">Lecture de la zone selectionnee...</p>}
           {selectedZoneError && <p className="form-error" role="alert">{selectedZoneError}</p>}
           {selectedDetails?.projectionInvalid && <p className="form-error" role="alert">Projection de compteurs invalide. Les batiments restent consultables.</p>}
+          {missingStatusLabels && <p className="dashboard-projection-note" role="status">La liste des statuts est incomplète. Le total et la progression incluent aussi les portes dont le statut n’est pas affiché ci-dessous.</p>}
 
           <section className="dashboard-overview" aria-labelledby="zone-summary-title">
             <div>

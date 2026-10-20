@@ -78,6 +78,8 @@ mention que les passages récents peuvent manquer. Aucune date de lecture ne rem
 `updatedAt`. Aucun seuil arbitraire ne transforme un vieux relevé en relevé frais.
 Sans catalogue complet, la couverture des bâtiments est explicitement indisponible.
 Le contrôle admin est renommé « Compteur par statut » : il ne filtre pas les bâtiments.
+Un catalogue de libellés incomplet est signalé dans la répartition, sans changer le total
+ni la formule fondée sur les identifiants persistés.
 
 Acceptation : mêmes unités et même résultat pour le même relevé ; null/ensemble vide/vrai
 zéro distincts ; 3/6 portes donne 50 % même si les deux bâtiments sont touchés ; catalogue
@@ -133,4 +135,8 @@ Sous Node 22.23.3 : lint et build de production vérifié réussis, **203 tests 
 **79 tests Firestore/Auth** et **9 parcours navigateur émulateurs** réussis.
 Le nouveau parcours compare carte, administration et choix de zone sur le même relevé
 à 50 %, puis supprime ce relevé et vérifie « indisponible » sur les trois écrans.
+Il vérifie également qu'un statut absent du catalogue ne transforme pas 50 % en 100 %.
+La recette laboratoire valide ses 19 parcours existants ; le nouveau cas de progression
+mobile est validé séparément après retrait d'une attente de sept tuiles propre au cadrage
+desktop. La progression ne dépend pas du nombre de tuiles visibles.
 Les réserves du lot A sur la production et les appareils physiques restent applicables.

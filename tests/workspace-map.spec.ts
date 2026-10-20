@@ -51,7 +51,9 @@ async function enterEdition(page: Page): Promise<void> {
 }
 
 test('shows the recorded door ratio instead of calling two touched buildings a fully covered zone', async ({ page }) => {
-  await openFieldMap(page);
+  await page.goto('/technical-map');
+  await expect(page.getByText('2 bâtiment(s) suivis')).toBeVisible({ timeout: 15_000 });
+  // Le cadrage mobile charge moins de tuiles : la progression n'en dépend pas.
   // La fixture contient deux bâtiments touchés, mais seulement trois portes sur six.
   await expect(page.getByTestId('zone-recorded-progress')).toHaveText('50%');
   await expect(page.locator('.terrain-zone-copy')).toContainText('3/6 portes décrites avec passage');
