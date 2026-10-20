@@ -1,0 +1,8 @@
+{
+  "_doc": "État backend DÉCLARÉ publié sur athar-dev31. Mis à jour à la main par la personne autorisée, juste après chaque publication de règles ou de Functions (cf. docs/audits/LOT-A-FIABILITE-SECURITE.md, procédure de publication). null = inconnu.",
+  "project": "athar-dev31",
+  "rulesSha256": null,
+  "functionsSha256": null,
+  "functions": null,
+  "updatedAt": null
+}

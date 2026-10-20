@@ -28,7 +28,12 @@ function run(command) {
 
 run('node scripts/seed-playwright-emulator.mjs');
 run('npx vite build');
-run('npx playwright test tests/field-sync-emulator.spec.ts tests/onboarding-emulator.spec.ts --grep-invert "desktop dashboard"');
+run('npx playwright test tests/production-routes-emulator.spec.ts tests/onboarding-emulator.spec.ts');
+// ATHAR_E2E_SKIP_CONFLICT=true écarte le parcours « deux clients » : son second client
+// (appareil de confiance, cache Firestore persistant) ne charge pas dans Chromium headless
+// sans GPU. Le conflit de révision reste prouvé par tests/emulator/firestore-gateway.
+const excluded = process.env.ATHAR_E2E_SKIP_CONFLICT === 'true' ? 'desktop dashboard|two terrain clients' : 'desktop dashboard';
+run(`npx playwright test tests/field-sync-emulator.spec.ts --grep-invert "${excluded}"`);
 // Les projections volontairement invalides de la recette admin ne doivent pas rendre la
 // fixture terrain illisible : elles ne sont injectées que pour ce dernier parcours.
 run('node scripts/seed-playwright-emulator.mjs --with-regressions');

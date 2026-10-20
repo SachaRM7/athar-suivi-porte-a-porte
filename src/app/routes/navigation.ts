@@ -13,6 +13,10 @@ export function usePathname(): string {
   useEffect(() => {
     const update = () => setPathname(withoutBasePath(window.location.pathname));
     window.addEventListener('popstate', update);
+    // Les effets enfants passent avant celui-ci : un `Redirect` monté au premier rendu a pu
+    // naviguer avant l'abonnement. Sans cette relecture, l'URL changeait mais l'écran restait
+    // blanc (route inconnue ouverte directement, laboratoire en production compris).
+    update();
     return () => window.removeEventListener('popstate', update);
   }, []);
   return pathname;

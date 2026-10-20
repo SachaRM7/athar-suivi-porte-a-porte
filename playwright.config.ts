@@ -16,8 +16,10 @@ export default defineConfig({
       ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } }
       : {})
   },
+  // Les parcours de laboratoire tournent sur le build de recette `dist-lab` (npm run build:lab) ;
+  // les parcours @emulator, sur le build de production construit contre les émulateurs.
   webServer: {
-    command: `npx vite preview --port 5274 --strictPort --host 127.0.0.1 --outDir ${process.env.ATHAR_PREVIEW_DIR ?? 'dist'}`,
+    command: `npx vite preview --port 5274 --strictPort --host 127.0.0.1 --outDir ${process.env.ATHAR_PREVIEW_DIR ?? 'dist-lab'}`,
     url: 'http://127.0.0.1:5274',
     reuseExistingServer: true,
     timeout: 30_000

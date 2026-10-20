@@ -30,7 +30,6 @@ export function MemberHome(): ReactElement {
       </section>
       <nav className="member-links" aria-label="Routes disponibles">
         {state.session.member.role === 'admin' && <AppLink className="primary-action link-action" href="/admin/members">Gerer les membres</AppLink>}
-        <AppLink className="text-link" href="/technical-lab">Laboratoire technique</AppLink>
       </nav>
     </main>
   );

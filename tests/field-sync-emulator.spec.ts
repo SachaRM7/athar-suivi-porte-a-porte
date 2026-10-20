@@ -5,7 +5,8 @@ async function signIn(page: import('@playwright/test').Page, username: string): 
   await page.getByLabel('Adresse e-mail ou identifiant').fill(username);
   await page.getByLabel('Mot de passe').fill('Temporary-password-123');
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.getByRole('heading', { name: 'Zones de Toulouse' })).toBeVisible({ timeout: 20_000 });
+  // Selon le nombre de zones, la connexion ouvre la carte ou le choix de la zone de sortie.
+  await expect(page.getByRole('heading', { name: /Zones de Toulouse|Choisis la zone de la sortie/ })).toBeVisible({ timeout: 20_000 });
   // La carte terrain n'ouvre la liste d'une zone qu'une fois celle-ci choisie.
   await page.goto('/?zone=carmes');
   await expect(page.getByRole('heading', { name: 'Zones de Toulouse' })).toBeVisible({ timeout: 20_000 });
@@ -154,7 +155,9 @@ test('an untrusted sign-out purges the UID outbox and prior persistent Firestore
           doorId: 'pilot-door-002',
           statusId: 'retry',
           note: '',
-          expectedRevision: 0,
+          // Révision périmée : si une synchronisation passe, l'entrée devient un conflit et
+          // reste sur l'appareil. Elle compte donc toujours comme non envoyée.
+          expectedRevision: 99,
           createdAt: '2026-08-03T10:00:00.000Z',
           state: 'pending'
         });

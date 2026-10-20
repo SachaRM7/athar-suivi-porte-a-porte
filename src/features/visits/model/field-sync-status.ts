@@ -51,7 +51,11 @@ export function summarizeFieldSync(input: FieldSyncInput): FieldSyncSummary {
     };
   }
   const waiting = input.entries.length + input.pendingProfiles;
-  if (waiting === 0) return { phase: 'synced', label: 'À jour', detail: null };
+  if (waiting === 0) {
+    return input.online
+      ? { phase: 'synced', label: 'À jour', detail: null }
+      : { phase: 'synced', label: 'Hors ligne', detail: 'Aucune saisie en attente sur cet appareil.' };
+  }
   const what = plural(waiting, 'modification enregistrée sur l’appareil', 'modifications enregistrées sur l’appareil');
   if (!input.online || input.deferral === 'offline') {
     return { phase: 'deferred', label: 'Hors ligne', detail: `${what}, envoi au retour du réseau.` };

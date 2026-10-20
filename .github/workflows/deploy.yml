@@ -1,12 +1,17 @@
-# Publie Athar sur Firebase Hosting à chaque poussée sur `main`.
+# Contrôle puis publie Athar sur Firebase Hosting (lot A5).
 #
-# Lint et tests unitaires passent avant la publication : une mise en ligne ne part
-# jamais sur du rouge.
+# - Toute poussée et toute pull request passent par le job `verifier` : lint, typage, tests
+#   unitaires, Functions, règles Firestore et Auth sur émulateurs, parcours critiques
+#   (inscription fermée, routes techniques absentes, purge de déconnexion), build vérifié.
+# - Seule une poussée sur `main` (ou un lancement manuel) publie, et seulement si
+#   `verifier` est vert ET si le build de déploiement passe ses gardes de configuration.
+# - Ce workflow ne publie QUE Hosting. Règles Firestore, index et Functions se publient à
+#   part, sur autorisation explicite (procédure : docs/audits/LOT-A-FIABILITE-SECURITE.md).
 #
 # Secrets attendus dans Paramètres → Secrets and variables → Actions :
 #   FIREBASE_SERVICE_ACCOUNT_ATHAR_DEV31   clé JSON posée par `firebase init hosting:github`
-#   VITE_FIREBASE_API_KEY                  configuration web du projet athar-dev31
-#   VITE_FIREBASE_AUTH_DOMAIN
+#   VITE_FIREBASE_API_KEY                  configuration web du projet athar-dev31 (publique,
+#   VITE_FIREBASE_AUTH_DOMAIN              mais jamais imprimée dans les journaux)
 #   VITE_FIREBASE_PROJECT_ID
 #   VITE_FIREBASE_APP_ID
 name: Déploiement
@@ -14,14 +19,56 @@ name: Déploiement
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-hosting
+  group: deploy-hosting-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Émulateur Firestore : Java 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+      - run: npm ci --prefix functions
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:run
+      - run: npm run test:functions
+      - run: npm run test:ci-scripts
+
+      # Règles Firestore, Auth et Functions sur émulateurs locaux (projet athar-local).
+      - run: npm run test:emulator:ci
+
+      # Build de production vérifié : laboratoires absents, PWA complète, carte différée.
+      - run: npm run build
+      - run: node scripts/verify-build.mjs
+
+      # Parcours critiques sur le build de production branché aux émulateurs.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:emulator:ci
+        env:
+          ATHAR_E2E_SKIP_CONFLICT: 'true'
+
   publier:
+    needs: verifier
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,13 +79,13 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npm ci --prefix functions
 
-      # Une mise en ligne ne part jamais sans que le socle soit vert.
-      - run: npm run lint
-      - run: npm run test:run
-
-      - run: npm run build
+      # Gardes de configuration, build, vérification du bundle et contrat backend :
+      # le moindre écart arrête la publication avant Firebase Hosting.
+      - run: npm run build:deploy
         env:
+          ATHAR_EXPECTED_PROJECT_ID: athar-dev31
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}

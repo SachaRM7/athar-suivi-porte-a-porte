@@ -4,6 +4,7 @@ node_modules/
 .env.*.local
 .athar-local/
 dist/
+dist-lab/
 test-results/
 playwright-report/
 *.tsbuildinfo

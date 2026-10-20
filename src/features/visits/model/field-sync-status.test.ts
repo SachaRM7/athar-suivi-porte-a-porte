@@ -23,6 +23,10 @@ describe('field sync summary', () => {
     }
   });
 
+  it('says offline even when nothing waits, without inventing a pending write', () => {
+    expect(summarizeFieldSync({ ...base, online: false })).toMatchObject({ phase: 'synced', label: 'Hors ligne' });
+  });
+
   it('never reports "À jour" while a profile change is still only on the device', () => {
     expect(summarizeFieldSync({ ...base, pendingProfiles: 1 }).phase).toBe('pending');
   });
