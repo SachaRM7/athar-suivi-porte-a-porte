@@ -52,7 +52,7 @@ secret, de règle ou de Function en ligne n'a été faite. Tout a été validé 
   - Cache Firestore persistant réservé à l'appareil de confiance (politique documentée).
   - Anomalie I19 : vérification des octets magiques PMTiles ; liste de zone illisible affichée.
 - **Tests ajoutés** : `indexeddb-outbox.test.ts` (ouverture impossible, quota plein au milieu puis reprise sans doublon, groupe atomique, rechargement multi-portes chaînées, profil modifié pendant l'envoi, décompte avant déconnexion), `record-local-visit.test.ts` (aucune projection si stockage refusé, groupe non projeté, chaîne), `sync-service.test.ts` (passe reportée sans perte ni réordonnancement, statut serveur plus récent jamais écrasé), `firestore-rest-door-writes.test.ts` (réseau, 503, session, membre suspendu, conflit, réponse perdue, émulateur), `field-sync-status.test.ts`, `sign-out-policy.test.ts`, `device-storage.test.ts` (purge partielle), `footprint-archive.test.ts`, émulateur `firestore-gateway` (autre auteur / session fermée), e2e `field-sync-emulator` (avertissement, « Rester connecté » conserve, confirmation purge).
-- **Résultat** : vert (voir §5), sauf le parcours e2e « deux clients » (voir limites).
+- **Résultat** : vert ; le parcours e2e « deux clients », initialement en échec (§5), est également validé après le correctif d'intégration (§8).
 - **Limites résiduelles** : purge multi-onglets — un autre onglet ouvert peut écrire après la purge (aucune perte, mais donnée laissée sur l'appareil) ; les passages en attente ne sont pas réaffichés dans l'historique de la fiche après rechargement (la porte, si) ; saturation réelle et fermeture de PWA à vérifier sur téléphone.
 
 ### A2 — « Ne pas déranger » — commits `8c217f4`, `122aeac`
@@ -143,13 +143,13 @@ autorisée de règles ou de Functions, y recopier les empreintes de `athar-relea
 **Résolus** : I1–I23 sauf ci-dessous.
 
 **Partiellement résolus**
-- Parcours e2e « deux clients, conflit réel » : le second client (appareil de confiance, cache persistant) ne charge pas dans Chromium headless sans GPU — blocage préexistant sur `main`. Le conflit est prouvé par `tests/emulator/firestore-gateway.integration.test.ts` et les tests unitaires ; le parcours est exclu de la barrière CI (`ATHAR_E2E_SKIP_CONFLICT`).
+- L'échec initial du parcours e2e « deux clients, conflit réel » a été levé pendant la validation d'intégration (§8). Il n'est plus exclu de la CI.
 - Parcours Playwright de laboratoire (carte MapLibre) : très lents ici (rendu logiciel) ; voir §5.
 - Purge multi-onglets (dette pilote déjà acceptée).
 
 **À vérifier sur appareil réel**
 - Mode avion, fermeture complète de la PWA, réouverture ; saturation de stockage réelle ; navigation privée.
-- Cache persistant sur appareil de confiance (blocage observé en headless) et rechargement hors ligne sur appareil non approuvé.
+- Cache persistant sur téléphone de confiance et rechargement hors ligne sur appareil non approuvé.
 - Mise à jour du service worker pendant une saisie.
 
 **Actions nécessitant une autorisation cloud**
@@ -216,3 +216,31 @@ plus le commit de documentation de clôture. Aucune migration de données n'est 
 **GO pour le lot B**, sous réserve de ne pas ouvrir l'accès élargi avant : (1) l'inventaire des
 Functions en ligne et la suppression éventuelle de `registerMember` / `claimInitialAdmin`,
 (2) la publication autorisée des nouvelles règles, (3) les vérifications sur téléphone réel.
+
+## 8. Validation d'intégration indépendante — 20 octobre 2026
+
+Base contrôlée : `01820c9`, puis branche `lot-a-validation-integration` et PR #1.
+Node 22.23.3, Java 21, Chromium 154. Aucun accès ni déploiement en production.
+
+Le scénario à deux appareils échouait encore avant la coupure réseau. Une boucle
+`idle → paintFootprints → GeoJSONSource.setData → rendu → idle` dans `WorkspaceMap.tsx`
+entretenait le rendu même sans déplacement. Le rappel sur `idle` a été retiré :
+les événements de chargement des emprises, les lectures du viewport et le changement de
+zone déclenchent déjà leur mise en couleur. Le test auparavant rouge passe alors en
+24,8 secondes, sans changer ses délais ni ses assertions. L'hypothèse initiale d'un
+blocage intrinsèque du cache Firestore n'est donc pas retenue.
+
+La variable d'exclusion `ATHAR_E2E_SKIP_CONFLICT` a été supprimée du workflow et du runner.
+La barrière impose maintenant les **8 parcours émulateurs**, dont rechargement hors ligne,
+conservation de la file et résolution du conflit réel entre deux appareils.
+
+Vérifications locales : lint, 185 tests unitaires, 5 tests Functions, 6 tests des gardes,
+commissioning, typage/build de production vérifié et 79 tests Firestore/Auth réussis ;
+8/8 parcours navigateur émulateurs réussis après le correctif. Le build de laboratoire
+est également vérifié. Dans cet environnement seulement, le client HTTP installé de
+`firebase-tools` a dû utiliser `EnvHttpProxyAgent` pour respecter `NO_PROXY` sur localhost ;
+cette adaptation de `node_modules` n'est pas versionnée et ne modifie pas l'application.
+
+L'intégration ne déclenche plus Hosting : seule une exécution manuelle sur `main`, avec
+`publish=true` et après validation, peut publier. Les réserves concernant les téléphones
+et l'état réel du backend de production restent celles du §7.

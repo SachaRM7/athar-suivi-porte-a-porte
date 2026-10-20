@@ -522,7 +522,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         void openFootprint(hit);
       });
 
-      instance.on('idle', paintFootprints);
+      // paintFootprints met à jour une source GeoJSON, ce qui déclenche un nouveau rendu.
+      // L'appeler sur « idle » entretiendrait une boucle de rendu permanente, même immobile.
+      // Les tuiles chargées et les lectures du viewport déclenchent déjà cette mise à jour.
       instance.on('sourcedata', (event) => { if (event.sourceId === FOOTPRINT_SOURCE && event.isSourceLoaded) paintFootprints(); });
       instance.addControl(new NavigationControl({ showCompass: false }), 'top-right');
       setMessage((current) => current.startsWith('Emprises indisponibles') ? current : 'Fond Toulouse local pret.');

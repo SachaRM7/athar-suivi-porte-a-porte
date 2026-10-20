@@ -69,8 +69,6 @@ jobs:
       # Parcours critiques sur le build de production branché aux émulateurs.
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:emulator:ci
-        env:
-          ATHAR_E2E_SKIP_CONFLICT: 'true'
 
   publier:
     needs: verifier
