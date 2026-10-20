@@ -293,3 +293,9 @@ Les tests Functions sont exécutés avant les fixtures de charge qui alimentent 
 sérielle de l'émulateur. Tous les tests sont conservés, sans allongement de leurs délais.
 La vérification d'interface mobile a été effectuée sur la carte de laboratoire ; les
 appareils physiques et la configuration de production restent hors de cette recette.
+
+Les 20 parcours de laboratoire sont également validés : 18 réussis dans la passe complète,
+puis les 2 cas de libellé de couverture et de filtre « Pas encore fait » rejoués avec succès
+après alignement des attentes sur la nouvelle sémantique. Le compteur du filtre correspond
+bien aux bâtiments contenant encore des portes sans passage, même s'ils sont partiellement
+visités. La capture mobile vérifiée conserve la lecture de la progression et des anciennetés.

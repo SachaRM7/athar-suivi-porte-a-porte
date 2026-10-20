@@ -336,9 +336,9 @@ test('reads the ancienneté column, its ninety-day alert and its two filters', a
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('7 rue des Filatiers');
 
-  // « Pas encore fait » est une autre pile : ici, aucun bâtiment décrit sans passage.
+  // Chaque bâtiment conserve des portes jamais visitées : le filtre doit les garder.
   await page.getByRole('button', { name: 'Pas encore fait' }).click();
-  await expect(rows).toHaveCount(0);
+  await expect(rows).toHaveCount(2);
   await page.getByRole('button', { name: 'Tous' }).click();
   await expect(rows).toHaveCount(2);
   await page.close();
