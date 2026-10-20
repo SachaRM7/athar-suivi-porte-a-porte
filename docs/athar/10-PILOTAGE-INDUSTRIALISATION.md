@@ -27,7 +27,7 @@ Tous les chemins restent sous `workspaces/{workspaceId}`.
 | `members/{uid}.activeOuting` | Callable | `{id, zoneId, title}` ou null ; au plus une participation active par compte |
 | `outings/{id}` | Callable | titre/zone/responsable/début immuables, fin et participants contrôlés |
 | `visits/{uuid}.outingId` | batch passage + porte | optionnel, immuable, auteur participant et zone identique imposés par les règles |
-| `members/{uid}.lastActivityAt` | trigger | maximum des dates de réception des passages, jamais l'horloge cliente |
+| `members/{uid}.lastActivityAt` | trigger | maximum des dates de création Firestore des passages, jamais l'horloge cliente |
 | `memberAudit/{uuid}` | Callable | auteur, cible, action, dates, résultat ; aucun mot de passe |
 | `memberManagement/{uid}` | Callable | verrou temporaire d'une modification Auth/Firestore, invisible au client |
 
@@ -59,7 +59,9 @@ une anomalie de période, pas corrigée silencieusement. Les compteurs par statu
 ceux des **passages**, et non le statut courant des portes ou une couverture géographique.
 
 `getOutingReport` lit sortie et visites dans une transaction de lecture cohérente,
-recalcule le résultat à chaque demande, et affiche la date serveur. Aucun compteur
+recalcule le résultat à chaque demande, et affiche la date serveur. La réception tardive
+et la dernière activité utilisent `DocumentSnapshot.createTime`, non une date fournie
+par un client. Aucun compteur
 incrémental irréparable ni nouvel agrégat à migrer. Budget : 10 000 visites/sortie ;
 au dépassement, bilan indisponible avec erreur explicite, jamais total tronqué.
 Sorties : pages de 25, curseur `(startedAt DESC, documentId DESC)`, dates de départ à la

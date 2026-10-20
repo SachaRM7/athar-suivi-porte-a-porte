@@ -32,11 +32,15 @@ beforeAll(async () => {
 afterAll(() => deleteApp(app));
 
 describe('Lot E privileged member management', () => {
-  it('refuses anonymous, regular and inactive callers even with valid tokens', async () => {
+  it('refuses anonymous, regular, inactive and malformed memberships even with valid tokens', async () => {
     for (const uid of ['anonymous','e-member','e-inactive']) {
       expect([401,403]).toContain((await call('listMembers', uid)).status);
       expect([401,403]).toContain((await call('manageMember', uid, { targetId: 'e-guest', action: 'promote' })).status);
     }
+    await root.collection('members').doc('e-inactive').update({ active: 'true' });
+    expect((await call('listMembers','e-inactive')).status).toBe(403);
+    expect((await call('manageOuting','e-inactive',{ action: 'start', outingId: 'malformed', zoneId: 'zone-e', title: 'Invalid' })).status).toBe(403);
+    await root.collection('members').doc('e-inactive').update({ active: false });
   });
   it('reads members and auth metadata without passwords and paginates completely', async () => {
     const batch = db.batch();
@@ -106,12 +110,15 @@ describe('Lot E real outings and reproducible reports', () => {
     expect((await root.collection('members').doc('e-guest').get()).data()?.activeOuting).toBeNull();
     const end = (await outingRef.get()).data()!.endedAt;
     const batch = db.batch();
-    for (const [id, at] of [['one', joined], ['two', joined], ['outside', Timestamp.fromMillis(end.toMillis()+1000)]] as const) batch.set(root.collection('visits').doc(id), { outingId: 'outing-e', authorId: 'e-member', doorId: 'same-door', statusId: 'retry', occurredAt: at, syncedAt: Timestamp.fromMillis(end.toMillis()+2000), note: 'secret' });
+    for (const [id, at] of [['one', joined], ['two', joined], ['outside', Timestamp.fromMillis(end.toMillis()+1000)]] as const) batch.set(root.collection('visits').doc(id), { outingId: 'outing-e', authorId: 'e-member', doorId: 'same-door', statusId: 'retry', occurredAt: at, syncedAt: Timestamp.fromMillis(1), note: 'secret' });
     await batch.commit();
     const report = await call('getOutingReport','e-member',{ outingId: 'outing-e' });
     expect(report.status).toBe(200);
     expect(report.body.result).toMatchObject({ visitCount: 2, doorCount: 1, outsidePeriodCount: 1, lateSyncCount: 2, source: 'server' });
     expect(JSON.stringify(report.body)).not.toContain('secret');
+    // A forged client receipt cannot backdate the activity or hide a late arrival.
+    const receivedAt = (await root.collection('visits').doc('outside').get()).createTime!.toMillis();
+    await expect.poll(async () => (await root.collection('members').doc('e-member').get()).data()?.lastActivityAt?.toMillis(), { timeout: 10_000 }).toBe(receivedAt);
     expect((await call('manageOuting','e-admin',{ action: 'join', outingId: 'outing-e' })).status).toBe(400);
   });
   it('pages equal-date outings without duplicates or missing rows', async () => {

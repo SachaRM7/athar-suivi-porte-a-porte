@@ -17,7 +17,7 @@ exports.listMembers = onCall(async request => {
       const member = doc.data();
       const user = users.get(doc.id);
       return { id: doc.id, username: member.username, displayName: member.displayName,
-        role: member.role, active: member.active, createdAt: iso(member.createdAt),
+        role: member.role, active: member.active === true, createdAt: iso(member.createdAt),
         lastVisitAt: iso(member.lastActivityAt), lastSignInAt: user?.metadata.lastSignInTime ?? null,
         accountState: !user ? 'missing' : user.disabled ? 'disabled' : 'enabled' };
     }),
@@ -44,7 +44,7 @@ exports.manageMember = onCall(async request => {
   const operationId = audit.id;
   await db.runTransaction(async tx => {
     const [caller, member, lease] = await tx.getAll(callerRef, target, lock);
-    if (!caller.data()?.active || caller.data().role !== 'admin') throw new HttpsError('permission-denied', 'Accès administrateur retiré.');
+    if (caller.data()?.active !== true || caller.data().role !== 'admin') throw new HttpsError('permission-denied', 'Accès administrateur retiré.');
     if (!member.exists) throw new HttpsError('not-found', 'Membre introuvable.');
     if (lease.data()?.expiresAt?.toMillis() > Date.now()) throw new HttpsError('aborted', 'Une modification est déjà en cours. Réessaie.');
     tx.set(lock, { operationId, expiresAt: Timestamp.fromMillis(Date.now() + 300_000) });
@@ -65,7 +65,7 @@ exports.manageMember = onCall(async request => {
     await db.runTransaction(async tx => {
       const [lease, caller] = await tx.getAll(lock, callerRef);
       if (lease.data()?.operationId !== operationId) throw new HttpsError('aborted', 'Opération à reprendre.');
-      if ((action === 'reactivate' || action === 'promote') && (!caller.data()?.active || caller.data().role !== 'admin')) {
+      if ((action === 'reactivate' || action === 'promote') && (caller.data()?.active !== true || caller.data().role !== 'admin')) {
         throw new HttpsError('permission-denied', 'Accès administrateur retiré.');
       }
       if (action === 'reactivate') tx.update(target, { active: true });

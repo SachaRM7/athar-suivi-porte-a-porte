@@ -14,7 +14,7 @@ async function access(request, admin = false) {
   const root = getFirestore().doc(`workspaces/${workspaceId}`);
   const ref = root.collection('members').doc(request.auth.uid);
   const member = await ref.get();
-  if (!member.exists || !member.data().active || (admin && member.data().role !== 'admin')) {
+  if (!member.exists || member.data().active !== true || (admin && member.data().role !== 'admin')) {
     throw new HttpsError('permission-denied', 'Accès actif requis.');
   }
   return { root, ref, member: member.data(), uid: request.auth.uid };

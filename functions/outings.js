@@ -21,7 +21,7 @@ exports.manageOuting = onCall(async request => {
   await getFirestore().runTransaction(async tx => {
     const [memberDoc, outingDoc] = await tx.getAll(ref, outingRef);
     const member = memberDoc.data();
-    if (!member?.active) throw new HttpsError('permission-denied', 'Membre actif requis.');
+    if (member?.active !== true) throw new HttpsError('permission-denied', 'Membre actif requis.');
     const now = Timestamp.now();
     if (action === 'start') {
       if (outingDoc.exists) {
@@ -90,19 +90,20 @@ exports.getOutingReport = onCall(async request => {
     if (!outing.exists) throw new HttpsError('not-found', 'Sortie introuvable.');
     const visits = await tx.get(root.collection('visits').where('outingId', '==', outing.id).limit(10001));
     if (visits.size > 10000) throw new HttpsError('resource-exhausted', 'Bilan trop volumineux. Aucun total partiel ne sera présenté.');
-    return { outing: serialize(outing), ...summarizeOuting(outing.data(), visits.docs.map(doc => doc.data())),
+    return { outing: serialize(outing), ...summarizeOuting(outing.data(), visits.docs.map(doc => ({ ...doc.data(), syncedAt: doc.createTime }))),
       readAt: iso(visits.readTime), source: 'server' };
   }, { readOnly: true });
 });
 
 exports.recordMemberActivity = onDocumentCreated({ document: 'workspaces/{workspaceId}/visits/{visitId}', retry: true }, async event => {
   const visit = event.data?.data();
-  if (!visit?.authorId || !visit.syncedAt?.toMillis) return;
+  const receivedAt = event.data?.createTime;
+  if (!visit?.authorId || !receivedAt?.toMillis) return;
   const ref = getFirestore().doc(`workspaces/${event.params.workspaceId}/members/${visit.authorId}`);
   await getFirestore().runTransaction(async tx => {
     const member = await tx.get(ref);
-    if (member.exists && (member.data().lastActivityAt?.toMillis() ?? 0) < visit.syncedAt.toMillis()) {
-      tx.update(ref, { lastActivityAt: visit.syncedAt });
+    if (member.exists && (member.data().lastActivityAt?.toMillis() ?? 0) < receivedAt.toMillis()) {
+      tx.update(ref, { lastActivityAt: receivedAt });
     }
   });
 });
