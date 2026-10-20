@@ -293,7 +293,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   async function savePassage(door: Door, statusId: string): Promise<void> {
     // Corriger un « Ne pas déranger » est une opération explicite : on la fait confirmer.
     // Elle ajoute un passage, l'ancien reste daté et signé dans l'historique.
-    if (requiresDoNotDisturbConfirmation(door, statusId) && dndCorrection?.doorId !== door.id) {
+    const confirmed = dndCorrection?.doorId === door.id && dndCorrection.statusId === statusId;
+    if (requiresDoNotDisturbConfirmation(door, statusId) && !confirmed) {
       setDndCorrection({ doorId: door.id, statusId });
       return;
     }
