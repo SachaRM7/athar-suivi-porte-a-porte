@@ -1,11 +1,13 @@
 import type { Building, Door } from '../../../domain/workspace/models';
+import { doorFollowUp } from '../../../domain/workspace/follow-up';
 
 /**
  * Ancienneté — axe de lecture principal de `02-DATA-MODEL.md`.
  *
- * Puisque toute porte reste dans le cycle de suivi sauf « Attaché à l'effort », la question
- * utile sur le terrain n'est pas « quoi » mais « depuis quand ». Rien ici ne lit ni n'écrit
- * Firestore : l'ancienneté se déduit des passages déjà chargés.
+ * Une porte reste dans le cycle de suivi sauf « Attaché à l'effort » et « Ne pas déranger »
+ * (cf. `domain/workspace/follow-up.ts`) : pour elles, la question utile sur le terrain n'est
+ * pas « quoi » mais « depuis quand ». Rien ici ne lit ni n'écrit Firestore : l'ancienneté se
+ * déduit des passages déjà chargés.
  */
 
 /** Seuil d'alerte visuelle de `02-DATA-MODEL.md`. Trois mois, en jours. */
@@ -56,12 +58,51 @@ export function buildingStaleness(lastVisitAt: string | null, now: Date = new Da
   return { lastVisitAt, days, label: stalenessLabel(days), alert: days > STALE_ALERT_DAYS };
 }
 
+/**
+ * Où en est le bâtiment dans le cycle de suivi, porte par porte. Une suggestion de revisite
+ * ne se fonde jamais sur le statut dominant : seules les portes encore dans le cycle comptent.
+ */
+export type BuildingFollowUp = {
+  firstVisitDoorCount: number;
+  revisitDoorCount: number;
+  excludedDoorCount: number;
+  /** Ancienneté calculée sur les seules portes visitées encore dans le cycle. */
+  revisitStaleness: BuildingStaleness;
+  /** Vrai seulement si une porte encore dans le cycle n'a pas été vue depuis plus de 90 jours. */
+  suggestedForRevisit: boolean;
+  /** Toutes les portes décrites sont sorties du suivi : rien à proposer ici. */
+  outOfFollowUp: boolean;
+};
+
+export function buildingFollowUp(activeDoors: readonly Door[], now: Date = new Date()): BuildingFollowUp {
+  const states = activeDoors.map((door) => ({ door, followUp: doorFollowUp(door) }));
+  const revisitDoors = states.filter((state) => state.followUp === 'revisit').map((state) => state.door);
+  const excludedDoorCount = states.filter((state) => state.followUp === 'excluded').length;
+  const revisitStaleness = buildingStaleness(lastVisitOfBuilding(revisitDoors), now);
+  return {
+    firstVisitDoorCount: states.filter((state) => state.followUp === 'first-visit').length,
+    revisitDoorCount: revisitDoors.length,
+    excludedDoorCount,
+    revisitStaleness,
+    suggestedForRevisit: revisitStaleness.alert,
+    outOfFollowUp: activeDoors.length > 0 && excludedDoorCount === activeDoors.length
+  };
+}
+
 export type BuildingListEntry = {
   building: Building;
+  /** Dernier passage du bâtiment, toutes portes confondues : c'est ce qui dit « vu ». */
   staleness: BuildingStaleness;
   doorCount: number;
   treatedCount: number;
+  followUp: BuildingFollowUp;
 };
+
+/** Libellé de la colonne d'ancienneté, cohérent avec la suggestion de revisite. */
+export function buildingAgeLabel(entry: BuildingListEntry): string {
+  if (entry.followUp.outOfFollowUp) return 'sorti du suivi';
+  return entry.followUp.suggestedForRevisit ? entry.followUp.revisitStaleness.label : entry.staleness.label;
+}
 
 export type BuildingListFilter = 'all' | 'todo' | 'stale';
 
@@ -78,7 +119,8 @@ export function buildingListEntries(
       building,
       staleness: buildingStaleness(lastVisitOfBuilding(doors), now),
       doorCount: doors.length,
-      treatedCount: doors.filter((door) => door.currentStatusId !== 'unvisited').length
+      treatedCount: doors.filter((door) => door.currentStatusId !== 'unvisited').length,
+      followUp: buildingFollowUp(doors, now)
     };
   });
 }
@@ -89,18 +131,26 @@ export function buildingListEntries(
  */
 export function matchesBuildingListFilter(entry: BuildingListEntry, filter: BuildingListFilter): boolean {
   if (filter === 'todo') return entry.staleness.days === null;
-  if (filter === 'stale') return entry.staleness.alert;
+  if (filter === 'stale') return entry.followUp.suggestedForRevisit;
   return true;
 }
 
-/** Du plus ancien au plus récent ; un bâtiment jamais vu passe en tête. */
+/**
+ * Du plus ancien au plus récent ; un bâtiment jamais vu passe en tête, un bâtiment sorti
+ * du suivi en dernier. L'ancienneté comparée est celle des portes encore dans le cycle.
+ */
 export function compareByStaleness(left: BuildingListEntry, right: BuildingListEntry): number {
-  if (left.staleness.lastVisitAt === right.staleness.lastVisitAt) {
+  const rank = (entry: BuildingListEntry) => entry.staleness.lastVisitAt === null ? 0 : entry.followUp.outOfFollowUp ? 2 : 1;
+  const byRank = rank(left) - rank(right);
+  if (byRank !== 0) return byRank;
+  const leftAt = left.followUp.revisitStaleness.lastVisitAt ?? left.staleness.lastVisitAt;
+  const rightAt = right.followUp.revisitStaleness.lastVisitAt ?? right.staleness.lastVisitAt;
+  if (leftAt === rightAt) {
     return left.building.addressLabel.localeCompare(right.building.addressLabel, 'fr-FR');
   }
-  if (left.staleness.lastVisitAt === null) return -1;
-  if (right.staleness.lastVisitAt === null) return 1;
-  return left.staleness.lastVisitAt.localeCompare(right.staleness.lastVisitAt);
+  if (leftAt === null) return -1;
+  if (rightAt === null) return 1;
+  return leftAt.localeCompare(rightAt);
 }
 
 export function sortBuildingList(

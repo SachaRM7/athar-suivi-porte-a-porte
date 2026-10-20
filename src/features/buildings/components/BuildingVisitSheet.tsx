@@ -12,6 +12,7 @@ import type { FieldVisitSync } from '../../visits/model/use-field-visit-sync';
 import { isTrustedDevice, setTrustedDevice } from '../../../infrastructure/offline/device-storage';
 import { CADASTRAL_SUGGESTION_NOTICE, type CadastralSuggestion } from '../model/cadastral-structure';
 import { buildingStaleness } from '../model/building-staleness';
+import { doorsForGroupedAbsence, requiresDoNotDisturbConfirmation } from '../../../domain/workspace/follow-up';
 import { Stepper } from '../../../design/components';
 import { firestoreWriteErrorMessage } from '../../../infrastructure/firebase/firestore-errors';
 import { localWriteErrorMessage } from '../../visits/model/field-sync-status';
@@ -123,6 +124,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const [ambiguities, setAmbiguities] = useState<readonly StructureAmbiguity[]>([]);
   const [structureMessage, setStructureMessage] = useState('');
   const [structurePending, setStructurePending] = useState(false);
+  /** Correction d'un « Ne pas déranger » en attente de confirmation. */
+  const [dndCorrection, setDndCorrection] = useState<{ doorId: string; statusId: string } | null>(null);
 
   const refresh = useCallback(async () => {
     if (!building) return;
@@ -264,6 +267,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   async function openDoor(door: Door): Promise<void> {
     setSelectedDoorId(door.id);
     setOpenPaletteDoorId(door.id);
+    setDndCorrection(null);
     setShowPassageNote(false);
     setSisters(door.sisters);
     setAutoSisters(false);
@@ -287,6 +291,13 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   }
 
   async function savePassage(door: Door, statusId: string): Promise<void> {
+    // Corriger un « Ne pas déranger » est une opération explicite : on la fait confirmer.
+    // Elle ajoute un passage, l'ancien reste daté et signé dans l'historique.
+    if (requiresDoNotDisturbConfirmation(door, statusId) && dndCorrection?.doorId !== door.id) {
+      setDndCorrection({ doorId: door.id, statusId });
+      return;
+    }
+    setDndCorrection(null);
     await applyStatus(door, statusId);
   }
 
@@ -312,7 +323,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
 
   async function markFloorAway(scope: readonly Door[]): Promise<void> {
     const awayStatus = statuses.find((status) => status.id === 'retry' && status.active);
-    const targets = scope.filter((door) => door.currentStatusId === 'unvisited');
+    // Règle centrale : jamais une porte sortie du suivi, jamais une porte déjà visitée.
+    const targets = doorsForGroupedAbsence(scope);
     if (!awayStatus || targets.length === 0) return;
     try {
       const results = await recordLocalVisits(repositories, outbox, {
@@ -595,6 +607,11 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
             <p className="door-detail-subline">Dernier passage {doorVisits[0] ? buildingStaleness(doorVisits[0].occurredAt).label : 'jamais'}</p>
             <p className="eyebrow">Résultat du passage</p>
             <div className="status-palette"><button className="status-swatch open-result" onClick={() => void savePassage(paletteDoor, 'contacted')} type="button"><span aria-hidden="true" /><b>Contact établi</b></button><button className="status-swatch away-result" onClick={() => void savePassage(paletteDoor, 'retry')} type="button"><span aria-hidden="true" /><b>Absent</b></button><button className="status-swatch linked-result" onClick={() => void savePassage(paletteDoor, 'linked')} type="button"><span aria-hidden="true" /><b>Attaché à l'effort — plus à revisiter</b></button><button className="status-swatch dnd-result" onClick={() => void savePassage(paletteDoor, 'do-not-return')} type="button"><span aria-hidden="true" /><b>Ne pas déranger</b></button><button className="status-swatch locked-result" onClick={() => void savePassage(paletteDoor, 'locked')} type="button"><span aria-hidden="true" /><b>Accès bloqué (interphone / code)</b></button></div>
+            {dndCorrection?.doorId === paletteDoor.id && <div className="dnd-correction" role="alert">
+              <b>Cette personne a demandé à ne plus être dérangée.</b>
+              <span>Enregistrer « {statusesById.get(dndCorrection.statusId)?.label ?? dndCorrection.statusId} » à la place ? Le passage « Ne pas déranger » reste dans l’historique.</span>
+              <span className="dnd-correction-actions"><button onClick={() => void savePassage(paletteDoor, dndCorrection.statusId)} type="button">Oui, corriger</button><button onClick={() => setDndCorrection(null)} type="button">Annuler</button></span>
+            </div>}
             <p className="eyebrow">Composition du foyer</p>
             <div className="foyer-chips">{([{ value: 'femme', label: 'Femme seule' }, { value: 'homme', label: 'Homme seul' }, { value: 'couple', label: 'Couple' }, { value: 'famille', label: 'Famille' }, { value: null, label: 'Non renseigné' }] as const).map((choice) => <button aria-pressed={foyer === choice.value} key={choice.label} onClick={() => void chooseFoyer(paletteDoor, choice.value)} type="button">{choice.label}</button>)}</div>
             <button aria-pressed={sisters} className="sisters-toggle" onClick={() => void toggleSisters(paletteDoor, !sisters, false)} type="button"><span className="sisters-toggle-copy"><strong>À confier aux sœurs</strong><span>Le prochain passage sera fait par les sœurs.</span></span><i aria-hidden="true" className="sisters-toggle-control" /></button>

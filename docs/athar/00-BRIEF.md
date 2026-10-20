@@ -40,8 +40,8 @@ Ces libellés sont ceux affichés à l'utilisateur. Ne pas les reformuler.
 | `todo` | Pas encore fait | Aucun passage enregistré |
 | `open` | Contact établi | Quelqu'un a ouvert et a échangé |
 | `away` | Absent | Personne n'a ouvert |
-| `linked` | Attaché à l'effort | **Seul statut qui sort la porte du cycle de suivi** |
-| `dnd` | Ne pas déranger | La personne a demandé à ne plus être sollicitée |
+| `linked` | Attaché à l'effort | **Sort la porte du cycle de suivi** (lien établi) |
+| `dnd` | Ne pas déranger | La personne a demandé à ne plus être sollicitée — **sort aussi la porte du cycle de suivi** |
 | `locked` | Accès bloqué | Interphone, digicode, portail |
 
 Marqueur séparé (booléen, cumulable avec n'importe quel statut) : **À confier aux sœurs**.

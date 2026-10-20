@@ -150,4 +150,30 @@ describe('local field visit recording', () => {
       { commandId: 'visit-second', expectedRevision: 1 }
     ]);
   });
+
+  it('refuses a grouped action that would touch a « Ne pas déranger » door', async () => {
+    const repositories = createMemoryWorkspaceRepositories({
+      ...demoWorkspace,
+      doors: demoWorkspace.doors.map((door) => door.id === 'door-dalbad-12' ? { ...door, currentStatusId: 'do-not-return', revision: 1, lastVisitId: 'v-dnd', lastVisitAt: '2026-01-01T10:00:00.000Z' } : door)
+    });
+    const outbox = new MemoryOutbox();
+
+    await expect(recordLocalVisits(repositories, outbox, {
+      authorId: 'member-1', doorIds: ['door-dalbad-02', 'door-dalbad-12'], statusId: 'retry', note: ''
+    })).rejects.toThrow('excluded from follow-up');
+    await expect(outbox.all()).resolves.toEqual([]);
+    await expect(repositories.doors.get('door-dalbad-12')).resolves.toMatchObject({ currentStatusId: 'do-not-return' });
+  });
+
+  it('corrects a « Ne pas déranger » by adding a passage, never by erasing the previous one', async () => {
+    const repositories = createMemoryWorkspaceRepositories(demoWorkspace);
+    const outbox = new MemoryOutbox();
+    const ids = ['visit-dnd', 'visit-correction'];
+    await recordLocalVisit(repositories, outbox, { authorId: 'member-1', doorId: 'door-dalbad-02', statusId: 'do-not-return', note: '', now: new Date('2026-08-02T09:00:00.000Z'), createId: () => ids.shift()! });
+    await recordLocalVisit(repositories, outbox, { authorId: 'member-1', doorId: 'door-dalbad-02', statusId: 'contacted', note: 'Erreur de saisie', now: new Date('2026-08-02T09:05:00.000Z'), createId: () => ids.shift()! });
+
+    const history = await repositories.visits.listByDoor('door-dalbad-02');
+    expect(history.map((visit) => visit.statusId).sort()).toEqual(['contacted', 'do-not-return']);
+    await expect(repositories.doors.get('door-dalbad-02')).resolves.toMatchObject({ currentStatusId: 'contacted', revision: 2 });
+  });
 });

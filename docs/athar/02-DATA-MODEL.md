@@ -64,8 +64,29 @@ Les trous et multipolygones ne sont pas nécessaires aux zones WP0 → WP8 ; leu
 
 ## Ancienneté
 
-C'est l'axe de lecture principal : puisque toute porte reste dans le cycle de suivi sauf `linked`,
-la question utile n'est pas « quoi » mais « depuis quand ».
+C'est l'axe de lecture principal : puisque toute porte reste dans le cycle de suivi sauf `linked`
+et `dnd`, la question utile n'est pas « quoi » mais « depuis quand ».
+
+### Cycle de suivi (lot A2)
+
+Trois notions distinctes, dérivées du statut courant sans champ stocké
+(`src/domain/workspace/follow-up.ts`, seule source de vérité) :
+
+| Notion | Règle |
+|---|---|
+| Résultat du dernier passage | `currentStatusId`, fait historique, jamais réécrit |
+| Éligibilité à une suggestion | `unvisited` → première visite ; `contacted`, `retry`, `locked` → revisite |
+| Exclusion du suivi ordinaire | `linked` (lien établi) et `do-not-return` (« Ne pas déranger ») |
+
+- « Pas vu > 3 mois » et le tri par ancienneté ne regardent que les portes encore dans le cycle :
+  un immeuble dont toutes les portes sont exclues n'est jamais proposé ; un immeuble mixte reste
+  proposé par ses portes éligibles. Le statut dominant n'intervient pas.
+- « Absent » et « Accès bloqué » ne deviennent jamais définitifs, et « Ne pas déranger » n'est
+  jamais converti en « Absent ».
+- « Tout marquer absent » n'écrit que sur les portes jamais visitées ; une porte exclue n'est
+  jamais touchée par une action groupée (refus aussi au niveau du modèle).
+- Corriger un « Ne pas déranger » saisi par erreur exige une confirmation explicite et ajoute un
+  passage : l'ancien reste dans l'historique, avec son auteur et sa date.
 
 Affichage : `aujourd'hui` · `hier` · `il y a N j` (< 30) · `il y a N mois` · `jamais vu`.
 Seuil d'alerte visuelle : 90 jours.

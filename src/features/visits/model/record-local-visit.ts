@@ -1,6 +1,7 @@
 import type { Outbox } from '../../../domain/sync/outbox';
 import { assertDoor, assertVisit } from '../../../domain/workspace/invariants';
 import type { Door, Status, Visit } from '../../../domain/workspace/models';
+import { doorFollowUp } from '../../../domain/workspace/follow-up';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
 
 export type RecordLocalVisitInput = {
@@ -118,6 +119,10 @@ export async function recordLocalVisits(
   if (doors.some((door) => !door)) throw new Error('Door not found.');
   const resolvedDoors = doors as Door[];
   if (resolvedDoors.some((door) => !door.active)) throw new Error('Cannot record a visit for an archived door.');
+  // Défense en profondeur : un geste groupé n'écrit jamais sur une porte sortie du suivi.
+  if (resolvedDoors.some((door) => doorFollowUp(door) === 'excluded')) {
+    throw new Error('A grouped action cannot target a door excluded from follow-up.');
+  }
   if (entries.some((entry) => doorIds.includes(entry.doorId))) {
     throw new Error('Resolve the existing door conflict before adding another visit.');
   }

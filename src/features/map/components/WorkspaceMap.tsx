@@ -34,6 +34,7 @@ import {
   type FootprintContext,
 } from '../model/footprints';
 import {
+  buildingAgeLabel,
   buildingListEntries,
   matchesBuildingListFilter,
   sortBuildingList,
@@ -695,7 +696,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const coveredBuildingCount = zoneBuildings.filter((entry) => entry.treatedCount > 0).length;
   const coveragePercent = zoneBuildingCount === 0 ? 0 : Math.round((coveredBuildingCount / zoneBuildingCount) * 100);
   const todoCount = zoneBuildings.filter((entry) => entry.staleness.days === null).length;
-  const staleCount = zoneBuildings.filter((entry) => entry.staleness.alert).length;
+  const staleCount = zoneBuildings.filter((entry) => entry.followUp.suggestedForRevisit).length;
   const zoneName = selectedZone?.name ?? 'Zone à choisir';
 
   return (
@@ -828,12 +829,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
                 {listedBuildings.map((entry) => (
                   <li key={entry.building.id}>
                     <button className="building-row" onClick={() => { flyToBuilding(entry.building); onBuildingSelect(entry.building, { persisted: true, suggestion: footprintSuggestions.current.get(entry.building.id) ?? null }); }} type="button">
-                      <span className={`terrain-building-pin terrain-building-pin--${entry.treatedCount === 0 ? 'todo' : entry.staleness.alert ? 'away' : 'open'}`} />
+                      <span className={`terrain-building-pin terrain-building-pin--${entry.treatedCount === 0 ? 'todo' : entry.followUp.suggestedForRevisit ? 'away' : entry.followUp.outOfFollowUp ? 'linked' : 'open'}`} />
                       <span className="terrain-building-copy">
                         <span className="building-row-address">{entry.building.addressLabel}</span>
                         <span className="building-row-progress">{entry.doorCount} portes · {entry.treatedCount} faites</span>
                       </span>
-                      <span className={entry.staleness.alert ? 'building-row-age alert' : 'building-row-age'}>{entry.staleness.label}</span>
+                      <span className={entry.followUp.suggestedForRevisit ? 'building-row-age alert' : 'building-row-age'}>{buildingAgeLabel(entry)}</span>
                     </button>
                   </li>
                 ))}
