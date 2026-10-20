@@ -281,7 +281,7 @@ progression des portes est exploitable et la couverture géographique est indisp
 
 ## Recette de l'implémentation complète
 
-Sous Node 22 : lint, typage et build de production vérifié ; **210 tests unitaires**, **14
+Sous Node 22 : lint, typage et build de production vérifié ; **210 tests unitaires**, **17
 contrôles Functions**, **5 tests catalogue/diagnostic**, **6 contrôles de configuration**, **84
 tests Firestore/Auth** et **10 parcours navigateur sur émulateurs** réussis. La reconstruction
 est testée à 900 portes, avec écriture entre les pages, publication concurrente, génération
@@ -299,3 +299,8 @@ puis les 2 cas de libellé de couverture et de filtre « Pas encore fait » rejo
 après alignement des attentes sur la nouvelle sémantique. Le compteur du filtre correspond
 bien aux bâtiments contenant encore des portes sans passage, même s'ils sont partiellement
 visités. La capture mobile vérifiée conserve la lecture de la progression et des anciennetés.
+
+La concurrence observée en CI peut fermer une transaction avec le code 3 de l'émulateur.
+Le producteur recommence alors la transaction entière, au plus trois tentatives, avec le
+même instantané pour les lectures et le même contrôle de génération pour la publication.
+Les autres erreurs d'argument ne sont pas rejouées. Trois tests ciblés vérifient cette borne.

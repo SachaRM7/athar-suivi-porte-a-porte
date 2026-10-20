@@ -1,5 +1,6 @@
 const { FieldPath, FieldValue } = require('firebase-admin/firestore');
 const { computeWorkspaceStats, hash } = require('./stats-core');
+const { statsTransaction } = require('./stats-transaction');
 const PAGE_SIZE = 400;
 const MAX_DOCUMENTS = 50000;
 const MAX_ZONES = 250;
@@ -8,7 +9,7 @@ const MAX_ZONES = 250;
 async function readWorkspaceSnapshot(db, workspaceId, { maxDocuments = MAX_DOCUMENTS, afterPage } = {}) {
   // Pin a server-observed read time: implicit read-only transactions may be stale.
   const anchor = await db.doc(`workspaces/${workspaceId}/statsState/current`).get();
-  return db.runTransaction(async tx => {
+  return statsTransaction(db, async tx => {
     let documentsRead = 0;
     let sourceReadTime;
     const root = db.doc(`workspaces/${workspaceId}`);
@@ -53,7 +54,7 @@ function compareTime(a, b) {
 async function publishStats(db, workspaceId, snapshot, projections) {
   const root = db.doc(`workspaces/${workspaceId}`);
   const stateRef = root.collection('statsState').doc('current');
-  return db.runTransaction(async tx => {
+  return statsTransaction(db, async tx => {
     const state = await tx.get(stateRef);
     const previous = state.data()?.sourceReadTime;
     const failedReadTime = state.data()?.failedReadTime;
@@ -89,7 +90,7 @@ async function rebuildWorkspaceStats(db, workspaceId, options = {}) {
   }
   catch (error) {
     if (!options.dryRun) {
-      await db.runTransaction(async tx => {
+      await statsTransaction(db, async tx => {
         const stateRef = db.doc(`workspaces/${workspaceId}/statsState/current`);
         const state = await tx.get(stateRef);
         if (state.data()?.sourceReadTime && compareTime(state.data().sourceReadTime, started) > 0) return;
