@@ -23,8 +23,10 @@ export class FirestoreDoorGateway implements DoorWriteGateway {
 
   async commit(intent: VisitIntent): Promise<DoorSnapshot> {
     if (!this.isNetworkAvailable()) throw new NetworkUnavailableError();
+    // Session fermée ou remplacée pendant la passe : on n'envoie rien sous un autre nom,
+    // et l'intention attend son auteur au lieu d'être rejetée définitivement.
     if (this.currentUserId() !== intent.authorId) {
-      throw new SyncRejectedError('author-mismatch', 'The authenticated user does not own this queued visit.');
+      throw new NetworkUnavailableError('session', 'The authenticated user does not own this queued visit.');
     }
     const validNote = typeof intent.note === 'string';
     const containsUnsafeControl = validNote && [...intent.note].some((character) => {
@@ -82,8 +84,9 @@ export class FirestoreDoorGateway implements DoorWriteGateway {
     } catch (error) {
       const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : null;
       if (code === 'unavailable' || code === 'deadline-exceeded' || code === 'cancelled') {
-        throw new NetworkUnavailableError();
+        throw new NetworkUnavailableError('server');
       }
+      if (code === 'unauthenticated') throw new NetworkUnavailableError('session');
       if (code !== 'permission-denied') throw error;
 
       const memberRef = doc(this.db, `${workspace}/members/${intent.authorId}`);

@@ -78,8 +78,8 @@ Libellés affichés à l'utilisateur. Ne pas les reformuler, ne pas les traduire
 | `todo` | Pas encore fait | Aucun passage enregistré |
 | `open` | Contact établi | Quelqu'un a ouvert et a échangé |
 | `away` | Absent | Personne n'a ouvert |
-| `linked` | Attaché à l'effort | Seul statut qui sort la porte du cycle de suivi |
-| `dnd` | Ne pas déranger | La personne a demandé à ne plus être sollicitée |
+| `linked` | Attaché à l'effort | Sort la porte du cycle de suivi (lien établi) |
+| `dnd` | Ne pas déranger | La personne a demandé à ne plus être sollicitée — sort aussi la porte du cycle de suivi |
 | `locked` | Accès bloqué | Interphone, digicode, portail |
 
 « À confier aux sœurs » est un **marqueur booléen séparé**, cumulable avec n'importe quel statut.

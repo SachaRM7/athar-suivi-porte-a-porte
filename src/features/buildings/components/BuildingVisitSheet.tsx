@@ -12,8 +12,17 @@ import type { FieldVisitSync } from '../../visits/model/use-field-visit-sync';
 import { isTrustedDevice, setTrustedDevice } from '../../../infrastructure/offline/device-storage';
 import { CADASTRAL_SUGGESTION_NOTICE, type CadastralSuggestion } from '../model/cadastral-structure';
 import { buildingStaleness } from '../model/building-staleness';
+import { doorsForGroupedAbsence, requiresDoNotDisturbConfirmation } from '../../../domain/workspace/follow-up';
 import { Stepper } from '../../../design/components';
 import { firestoreWriteErrorMessage } from '../../../infrastructure/firebase/firestore-errors';
+import { localWriteErrorMessage } from '../../visits/model/field-sync-status';
+
+const REJECTION_MESSAGES: Readonly<Record<string, string>> = {
+  'inactive-member': 'ce compte n’est plus actif',
+  'author-mismatch': 'il a été saisi sous un autre compte',
+  'invalid-intent': 'le statut ou la porte ne sont plus valides',
+  security: 'les règles de sécurité l’ont refusé'
+};
 
 type BuildingVisitSheetProps = {
   authorId: string;
@@ -115,6 +124,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const [ambiguities, setAmbiguities] = useState<readonly StructureAmbiguity[]>([]);
   const [structureMessage, setStructureMessage] = useState('');
   const [structurePending, setStructurePending] = useState(false);
+  /** Correction d'un « Ne pas déranger » en attente de confirmation. */
+  const [dndCorrection, setDndCorrection] = useState<{ doorId: string; statusId: string } | null>(null);
 
   const refresh = useCallback(async () => {
     if (!building) return;
@@ -215,12 +226,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     ?? sync?.entries.find((entry) => entry.state !== 'pending')
     ?? sync?.entries.find((entry) => entry.doorId === selectedDoorId && entry.state === 'pending');
   const pendingEntries = sync?.entries.filter((entry) => entry.state === 'pending').length ?? pendingCount;
-  const syncLabel = !sync ? `${pendingCount} attente(s)`
-    : !sync.online ? 'Hors ligne'
-      : selectedEntry?.state === 'conflict' ? 'Conflit a resoudre'
-        : selectedEntry?.state === 'rejected' ? 'Ecriture rejetee'
-          : pendingEntries > 0 ? `${pendingEntries} changement(s) en attente`
-            : 'A jour';
+  const syncLabel = !sync ? (pendingEntries > 0 ? `${pendingEntries} changement(s) en attente` : 'À jour') : sync.status.label;
+  const syncDetail = sync?.status.detail ?? null;
 
   const loadDoorVisits = useCallback(async (doorId: string): Promise<readonly (Visit & { authorName: string })[]> => {
     const visits = await repositories.visits.listByDoor(doorId);
@@ -237,12 +244,13 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
 
   async function record(door: Door, statusId: string): Promise<boolean> {
     try {
-      const result = await recordLocalVisit(repositories, outbox, { authorId, doorId: door.id, statusId, note });
+      await recordLocalVisit(repositories, outbox, { authorId, doorId: door.id, statusId, note });
       setNote('');
-      setMessage(`Porte ${door.label}: passage ${result.visit.id.slice(0, 8)} cree, revision ${result.door.revision}.`);
+      // Enregistré sur l'appareil, pas encore confirmé : l'état de synchronisation le dira.
+      setMessage(`Porte ${door.label} : passage enregistré sur l’appareil.`);
       return true;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Passage local refuse.');
+      setMessage(localWriteErrorMessage(error));
       return false;
     }
   }
@@ -259,6 +267,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   async function openDoor(door: Door): Promise<void> {
     setSelectedDoorId(door.id);
     setOpenPaletteDoorId(door.id);
+    setDndCorrection(null);
     setShowPassageNote(false);
     setSisters(door.sisters);
     setAutoSisters(false);
@@ -266,22 +275,42 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     setDoorVisits(await loadDoorVisits(door.id));
   }
 
+  /**
+   * Le profil enregistré (durable sur l'appareil) rejoint aussitôt la coupe : sans cela, la
+   * tuile perdait l'anneau rose et la fiche rouverte montrait l'ancienne composition.
+   */
+  function showDoorProfile(updated: Door): void {
+    const apply = (values: readonly Door[]) => values.map((candidate) => candidate.id === updated.id
+      ? { ...candidate, foyer: updated.foyer, sisters: updated.sisters }
+      : candidate);
+    setDoors(apply);
+    setStructureDoors(apply);
+  }
+
   /** Bascule le marqueur seul : aucun passage n'est créé, la révision ne bouge pas. */
   async function toggleSisters(door: Door, next: boolean, automatic: boolean): Promise<void> {
     setSisters(next);
     setAutoSisters(automatic);
     try {
-      await markDoorForSisters(repositories, markers, { doorId: door.id, sisters: next, authorId });
+      showDoorProfile(await markDoorForSisters(repositories, markers, { doorId: door.id, sisters: next, authorId }));
       await sync?.synchronize();
     } catch (error) {
       setSisters(!next);
       setAutoSisters(false);
       await refresh().catch(() => undefined);
-      setMessage(error instanceof Error ? error.message : 'Le marqueur n a pas pu etre enregistre.');
+      setMessage(localWriteErrorMessage(error).replace('Le passage n’a pas été enregistré', 'Le marqueur n’a pas été enregistré'));
     }
   }
 
   async function savePassage(door: Door, statusId: string): Promise<void> {
+    // Corriger un « Ne pas déranger » est une opération explicite : on la fait confirmer.
+    // Elle ajoute un passage, l'ancien reste daté et signé dans l'historique.
+    const confirmed = dndCorrection?.doorId === door.id && dndCorrection.statusId === statusId;
+    if (requiresDoNotDisturbConfirmation(door, statusId) && !confirmed) {
+      setDndCorrection({ doorId: door.id, statusId });
+      return;
+    }
+    setDndCorrection(null);
     await applyStatus(door, statusId);
   }
 
@@ -294,20 +323,21 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     setSisters(nextSisters);
     setAutoSisters(value === 'femme' && !sisters);
     try {
-      await updateDoorProfile(repositories, markers, { doorId: door.id, foyer: value, sisters: nextSisters, authorId });
+      showDoorProfile(await updateDoorProfile(repositories, markers, { doorId: door.id, foyer: value, sisters: nextSisters, authorId }));
       await sync?.synchronize();
     } catch (error) {
       setFoyer(previousFoyer);
       setSisters(previousSisters);
       setAutoSisters(false);
       await refresh().catch(() => undefined);
-      setMessage(error instanceof Error ? error.message : 'La composition du foyer n a pas pu etre enregistree.');
+      setMessage(localWriteErrorMessage(error).replace('Le passage n’a pas été enregistré', 'La composition du foyer n’a pas été enregistrée'));
     }
   }
 
   async function markFloorAway(scope: readonly Door[]): Promise<void> {
     const awayStatus = statuses.find((status) => status.id === 'retry' && status.active);
-    const targets = scope.filter((door) => door.currentStatusId === 'unvisited');
+    // Règle centrale : jamais une porte sortie du suivi, jamais une porte déjà visitée.
+    const targets = doorsForGroupedAbsence(scope);
     if (!awayStatus || targets.length === 0) return;
     try {
       const results = await recordLocalVisits(repositories, outbox, {
@@ -318,9 +348,10 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       });
       await refresh();
       await sync?.synchronize();
-      setMessage(`${results.length} passage(s) « Absent » enregistres pour cet etage.`);
+      setMessage(`${results.length} passage(s) « Absent » enregistrés sur l’appareil pour cet étage.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Les passages groupes ont echoue.');
+      // Groupe atomique : en cas d'échec, aucune porte n'a été marquée.
+      setMessage(`${localWriteErrorMessage(error)} Aucune porte de l’étage n’a été marquée.`);
     }
   }
 
@@ -537,7 +568,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
             <span aria-hidden="true" className="building-progress-track"><i style={{ width: `${total.ratio * 100}%` }} /></span>
             <span className="building-progress-count">{total.treatedCount} / {total.doorCount}</span>
           </div>
-          <p aria-live="polite" className="building-sync-state">{syncLabel}</p>
+          <p aria-live="polite" className="building-sync-state" data-phase={sync?.status.phase}>{syncLabel}</p>
+          {syncDetail && <p className="building-sync-detail">{syncDetail}</p>}
           </>}
         </section>
 
@@ -575,8 +607,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
 
         {editing && <div className="building-edit-bar"><p><strong>Modification de la structure</strong><span>Les portes visitées gardent leur historique sauf suppression confirmée.</span></p><button onClick={() => { setEditing(false); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">Terminé</button></div>}
 
-        {sync && selectedEntry?.state === 'conflict' && selectedEntry.conflict && <section className="sync-resolution" aria-label="Resolution du conflit"><p className="eyebrow">Conflit a resoudre</p><p>Serveur : statut {selectedEntry.conflict.currentStatusId}, revision {selectedEntry.conflict.revision}.</p><div className="sync-resolution-actions"><button className="primary-action" disabled={sync.syncing} onClick={() => void sync.reapplyConflict(selectedEntry.commandId)} type="button">Reappliquer</button><button className="secondary-action" disabled={sync.syncing} onClick={() => void sync.abandonConflict(selectedEntry.commandId)} type="button">Abandonner la chaine</button></div></section>}
-        {sync && selectedEntry?.state === 'rejected' && <p className="sync-rejection" role="status">Ecriture rejetee : {selectedEntry.rejection}. Elle ne peut pas etre reappliquee comme un conflit.</p>}
+        {sync && selectedEntry?.state === 'conflict' && selectedEntry.conflict && <section className="sync-resolution" aria-label="Resolution du conflit"><p className="eyebrow">Conflit à résoudre</p><p>Un autre frère a marqué cette porte entre-temps : elle est maintenant « {statusesById.get(selectedEntry.conflict.currentStatusId)?.label ?? 'statut inconnu'} » sur le serveur. Ton passage est conservé sur l’appareil.</p><div className="sync-resolution-actions"><button className="primary-action" disabled={sync.syncing} onClick={() => void sync.reapplyConflict(selectedEntry.commandId)} type="button">Réappliquer mon passage</button><button className="secondary-action" disabled={sync.syncing} onClick={() => void sync.abandonConflict(selectedEntry.commandId)} type="button">Garder la version du serveur</button></div></section>}
+        {sync && selectedEntry?.state === 'rejected' && <p className="sync-rejection" role="status">Passage refusé par le serveur : {REJECTION_MESSAGES[selectedEntry.rejection ?? ''] ?? 'raison inconnue'}. Il reste sur l’appareil, rien n’est effacé.</p>}
         {sync && <div className="sync-controls"><button className="secondary-action" disabled={!sync.online || sync.syncing} onClick={() => void sync.synchronize()} type="button">Synchroniser</button><label className="trusted-device-control"><input checked={trustedDevice} onChange={(event) => { const trusted = event.target.checked; setTrustedDeviceState(trusted); setTrustedDevice(trusted); window.location.reload(); }} type="checkbox" />Appareil de confiance</label></div>}
         <p className="workspace-map-message" role="status">{message}</p>
 
@@ -588,6 +620,11 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
             <p className="door-detail-subline">Dernier passage {doorVisits[0] ? buildingStaleness(doorVisits[0].occurredAt).label : 'jamais'}</p>
             <p className="eyebrow">Résultat du passage</p>
             <div className="status-palette"><button className="status-swatch open-result" onClick={() => void savePassage(paletteDoor, 'contacted')} type="button"><span aria-hidden="true" /><b>Contact établi</b></button><button className="status-swatch away-result" onClick={() => void savePassage(paletteDoor, 'retry')} type="button"><span aria-hidden="true" /><b>Absent</b></button><button className="status-swatch linked-result" onClick={() => void savePassage(paletteDoor, 'linked')} type="button"><span aria-hidden="true" /><b>Attaché à l'effort — plus à revisiter</b></button><button className="status-swatch dnd-result" onClick={() => void savePassage(paletteDoor, 'do-not-return')} type="button"><span aria-hidden="true" /><b>Ne pas déranger</b></button><button className="status-swatch locked-result" onClick={() => void savePassage(paletteDoor, 'locked')} type="button"><span aria-hidden="true" /><b>Accès bloqué (interphone / code)</b></button></div>
+            {dndCorrection?.doorId === paletteDoor.id && <div className="dnd-correction" role="alert">
+              <b>Cette personne a demandé à ne plus être dérangée.</b>
+              <span>Enregistrer « {statusesById.get(dndCorrection.statusId)?.label ?? dndCorrection.statusId} » à la place ? Le passage « Ne pas déranger » reste dans l’historique.</span>
+              <span className="dnd-correction-actions"><button onClick={() => void savePassage(paletteDoor, dndCorrection.statusId)} type="button">Oui, corriger</button><button onClick={() => setDndCorrection(null)} type="button">Annuler</button></span>
+            </div>}
             <p className="eyebrow">Composition du foyer</p>
             <div className="foyer-chips">{([{ value: 'femme', label: 'Femme seule' }, { value: 'homme', label: 'Homme seul' }, { value: 'couple', label: 'Couple' }, { value: 'famille', label: 'Famille' }, { value: null, label: 'Non renseigné' }] as const).map((choice) => <button aria-pressed={foyer === choice.value} key={choice.label} onClick={() => void chooseFoyer(paletteDoor, choice.value)} type="button">{choice.label}</button>)}</div>
             <button aria-pressed={sisters} className="sisters-toggle" onClick={() => void toggleSisters(paletteDoor, !sisters, false)} type="button"><span className="sisters-toggle-copy"><strong>À confier aux sœurs</strong><span>Le prochain passage sera fait par les sœurs.</span></span><i aria-hidden="true" className="sisters-toggle-control" /></button>

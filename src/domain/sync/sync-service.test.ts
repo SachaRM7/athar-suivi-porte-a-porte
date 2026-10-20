@@ -157,4 +157,35 @@ describe('offline synchronization prototype', () => {
     expect(gateway.read('door-a')).toMatchObject({ revision: 5, lastVisitId: 'visit-once' });
     await expect(outbox.all()).resolves.toEqual([]);
   });
+
+  it('reports a deferred pass without dropping or reordering the queued visits', async () => {
+    const gateway = new MemoryDoorGateway([initialDoor, { ...initialDoor, id: 'door-b', revision: 0 }]);
+    const outbox = new MemoryOutbox();
+    const ids = ['visit-1', 'visit-2'];
+    const lab = new SyncLab(gateway, outbox, 'member-a', () => new Date('2026-07-29T12:00:00Z'), () => ids.shift()!);
+    await lab.queueStatus(initialDoor, 'retry');
+    await lab.queueStatus({ ...initialDoor, id: 'door-b', revision: 0 }, 'contacted');
+
+    gateway.setOnline(false);
+    const events = await lab.flush();
+    expect(events).toEqual([{ type: 'deferred', commandId: 'visit-1', reason: 'offline' }]);
+    expect((await outbox.pending()).map((entry) => entry.commandId)).toEqual(['visit-1', 'visit-2']);
+
+    gateway.setOnline(true);
+    expect((await lab.flush()).map((event) => event.type)).toEqual(['synced', 'synced']);
+    await expect(outbox.all()).resolves.toEqual([]);
+  });
+
+  it('never overwrites a newer server status: the stale intent becomes a visible conflict', async () => {
+    const gateway = new MemoryDoorGateway([initialDoor]);
+    const outbox = new MemoryOutbox();
+    const lab = new SyncLab(gateway, outbox, 'member-a', undefined, () => 'visit-stale');
+    await lab.queueStatus(initialDoor, 'contacted');
+    await gateway.commit({ commandId: 'remote-dnd', authorId: 'member-b', doorId: 'door-a', statusId: 'do-not-return', note: '', expectedRevision: 4, createdAt: '2026-07-29T12:00:00Z' });
+
+    const events = await lab.flush();
+    expect(events).toMatchObject([{ type: 'conflict', commandId: 'visit-stale' }]);
+    expect(gateway.read('door-a')).toMatchObject({ currentStatusId: 'do-not-return', revision: 5 });
+    await expect(outbox.all()).resolves.toMatchObject([{ commandId: 'visit-stale', state: 'conflict' }]);
+  });
 });

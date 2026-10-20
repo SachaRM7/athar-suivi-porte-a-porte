@@ -1,9 +1,11 @@
 import type { ReactElement } from 'react';
 import { useAuth } from '../../../app/providers/auth-context';
 import { AppLink } from '../../../app/routes/router';
+import { useGuardedSignOut } from './GuardedSignOut';
 
 export function MemberHome(): ReactElement {
-  const { state, signOut } = useAuth();
+  const { state } = useAuth();
+  const guardedSignOut = useGuardedSignOut();
   if (state.status !== 'active') throw new Error('MemberHome requires an active session.');
   return (
     <main className="member-shell">
@@ -12,7 +14,8 @@ export function MemberHome(): ReactElement {
           <p className="eyebrow">Athar / acces verifie</p>
           <h1>Bonjour {state.session.member.displayName}</h1>
         </div>
-        <button className="secondary-action" onClick={() => void signOut()} type="button">Se deconnecter</button>
+        <button className="secondary-action" onClick={guardedSignOut.request} type="button">Se deconnecter</button>
+        {guardedSignOut.dialog}
       </header>
       <section className="foundation-band">
         <div>
@@ -27,7 +30,6 @@ export function MemberHome(): ReactElement {
       </section>
       <nav className="member-links" aria-label="Routes disponibles">
         {state.session.member.role === 'admin' && <AppLink className="primary-action link-action" href="/admin/members">Gerer les membres</AppLink>}
-        <AppLink className="text-link" href="/technical-lab">Laboratoire technique</AppLink>
       </nav>
     </main>
   );

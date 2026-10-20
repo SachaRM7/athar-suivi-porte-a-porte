@@ -12,7 +12,18 @@ const WORKSPACE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAIN_WORKSPACE_ID = 'main';
 const TECHNICAL_EMAIL_DOMAIN = '@auth.athar.invalid';
 const REGISTERED_MEMBER_FIELDS = ['active', 'createdAt', 'displayName', 'role', 'uid', 'username', 'workspaceId'];
-const PRODUCTION_EXPORTS_ONLY = process.env.ATHAR_FUNCTIONS_MODE === 'production';
+const { localOnboardingEnabled } = require('./runtime-mode');
+const LOCAL_ONBOARDING = localOnboardingEnabled();
+
+/**
+ * Seconde barrière : même exportée par erreur, une callable de recette refuse de
+ * s'exécuter hors de l'émulateur.
+ */
+function assertLocalOnboarding() {
+  if (!localOnboardingEnabled()) {
+    throw new HttpsError('failed-precondition', 'Self-service onboarding is disabled in this environment.');
+  }
+}
 
 function normalizeUsername(value) {
   if (typeof value !== 'string') {
@@ -128,6 +139,7 @@ exports.createMember = onCall(async (request) => {
 });
 
 const registerMember = onCall(async (request) => {
+  assertLocalOnboarding();
   if (!request.auth?.uid || !request.auth.token.email) {
     throw new HttpsError('unauthenticated', 'Authentication is required.');
   }
@@ -168,6 +180,7 @@ const registerMember = onCall(async (request) => {
 });
 
 const claimInitialAdmin = onCall(async (request) => {
+  assertLocalOnboarding();
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
   assertExactFields(request.data, ['code']);
   const codeHash = suppliedCodeHash(request.data.code);
@@ -215,10 +228,11 @@ const claimInitialAdmin = onCall(async (request) => {
 
 /*
  * L'inscription ouverte et l'amorcage administrateur restent disponibles pour la
- * recette locale. En production, les acces sont crees par l'administrateur via
- * `createMember`; exporter ces callables ouvrirait le workspace a toute inscription.
+ * recette locale (emulateur uniquement, cf. runtime-mode.js). En production, les acces
+ * sont crees par l'administrateur via `createMember` ; le premier administrateur est
+ * amorce hors bande par l'Admin SDK (scripts/commissioning/plan-bootstrap-admin.mjs).
  */
-if (!PRODUCTION_EXPORTS_ONLY) {
+if (LOCAL_ONBOARDING) {
   exports.registerMember = registerMember;
   exports.claimInitialAdmin = claimInitialAdmin;
 }
@@ -299,7 +313,7 @@ const deriveAtharSistersMarker = onDocumentWritten('buildings/{buildingId}/doors
 
 // Ces derives appartiennent encore au schema racine historique. Le produit actif
 // ecrit sous workspaces/main ; elles ne sont donc chargees que par la recette locale.
-if (!PRODUCTION_EXPORTS_ONLY) {
+if (LOCAL_ONBOARDING) {
   exports.deriveAtharPassage = deriveAtharPassage;
   exports.deriveAtharSistersMarker = deriveAtharSistersMarker;
 }

@@ -4,7 +4,7 @@ import { environment } from '../../../app/config/environment';
 import type { Building, WorkspaceMember } from '../../../domain/workspace/models';
 import { BuildingVisitSheet } from '../../buildings/components/BuildingVisitSheet';
 import { InitialAdminSettings } from '../../settings/InitialAdminSettings';
-import { getFirebaseClient } from '../../../infrastructure/firebase/client';
+import { firestoreRestAuthFor, getFirebaseClient } from '../../../infrastructure/firebase/client';
 import { FirestoreBuildingStructureGateway } from '../../../infrastructure/firestore/firestore-building-structure-gateway';
 import { FirestoreBuildingGateway } from '../../../infrastructure/firestore/firestore-building-gateway';
 import { FirestoreZoneGateway } from '../../../infrastructure/firestore/firestore-zone-gateway';
@@ -14,17 +14,18 @@ import { createTerrainSessionRepositories } from '../../../infrastructure/firest
 import { IndexedDbDoorMarkerOutbox, IndexedDbOutbox } from '../../../infrastructure/outbox/indexeddb-outbox';
 import { useFieldVisitSync } from '../../visits/model/use-field-visit-sync';
 import { useOpenedBuilding } from '../model/use-opened-building';
+import { useGuardedSignOut } from '../../auth/components/GuardedSignOut';
 
 const WorkspaceMap = lazy(async () => ({ default: (await import('./WorkspaceMap')).WorkspaceMap }));
 
 export function MapPage(): ReactElement {
-  const { state, signOut } = useAuth();
+  const { state } = useAuth();
   const session = state.status === 'active' ? state.session : null;
   if (!session) throw new Error('MapPage requires an active session.');
-  return <ActiveMapPage member={session.member} onSignOut={signOut} />;
+  return <ActiveMapPage member={session.member} />;
 }
 
-function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignOut(): Promise<void> }): ReactElement {
+function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Bougé à chaque écriture faite depuis la fiche : la carte relit alors son cadrage. */
   const [dataVersion, setDataVersion] = useState(0);
@@ -43,19 +44,13 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
         client.firestore,
         environment.workspaceId,
         () => client.auth.currentUser?.uid ?? null,
-        {
-          projectId: client.app.options.projectId ?? '',
-          getIdToken: async () => client.auth.currentUser?.getIdToken() ?? null
-        }
+        firestoreRestAuthFor(client)
       ),
       zoneWriter: new FirestoreZoneGateway(
         client.firestore,
         environment.workspaceId,
         () => client.auth.currentUser?.uid ?? null,
-        {
-          projectId: client.app.options.projectId ?? '',
-          getIdToken: async () => client.auth.currentUser?.getIdToken() ?? null
-        }
+        firestoreRestAuthFor(client)
       ),
       buildingWriter: new FirestoreBuildingGateway(
         client.firestore,
@@ -65,6 +60,8 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
     });
   }, [member, outbox]);
   const sync = useFieldVisitSync(member.id, outbox, markers, repositories);
+  const guardedSignOut = useGuardedSignOut({ onSynchronize: sync.synchronize });
+  const requestSignOut = guardedSignOut.request;
   const opened = useOpenedBuilding(repositories);
   // La structure vient d'être écrite : la suggestion cadastrale n'a plus rien à proposer.
   // La structure vient de changer : la liste et le compteur de la carte doivent suivre,
@@ -74,8 +71,8 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
     setDataVersion((version) => version + 1);
   }, [opened]);
   const account = useMemo(
-    () => ({ displayName: member.displayName, onOpenSettings: () => setSettingsOpen(true), onSignOut: () => void onSignOut() }),
-    [member.displayName, onSignOut]
+    () => ({ displayName: member.displayName, onOpenSettings: () => setSettingsOpen(true), onSignOut: requestSignOut }),
+    [member.displayName, requestSignOut]
   );
   const initialAdmin = useMemo(() => {
     const client = getFirebaseClient();
@@ -110,6 +107,7 @@ function ActiveMapPage({ member, onSignOut }: { member: WorkspaceMember; onSignO
         structureSuggestion={opened.suggestion}
         sync={sync}
       />
+      {guardedSignOut.dialog}
       {settingsOpen && <InitialAdminSettings allowInitialAdminActivation={environment.firebase?.useEmulators === true} member={member} onActivate={initialAdmin} onClose={() => setSettingsOpen(false)} />}
     </main>
   );

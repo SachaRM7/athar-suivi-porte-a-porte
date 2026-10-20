@@ -5,10 +5,15 @@ async function signIn(page: import('@playwright/test').Page, username: string): 
   await page.getByLabel('Adresse e-mail ou identifiant').fill(username);
   await page.getByLabel('Mot de passe').fill('Temporary-password-123');
   await page.getByRole('button', { name: 'Se connecter' }).click();
+  // Selon le nombre de zones, la connexion ouvre la carte ou le choix de la zone de sortie.
+  await expect(page.getByRole('heading', { name: /Zones de Toulouse|Choisis la zone de la sortie/ })).toBeVisible({ timeout: 20_000 });
+  // La carte terrain n'ouvre la liste d'une zone qu'une fois celle-ci choisie.
+  await page.goto('/?zone=carmes');
   await expect(page.getByRole('heading', { name: 'Zones de Toulouse' })).toBeVisible({ timeout: 20_000 });
 }
 
 async function openDoor(page: import('@playwright/test').Page): Promise<void> {
+  await expect(page.getByRole('button', { name: '1 rue du Pilote, Toulouse' })).toBeVisible({ timeout: 45_000 });
   await page.getByRole('button', { name: '1 rue du Pilote, Toulouse' }).click();
   await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Porte 02, Pas encore fait' })).toBeVisible({ timeout: 15_000 });
@@ -17,6 +22,8 @@ async function openDoor(page: import('@playwright/test').Page): Promise<void> {
 }
 
 async function prepareBuildingCache(page: import('@playwright/test').Page): Promise<void> {
+  // Rendu MapLibre logiciel en CI : la liste de zone peut mettre plus de 15 s à arriver.
+  await expect(page.getByRole('button', { name: '1 rue du Pilote, Toulouse' })).toBeVisible({ timeout: 45_000 });
   await page.getByRole('button', { name: '1 rue du Pilote, Toulouse' }).click();
   await expect(page.getByRole('button', { name: 'Porte 02, Pas encore fait' })).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Retour à la zone' }).click();
@@ -58,7 +65,7 @@ async function serverDoorRevision(): Promise<number> {
 }
 
 test('two terrain clients retain offline intentions and resolve a real Firestore revision conflict @emulator', async ({ browser }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
   const firstContext = await browser.newContext();
   const secondContext = await browser.newContext();
   await secondContext.addInitScript(() => {
@@ -72,7 +79,7 @@ test('two terrain clients retain offline intentions and resolve a real Firestore
   const second = await secondContext.newPage();
   try {
     await Promise.all([signIn(first, 'terrain.31'), signIn(second, 'terrain.b')]);
-    await expect(first.getByRole('button', { name: '1 rue du Pilote, Toulouse' })).toBeVisible({ timeout: 15_000 });
+    await expect(first.getByRole('button', { name: '1 rue du Pilote, Toulouse' })).toBeVisible({ timeout: 45_000 });
     await expect(first.getByText('18 rue du Languedoc, Toulouse')).toHaveCount(0);
     await Promise.all([prepareBuildingCache(first), prepareBuildingCache(second)]);
     await waitForOfflineShell(second);
@@ -97,7 +104,7 @@ test('two terrain clients retain offline intentions and resolve a real Firestore
 
     await firstContext.setOffline(false);
     await first.evaluate(() => window.dispatchEvent(new Event('online')));
-    await expect(first.getByText('A jour', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(first.getByText('À jour', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect.poll(serverDoorRevision).toBe(1);
     await expect.poll(async () => outboxEntries(second, 'member-b')).toEqual(pendingBeforeReload);
 
@@ -108,10 +115,10 @@ test('two terrain clients retain offline intentions and resolve a real Firestore
     });
     const resolution = second.getByLabel('Resolution du conflit');
     await expect(resolution).toBeVisible({ timeout: 15_000 });
-    await expect(resolution.getByText(/Serveur : statut retry, revision 1\./)).toBeVisible();
+    await expect(resolution.getByText(/elle est maintenant « Absent » sur le serveur/)).toBeVisible();
 
-    await second.getByRole('button', { name: 'Reappliquer' }).click();
-    await expect(second.getByText('A jour', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await second.getByRole('button', { name: 'Réappliquer mon passage' }).click();
+    await expect(second.getByText('À jour', { exact: true })).toBeVisible({ timeout: 15_000 });
   } finally {
     await Promise.allSettled([firstContext.close(), secondContext.close()]);
   }
@@ -148,7 +155,9 @@ test('an untrusted sign-out purges the UID outbox and prior persistent Firestore
           doorId: 'pilot-door-002',
           statusId: 'retry',
           note: '',
-          expectedRevision: 0,
+          // Révision périmée : si une synchronisation passe, l'entrée devient un conflit et
+          // reste sur l'appareil. Elle compte donc toujours comme non envoyée.
+          expectedRevision: 99,
           createdAt: '2026-08-03T10:00:00.000Z',
           state: 'pending'
         });
@@ -158,10 +167,36 @@ test('an untrusted sign-out purges the UID outbox and prior persistent Firestore
       database.close();
     });
 
+    // Une saisie non synchronisée n'est jamais effacée en silence : la déconnexion s'arrête
+    // et prévient. « Rester connecté » garde la saisie intacte.
     await page.getByRole('button', { name: /^Compte de / }).click();
+    await page.getByRole('menuitem', { name: 'Se déconnecter' }).click();
+    const warning = page.getByRole('dialog', { name: 'Des saisies ne sont pas encore envoyées' });
+    await expect(warning).toBeVisible();
+    await expect(warning.getByText('1 passage n’est pas encore envoyé au serveur.')).toBeVisible();
+    await warning.getByRole('button', { name: 'Rester connecté' }).click();
+    await expect(warning).toBeHidden();
+    await expect.poll(async () => page.evaluate(async () => {
+      const database = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('athar-prototype-outbox');
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+      });
+      const count = await new Promise<number>((resolve, reject) => {
+        const request = database.transaction('entries', 'readonly').objectStore('entries').count();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      database.close();
+      return count;
+    })).toBe(1);
+
+    // Confirmation explicite : la purge efface alors la partition de l'UID et le cache.
+    await page.getByRole('button', { name: /^Compte de / }).click();
+    await page.getByRole('menuitem', { name: 'Se déconnecter' }).click();
     await Promise.all([
       page.waitForEvent('load'),
-      page.getByRole('menuitem', { name: 'Se déconnecter' }).click()
+      page.getByRole('dialog', { name: 'Des saisies ne sont pas encore envoyées' }).getByRole('button', { name: 'Effacer et me déconnecter' }).click()
     ]);
     await expect(page.getByRole('heading', { name: 'Reprendre là où la zone s’est arrêtée.' })).toBeVisible({ timeout: 15_000 });
 

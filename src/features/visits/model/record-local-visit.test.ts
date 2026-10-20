@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryOutbox } from '../../../domain/sync/sync-service';
+import { LocalStorageUnavailableError } from '../../../domain/sync/outbox';
 import { demoWorkspace } from '../../../infrastructure/demo/demo-workspace';
 import { createMemoryWorkspaceRepositories } from '../../../infrastructure/memory/workspace-repositories';
 import { recordLocalVisit, recordLocalVisits } from './record-local-visit';
@@ -106,5 +107,73 @@ describe('local field visit recording', () => {
     expect(results.map((result) => result.visit.doorId)).toEqual(['door-dalbad-02', 'door-dalbad-12']);
     await expect(base.visits.listByDoor('door-dalbad-02')).resolves.toMatchObject([{ statusId: 'retry' }]);
     await expect(outbox.all()).resolves.toHaveLength(2);
+  });
+
+  it('never projects a visit as saved when the device storage refuses the intent', async () => {
+    const repositories = createMemoryWorkspaceRepositories(demoWorkspace);
+    const outbox = new MemoryOutbox();
+    vi.spyOn(outbox, 'addMany').mockRejectedValue(new LocalStorageUnavailableError(new Error('QuotaExceededError')));
+
+    await expect(recordLocalVisit(repositories, outbox, {
+      authorId: 'member-1', doorId: 'door-dalbad-02', statusId: 'retry', note: ''
+    })).rejects.toBeInstanceOf(LocalStorageUnavailableError);
+
+    await expect(repositories.doors.get('door-dalbad-02')).resolves.toMatchObject({ currentStatusId: 'unvisited', revision: 0 });
+    await expect(repositories.visits.listByDoor('door-dalbad-02')).resolves.toEqual([]);
+  });
+
+  it('projects no door of a grouped action when the grouped intent cannot be stored', async () => {
+    const repositories = createMemoryWorkspaceRepositories(demoWorkspace);
+    const commitVisitsAndDoors = vi.spyOn(repositories, 'commitVisitsAndDoors');
+    const outbox = new MemoryOutbox();
+    vi.spyOn(outbox, 'addMany').mockRejectedValue(new LocalStorageUnavailableError(new Error('AbortError')));
+
+    await expect(recordLocalVisits(repositories, outbox, {
+      authorId: 'member-1', doorIds: ['door-dalbad-02', 'door-dalbad-12'], statusId: 'retry', note: ''
+    })).rejects.toBeInstanceOf(LocalStorageUnavailableError);
+
+    expect(commitVisitsAndDoors).not.toHaveBeenCalled();
+    await expect(outbox.all()).resolves.toEqual([]);
+  });
+
+  it('chains consecutive offline passages on the same door without losing the first one', async () => {
+    const repositories = createMemoryWorkspaceRepositories(demoWorkspace);
+    const outbox = new MemoryOutbox();
+    const ids = ['visit-first', 'visit-second'];
+
+    await recordLocalVisit(repositories, outbox, { authorId: 'member-1', doorId: 'door-dalbad-02', statusId: 'retry', note: '', createId: () => ids.shift()! });
+    const second = await recordLocalVisit(repositories, outbox, { authorId: 'member-1', doorId: 'door-dalbad-02', statusId: 'contacted', note: '', createId: () => ids.shift()! });
+
+    expect(second.door).toMatchObject({ revision: 2, currentStatusId: 'contacted', lastVisitId: 'visit-second' });
+    await expect(outbox.pending()).resolves.toMatchObject([
+      { commandId: 'visit-first', expectedRevision: 0 },
+      { commandId: 'visit-second', expectedRevision: 1 }
+    ]);
+  });
+
+  it('refuses a grouped action that would touch a « Ne pas déranger » door', async () => {
+    const repositories = createMemoryWorkspaceRepositories({
+      ...demoWorkspace,
+      doors: demoWorkspace.doors.map((door) => door.id === 'door-dalbad-12' ? { ...door, currentStatusId: 'do-not-return', revision: 1, lastVisitId: 'v-dnd', lastVisitAt: '2026-01-01T10:00:00.000Z' } : door)
+    });
+    const outbox = new MemoryOutbox();
+
+    await expect(recordLocalVisits(repositories, outbox, {
+      authorId: 'member-1', doorIds: ['door-dalbad-02', 'door-dalbad-12'], statusId: 'retry', note: ''
+    })).rejects.toThrow('excluded from follow-up');
+    await expect(outbox.all()).resolves.toEqual([]);
+    await expect(repositories.doors.get('door-dalbad-12')).resolves.toMatchObject({ currentStatusId: 'do-not-return' });
+  });
+
+  it('corrects a « Ne pas déranger » by adding a passage, never by erasing the previous one', async () => {
+    const repositories = createMemoryWorkspaceRepositories(demoWorkspace);
+    const outbox = new MemoryOutbox();
+    const ids = ['visit-dnd', 'visit-correction'];
+    await recordLocalVisit(repositories, outbox, { authorId: 'member-1', doorId: 'door-dalbad-02', statusId: 'do-not-return', note: '', now: new Date('2026-08-02T09:00:00.000Z'), createId: () => ids.shift()! });
+    await recordLocalVisit(repositories, outbox, { authorId: 'member-1', doorId: 'door-dalbad-02', statusId: 'contacted', note: 'Erreur de saisie', now: new Date('2026-08-02T09:05:00.000Z'), createId: () => ids.shift()! });
+
+    const history = await repositories.visits.listByDoor('door-dalbad-02');
+    expect(history.map((visit) => visit.statusId).sort()).toEqual(['contacted', 'do-not-return']);
+    await expect(repositories.doors.get('door-dalbad-02')).resolves.toMatchObject({ currentStatusId: 'contacted', revision: 2 });
   });
 });

@@ -34,6 +34,7 @@ import {
   type FootprintContext,
 } from '../model/footprints';
 import {
+  buildingAgeLabel,
   buildingListEntries,
   matchesBuildingListFilter,
   sortBuildingList,
@@ -45,6 +46,7 @@ import { cadastralSuggestion, type CadastralSuggestion } from '../../buildings/m
 import { AccountMenu } from './AccountMenu';
 import type { SelectBuildingOptions } from '../model/use-opened-building';
 import { LocalPmtilesSource } from '../infrastructure/local-pmtiles-source';
+import { firstAvailableArchive } from '../model/footprint-archive';
 import { TraceBar } from '../../../design/components';
 import { terrainSession, type TerrainSession } from '../model/terrain-session';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -111,18 +113,6 @@ const BUILDING_LIST_FILTERS: readonly { id: BuildingListFilter; label: string }[
   { id: 'todo', label: 'Pas encore fait' },
   { id: 'stale', label: 'Pas vu > 3 mois' }
 ];
-
-async function firstAvailableArchive(urls: readonly string[]): Promise<string | null> {
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, { headers: { Range: 'bytes=0-15' } });
-      if (response.ok || response.status === 206) return url;
-    } catch {
-      // Archive suivante : l'absence du tuileset n'est pas une erreur de carte.
-    }
-  }
-  return null;
-}
 
 function zoneFeatures(zones: readonly Zone[], progressLabels: ReadonlyMap<string, string>): FeatureCollection<Polygon> {
   return {
@@ -384,7 +374,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
    * l'identifiant, lui, ne changeait plus. On attend donc que la zone existe vraiment.
    */
   const loadedZoneId = zoneList.some((zone) => zone.id === selectedZoneId) ? selectedZoneId : null;
-  useEffect(() => { void refreshZone(loadedZoneId).catch(() => undefined); }, [refreshZone, reloadToken, loadedZoneId]);
+  // Une liste de zone illisible n'est pas une zone vide : l'erreur est dite, pas avalée.
+  useEffect(() => {
+    void refreshZone(loadedZoneId).catch((error: unknown) => {
+      setMessage(error instanceof Error ? `Liste de la zone indisponible : ${error.message}` : 'Liste de la zone indisponible.');
+    });
+  }, [refreshZone, reloadToken, loadedZoneId]);
 
   /**
    * Un appui sur une emprise ouvre la vue bâtiment, jamais un formulaire de création :
@@ -527,7 +522,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         void openFootprint(hit);
       });
 
-      instance.on('idle', paintFootprints);
+      // paintFootprints met à jour une source GeoJSON, ce qui déclenche un nouveau rendu.
+      // L'appeler sur « idle » entretiendrait une boucle de rendu permanente, même immobile.
+      // Les tuiles chargées et les lectures du viewport déclenchent déjà cette mise à jour.
       instance.on('sourcedata', (event) => { if (event.sourceId === FOOTPRINT_SOURCE && event.isSourceLoaded) paintFootprints(); });
       instance.addControl(new NavigationControl({ showCompass: false }), 'top-right');
       setMessage((current) => current.startsWith('Emprises indisponibles') ? current : 'Fond Toulouse local pret.');
@@ -701,7 +698,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const coveredBuildingCount = zoneBuildings.filter((entry) => entry.treatedCount > 0).length;
   const coveragePercent = zoneBuildingCount === 0 ? 0 : Math.round((coveredBuildingCount / zoneBuildingCount) * 100);
   const todoCount = zoneBuildings.filter((entry) => entry.staleness.days === null).length;
-  const staleCount = zoneBuildings.filter((entry) => entry.staleness.alert).length;
+  const staleCount = zoneBuildings.filter((entry) => entry.followUp.suggestedForRevisit).length;
   const zoneName = selectedZone?.name ?? 'Zone à choisir';
 
   return (
@@ -834,12 +831,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
                 {listedBuildings.map((entry) => (
                   <li key={entry.building.id}>
                     <button className="building-row" onClick={() => { flyToBuilding(entry.building); onBuildingSelect(entry.building, { persisted: true, suggestion: footprintSuggestions.current.get(entry.building.id) ?? null }); }} type="button">
-                      <span className={`terrain-building-pin terrain-building-pin--${entry.treatedCount === 0 ? 'todo' : entry.staleness.alert ? 'away' : 'open'}`} />
+                      <span className={`terrain-building-pin terrain-building-pin--${entry.treatedCount === 0 ? 'todo' : entry.followUp.suggestedForRevisit ? 'away' : entry.followUp.outOfFollowUp ? 'linked' : 'open'}`} />
                       <span className="terrain-building-copy">
                         <span className="building-row-address">{entry.building.addressLabel}</span>
                         <span className="building-row-progress">{entry.doorCount} portes · {entry.treatedCount} faites</span>
                       </span>
-                      <span className={entry.staleness.alert ? 'building-row-age alert' : 'building-row-age'}>{entry.staleness.label}</span>
+                      <span className={entry.followUp.suggestedForRevisit ? 'building-row-age alert' : 'building-row-age'}>{buildingAgeLabel(entry)}</span>
                     </button>
                   </li>
                 ))}

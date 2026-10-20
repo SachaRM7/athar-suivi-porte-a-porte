@@ -9,10 +9,17 @@ export default defineConfig({
   workers: 1,
   use: {
     ...devices['Pixel 5'],
-    baseURL: 'http://127.0.0.1:5274'
+    baseURL: 'http://127.0.0.1:5274',
+    // Un poste ou une CI qui fournit son propre Chromium le désigne ici, plutôt que de
+    // télécharger celui de la version Playwright installée.
+    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+      ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } }
+      : {})
   },
+  // Les parcours de laboratoire tournent sur le build de recette `dist-lab` (npm run build:lab) ;
+  // les parcours @emulator, sur le build de production construit contre les émulateurs.
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1',
+    command: `npx vite preview --port 5274 --strictPort --host 127.0.0.1 --outDir ${process.env.ATHAR_PREVIEW_DIR ?? 'dist-lab'}`,
     url: 'http://127.0.0.1:5274',
     reuseExistingServer: true,
     timeout: 30_000

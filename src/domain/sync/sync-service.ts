@@ -11,9 +11,16 @@ export class RevisionConflictError extends Error {
   }
 }
 
+export type SyncDeferralReason = 'offline' | 'session' | 'server';
+
+/**
+ * La synchronisation est temporairement impossible : réseau coupé, session expirée ou
+ * serveur indisponible. L'intention reste en file avec son UUID et sa révision ; la passe
+ * s'arrête sans rien marquer, et reprendra plus tard.
+ */
 export class NetworkUnavailableError extends Error {
-  constructor() {
-    super('Network unavailable.');
+  constructor(readonly reason: SyncDeferralReason = 'offline', message = 'Network unavailable.') {
+    super(message);
     this.name = 'NetworkUnavailableError';
   }
 }
@@ -32,7 +39,9 @@ export interface DoorWriteGateway {
 export type SyncEvent =
   | { type: 'synced'; commandId: string; door: DoorSnapshot }
   | { type: 'conflict'; commandId: string; door: DoorSnapshot }
-  | { type: 'rejected'; commandId: string; category: RejectionCategory };
+  | { type: 'rejected'; commandId: string; category: RejectionCategory }
+  /** Passe interrompue sans perte : l'intention et les suivantes restent en attente. */
+  | { type: 'deferred'; commandId: string; reason: SyncDeferralReason };
 
 export class MemoryDoorGateway implements DoorWriteGateway {
   private readonly doors = new Map<string, DoorSnapshot>();
@@ -78,8 +87,14 @@ export class MemoryOutbox implements Outbox {
   private readonly entries = new Map<string, OutboxEntry>();
 
   async add(intent: VisitIntent): Promise<void> {
-    if (this.entries.has(intent.commandId)) throw new Error(`Duplicate outbox command: ${intent.commandId}`);
-    this.entries.set(intent.commandId, { ...intent, state: 'pending' });
+    await this.addMany([intent]);
+  }
+
+  async addMany(intents: readonly VisitIntent[]): Promise<void> {
+    const ids = intents.map((intent) => intent.commandId);
+    const duplicate = ids.find((id, index) => this.entries.has(id) || ids.indexOf(id) !== index);
+    if (duplicate) throw new Error(`Duplicate outbox command: ${duplicate}`);
+    for (const intent of intents) this.entries.set(intent.commandId, { ...intent, state: 'pending' });
   }
 
   async pending(): Promise<OutboxEntry[]> {
@@ -204,7 +219,10 @@ export class SyncLab {
         await this.outbox.markSynced(entry.commandId);
         events.push({ type: 'synced', commandId: entry.commandId, door });
       } catch (error) {
-        if (error instanceof NetworkUnavailableError) return events;
+        if (error instanceof NetworkUnavailableError) {
+          events.push({ type: 'deferred', commandId: entry.commandId, reason: error.reason });
+          return events;
+        }
         if (error instanceof RevisionConflictError) {
           await this.outbox.markConflict(entry.commandId, error.serverDoor);
           blockedDoors.add(entry.doorId);

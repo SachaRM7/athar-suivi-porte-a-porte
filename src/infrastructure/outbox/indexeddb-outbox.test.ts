@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearIndexedDbOutboxForTests, clearIndexedDbOutboxForUser, IndexedDbDoorMarkerOutbox, IndexedDbOutbox } from './indexeddb-outbox';
+import { clearIndexedDbOutboxForTests, clearIndexedDbOutboxForUser, countUnsyncedLocalWrites, IndexedDbDoorMarkerOutbox, IndexedDbOutbox } from './indexeddb-outbox';
+import { LocalStorageUnavailableError } from '../../domain/sync/outbox';
 import { MemoryDoorGateway, SyncLab } from '../../domain/sync/sync-service';
 
 const intent = {
@@ -27,20 +28,92 @@ describe('IndexedDbOutbox', () => {
     await expect(reloadedSession.pending()).resolves.toEqual([expect.objectContaining(intent)]);
   });
 
-  it('keeps visits and profiles usable in memory when IndexedDB is broken', async () => {
+  it('refuses to report a visit or a profile as saved when IndexedDB cannot open', async () => {
     vi.stubGlobal('indexedDB', { open: () => { throw new Error('Internal error.'); } });
     const outbox = new IndexedDbOutbox('member-a');
     const markers = new IndexedDbDoorMarkerOutbox('member-a');
 
-    await expect(outbox.all()).resolves.toEqual([]);
-    await outbox.add(intent);
-    await markers.add({
+    await expect(outbox.add(intent)).rejects.toBeInstanceOf(LocalStorageUnavailableError);
+    await expect(outbox.all()).rejects.toBeInstanceOf(LocalStorageUnavailableError);
+    await expect(markers.add({
       commandId: 'marker-a', authorId: 'member-a', doorId: 'door-a', foyer: 'couple', sisters: true,
       createdAt: '2026-08-09T20:02:00.000Z'
-    });
+    })).rejects.toBeInstanceOf(LocalStorageUnavailableError);
 
-    await expect(outbox.pending()).resolves.toMatchObject([{ commandId: intent.commandId }]);
-    await expect(markers.pending()).resolves.toMatchObject([{ doorId: 'door-a', foyer: 'couple', sisters: true }]);
+    // Pas de file mémoire cachée : la panne persiste tant que le stockage est indisponible.
+    await expect(outbox.pending()).rejects.toBeInstanceOf(LocalStorageUnavailableError);
+  });
+
+  it('keeps already durable intents when a later write hits a full storage, then accepts a retry without duplicate', async () => {
+    const outbox = new IndexedDbOutbox('member-a');
+    await outbox.add(intent);
+
+    const realAdd = IDBObjectStore.prototype.add;
+    const quota = vi.spyOn(IDBObjectStore.prototype, 'add').mockImplementation(function (this: IDBObjectStore) {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    const second = { ...intent, commandId: 'visit-uuid-2', doorId: 'door-b' };
+    await expect(outbox.add(second)).rejects.toBeInstanceOf(LocalStorageUnavailableError);
+    quota.mockRestore();
+    expect(IDBObjectStore.prototype.add).toBe(realAdd);
+
+    const reloaded = new IndexedDbOutbox('member-a');
+    await expect(reloaded.all()).resolves.toMatchObject([{ commandId: intent.commandId }]);
+    await reloaded.add(second);
+    await expect(reloaded.all()).resolves.toMatchObject([{ commandId: intent.commandId }, { commandId: 'visit-uuid-2' }]);
+  });
+
+  it('stores a grouped action atomically: all intents or none', async () => {
+    const outbox = new IndexedDbOutbox('member-a');
+    await outbox.add({ ...intent, commandId: 'already-there', doorId: 'door-z' });
+
+    // Le second UUID existe déjà : toute la transaction est annulée, le premier aussi.
+    await expect(outbox.addMany([
+      { ...intent, commandId: 'group-1', doorId: 'door-1' },
+      { ...intent, commandId: 'already-there', doorId: 'door-2' }
+    ])).rejects.toThrow('Duplicate outbox command');
+    await expect(outbox.all()).resolves.toMatchObject([{ commandId: 'already-there' }]);
+
+    await outbox.addMany([
+      { ...intent, commandId: 'group-1', doorId: 'door-1' },
+      { ...intent, commandId: 'group-2', doorId: 'door-2' }
+    ]);
+    await expect(new IndexedDbOutbox('member-a').all()).resolves.toHaveLength(3);
+  });
+
+  it('survives a reload with several doors and a chained door recorded offline', async () => {
+    const session = new IndexedDbOutbox('member-a');
+    await session.add({ ...intent, commandId: 'door-a-1', doorId: 'door-a', expectedRevision: 4 });
+    await session.add({ ...intent, commandId: 'door-a-2', doorId: 'door-a', expectedRevision: 5, createdAt: '2026-07-29T12:01:00.000Z' });
+    await session.add({ ...intent, commandId: 'door-b-1', doorId: 'door-b', expectedRevision: 0, createdAt: '2026-07-29T12:02:00.000Z' });
+
+    const reopened = new IndexedDbOutbox('member-a');
+    await expect(reopened.pending()).resolves.toMatchObject([
+      { commandId: 'door-a-1', expectedRevision: 4 },
+      { commandId: 'door-a-2', expectedRevision: 5 },
+      { commandId: 'door-b-1', expectedRevision: 0 }
+    ]);
+  });
+
+  it('keeps a profile changed while the previous one was being sent', async () => {
+    const markers = new IndexedDbDoorMarkerOutbox('member-a');
+    const first = { commandId: 'profile-1', authorId: 'member-a', doorId: 'door-a', foyer: 'femme' as const, sisters: true, createdAt: '2026-08-09T20:00:00.000Z' };
+    await markers.add(first);
+    await markers.add({ ...first, commandId: 'profile-2', sisters: false, createdAt: '2026-08-09T20:01:00.000Z' });
+
+    await markers.markSynced('door-a', 'profile-1');
+    await expect(markers.pending()).resolves.toMatchObject([{ commandId: 'profile-2', sisters: false }]);
+  });
+
+  it('counts unsynced writes of one user before a sign-out', async () => {
+    await new IndexedDbOutbox('member-a').add(intent);
+    await new IndexedDbDoorMarkerOutbox('member-a').add({ commandId: 'profile-1', authorId: 'member-a', doorId: 'door-a', foyer: null, sisters: true, createdAt: '2026-08-09T20:00:00.000Z' });
+    await new IndexedDbOutbox('member-b').add({ ...intent, authorId: 'member-b', commandId: 'other' });
+
+    await expect(countUnsyncedLocalWrites('member-a')).resolves.toEqual({ visits: 1, profiles: 1 });
+    await clearIndexedDbOutboxForUser('member-a');
+    await expect(countUnsyncedLocalWrites('member-a')).resolves.toEqual({ visits: 0, profiles: 0 });
+    await expect(countUnsyncedLocalWrites('member-b')).resolves.toEqual({ visits: 1, profiles: 0 });
   });
 
   it('partitions entries by user and refuses an intent from another user', async () => {

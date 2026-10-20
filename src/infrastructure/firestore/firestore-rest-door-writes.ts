@@ -1,6 +1,6 @@
 import type { DoorMarkerIntent, DoorSnapshot, VisitIntent } from '../../domain/doors/contracts';
-import { RevisionConflictError } from '../../domain/sync/sync-service';
-import type { FirestoreRestAuth } from './firestore-rest-auth';
+import { NetworkUnavailableError, RevisionConflictError, SyncRejectedError } from '../../domain/sync/sync-service';
+import { firestoreRestApi, type FirestoreRestAuth } from './firestore-rest-auth';
 
 type RestValue = {
   stringValue?: string;
@@ -37,7 +37,7 @@ async function authenticatedRequest(auth: FirestoreRestAuth): Promise<{ headers:
   return {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     databaseName: `projects/${auth.projectId}/databases/(default)`,
-    documentsRoot: `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`
+    documentsRoot: `${firestoreRestApi(auth)}/projects/${project}/databases/(default)/documents`
   };
 }
 
@@ -65,7 +65,77 @@ function matchesIntent(snapshot: DoorSnapshot, intent: VisitIntent): boolean {
     snapshot.currentStatusId === intent.statusId && snapshot.lastVisitId === intent.commandId;
 }
 
+function errorCode(error: unknown): string {
+  return typeof error === 'object' && error !== null && 'code' in error ? String((error as { code: unknown }).code) : '';
+}
+
+/** Réseau absent, délai dépassé ou serveur en difficulté : rien n'est perdu, on réessaiera. */
+function isTransient(error: unknown): boolean {
+  if (error instanceof TypeError) return true; // `fetch` échoue ainsi quand le réseau manque.
+  const code = errorCode(error);
+  return ['unavailable', 'deadline-exceeded', 'cancelled', 'resource-exhausted', 'internal', 'aborted'].includes(code) ||
+    /^http-(5\d\d|408|429)$/.test(code);
+}
+
+async function readOptional(url: string, headers: Record<string, string>): Promise<RestDocument | null> {
+  const response = await fetch(url, { headers });
+  if (response.status === 404) return null;
+  return readJson(response) as Promise<RestDocument>;
+}
+
+/**
+ * Un refus de sécurité n'a pas toujours la même cause. On la cherche comme le chemin SDK :
+ * membre suspendu, statut désactivé, sinon refus de sécurité. Aucun ne se « réessaie » seul.
+ */
+async function diagnosePermissionDenied(auth: FirestoreRestAuth, workspaceId: string, intent: VisitIntent): Promise<never> {
+  const request = await authenticatedRequest(auth);
+  const workspace = `${request.documentsRoot}/workspaces/${encodeURIComponent(workspaceId)}`;
+  const member = await readOptional(`${workspace}/members/${encodeURIComponent(intent.authorId)}`, request.headers).catch(() => null);
+  const memberFields = member?.fields as Record<string, { booleanValue?: boolean }> | undefined;
+  if (!member || memberFields?.active?.booleanValue !== true) {
+    throw new SyncRejectedError('inactive-member', 'The member is no longer active.');
+  }
+  const status = await readOptional(`${workspace}/statuses/${encodeURIComponent(intent.statusId)}`, request.headers).catch(() => null);
+  const statusFields = status?.fields as Record<string, { booleanValue?: boolean }> | undefined;
+  if (!status || statusFields?.active?.booleanValue !== true) {
+    throw new SyncRejectedError('invalid-intent', 'The queued visit is invalid.');
+  }
+  throw new SyncRejectedError('security', 'Firestore rejected the queued visit.');
+}
+
+/**
+ * Envoie un passage en attente par l'API REST. Chaque échec est classé : temporaire
+ * (l'intention reste en file), conflit de révision, ou rejet définitif à montrer.
+ */
 export async function commitVisitWithRest(
+  auth: FirestoreRestAuth,
+  workspaceId: string,
+  intent: VisitIntent
+): Promise<DoorSnapshot> {
+  try {
+    return await sendVisitWithRest(auth, workspaceId, intent);
+  } catch (error) {
+    if (error instanceof RevisionConflictError || error instanceof SyncRejectedError || error instanceof NetworkUnavailableError) throw error;
+    if (isTransient(error)) throw new NetworkUnavailableError(error instanceof TypeError ? 'offline' : 'server');
+    const code = errorCode(error);
+    if (code === 'unauthenticated') throw new NetworkUnavailableError('session', 'Firebase session expired.');
+    if (code === 'not-found') throw new SyncRejectedError('invalid-intent', 'The queued visit targets a door that no longer exists.');
+    if (code === 'permission-denied') {
+      try {
+        return await diagnosePermissionDenied(auth, workspaceId, intent);
+      } catch (diagnosis) {
+        if (diagnosis instanceof SyncRejectedError) throw diagnosis;
+        throw new NetworkUnavailableError('server');
+      }
+    }
+    if (code === 'invalid-argument' || code === 'failed-precondition') {
+      throw new SyncRejectedError('invalid-intent', 'The queued visit is invalid.');
+    }
+    throw error;
+  }
+}
+
+async function sendVisitWithRest(
   auth: FirestoreRestAuth,
   workspaceId: string,
   intent: VisitIntent
@@ -115,7 +185,7 @@ export async function commitVisitWithRest(
   ];
 
   try {
-    await readJson(await fetch(`https://firestore.googleapis.com/v1/${request.databaseName}/documents:commit`, {
+    await readJson(await fetch(`${firestoreRestApi(auth)}/${request.databaseName}/documents:commit`, {
       method: 'POST', headers: request.headers, body: JSON.stringify({ writes })
     }));
   } catch (error) {
@@ -140,7 +210,7 @@ export async function applyDoorProfileWithRest(
 ): Promise<void> {
   const request = await authenticatedRequest(auth);
   const doorName = `${request.databaseName}/documents/workspaces/${workspaceId}/doors/${intent.doorId}`;
-  await readJson(await fetch(`https://firestore.googleapis.com/v1/${request.databaseName}/documents:commit`, {
+  await readJson(await fetch(`${firestoreRestApi(auth)}/${request.databaseName}/documents:commit`, {
     method: 'POST',
     headers: request.headers,
     body: JSON.stringify({

@@ -1,9 +1,36 @@
 # Etat de passation
 
-Derniere mise a jour : 6 aout 2026
-Etape terminee : phase A de mise en service privee, locale et lecture seule
-Verdict : **GO pour le sas B de configuration de projet, sous autorisation explicite ; NO-GO pour les sas C, D et E**
-Prochaine etape : obtenir l'autorisation explicite du sas B pour Auth/domaines et la decision Functions/facturation, puis s'arreter avant toute ecriture backend, Function ou promotion live
+Derniere mise a jour : 20 octobre 2026
+Etape terminee : **lot A — fiabilite, securite et coherence des acces** (branche `lot-a-fiabilite-securite`, non fusionnee)
+Rapport complet : `docs/audits/LOT-A-FIABILITE-SECURITE.md`
+Verdict : voir le rapport (§ verdict) ; aucun deploiement ni mutation cloud n'a ete fait.
+Prochaine etape : revue et fusion de la branche ; puis, sous autorisation explicite,
+inventaire des Functions en ligne (A3.4) et publication des regles Firestore. Ne pas
+commencer le lot B sans demande.
+
+## Lot A — ce qui change pour le prochain agent
+
+- La file IndexedDB (`indexeddb-outbox.ts`) n'a plus de repli memoire : une panne leve
+  `LocalStorageUnavailableError`, l'interface dit « Rien n'a ete enregistre ». Toute
+  nouvelle ecriture terrain doit etre durable AVANT d'etre projetee (`addMany` pour un groupe).
+- Etats de synchronisation : `features/visits/model/field-sync-status.ts` (cinq phases).
+- Deconnexion : `sign-out-policy.ts` + `GuardedSignOut.tsx` ; jamais de purge silencieuse
+  d'ecritures non synchronisees ; purge partielle signalee sur l'ecran de connexion.
+- Cache Firestore persistant UNIQUEMENT sur « Appareil de confiance » (`client.ts`).
+- Cycle de suivi : `domain/workspace/follow-up.ts` est la seule source de verite
+  (`linked` et `do-not-return` sortent du cycle). Ne pas recoder la liste ailleurs.
+- `registerMember` / `claimInitialAdmin` : emulateur uniquement (`functions/runtime-mode.js`).
+- Regles : schema racine `/zones`, `/buildings/**` ferme aux clients ; matrice dans le rapport.
+- Laboratoires : `npm run dev` ou `npm run build:lab` (dist-lab) ; absents du build de prod.
+  `npm run test:e2e` construit dist-lab puis lance Playwright.
+- Publication : `npm run build:deploy` (gardes + verification + contrat backend) ; le
+  workflow publie Hosting seulement apres le job `verifier`.
+- Linux/CI : `test:emulator:ci`, `test:e2e:emulator:ci`, `test:functions`, `typecheck`.
+  Chromium preinstalle : `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium`.
+
+---
+
+# Historique (avant le lot A)
 
 ## Acquis
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Building, Door } from '../../../domain/workspace/models';
 import {
+  buildingAgeLabel,
+  buildingFollowUp,
   buildingListEntries,
   buildingStaleness,
   compareByStaleness,
@@ -124,5 +126,46 @@ describe('building list', () => {
     expect(sortBuildingList(entries, 'address').map((entry) => entry.building.addressLabel)).toEqual([
       '18 rue du Languedoc', '3 place des Carmes', '7 rue des Filatiers'
     ]);
+  });
+});
+
+describe('sortie du cycle de suivi (lot A2)', () => {
+  function withStatus(id: string, buildingId: string, statusId: string, days: number): Door {
+    return { ...visited(id, buildingId, days), currentStatusId: statusId };
+  }
+  const entries = buildingListEntries(
+    [building('b-dnd', 'Que des portes Ne pas déranger'), building('b-mixed', 'Immeuble mixte'), building('b-linked', 'Attaché et absent récent')],
+    new Map([
+      ['b-dnd', [withStatus('d1', 'b-dnd', 'do-not-return', 200), withStatus('d2', 'b-dnd', 'linked', 150)]],
+      ['b-mixed', [withStatus('d3', 'b-mixed', 'do-not-return', 3), withStatus('d4', 'b-mixed', 'retry', 120), door({ id: 'd5', buildingId: 'b-mixed' })]],
+      ['b-linked', [withStatus('d6', 'b-linked', 'linked', 300), withStatus('d7', 'b-linked', 'locked', 10)]]
+    ]),
+    now
+  );
+  const entryFor = (id: string): BuildingListEntry => entries.find((entry) => entry.building.id === id)!;
+
+  it('never suggests a door marked « Ne pas déranger » after ninety days', () => {
+    expect(entryFor('b-dnd').followUp).toMatchObject({ suggestedForRevisit: false, outOfFollowUp: true, excludedDoorCount: 2 });
+    expect(entries.filter((entry) => matchesBuildingListFilter(entry, 'stale')).map((entry) => entry.building.id)).not.toContain('b-dnd');
+    expect(buildingAgeLabel(entryFor('b-dnd'))).toBe('sorti du suivi');
+  });
+
+  it('keeps a mixed building eligible through its doors still in the cycle', () => {
+    // Le passage « Ne pas déranger » d'hier ne rajeunit pas la porte absente depuis 4 mois.
+    expect(entryFor('b-mixed').followUp).toMatchObject({ suggestedForRevisit: true, revisitDoorCount: 1, firstVisitDoorCount: 1, excludedDoorCount: 1 });
+    expect(buildingAgeLabel(entryFor('b-mixed'))).toBe('il y a 4 mois');
+  });
+
+  it('does not use the dominant status to decide: an old linked door does not hide a recent blocked access', () => {
+    expect(entryFor('b-linked').followUp).toMatchObject({ suggestedForRevisit: false, outOfFollowUp: false, revisitDoorCount: 1 });
+  });
+
+  it('sorts a building out of the follow-up cycle after the others', () => {
+    expect(sortBuildingList(entries, 'staleness').map((entry) => entry.building.id).at(-1)).toBe('b-dnd');
+  });
+
+  it('keeps ordinary statuses working: absent and blocked doors stay in the cycle', () => {
+    const ordinary = buildingFollowUp([withStatus('a', 'b', 'retry', 100), withStatus('b', 'b', 'locked', 100), withStatus('c', 'b', 'contacted', 100)], now);
+    expect(ordinary).toMatchObject({ revisitDoorCount: 3, excludedDoorCount: 0, suggestedForRevisit: true });
   });
 });

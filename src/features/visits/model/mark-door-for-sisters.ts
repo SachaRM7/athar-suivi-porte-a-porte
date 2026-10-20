@@ -36,7 +36,8 @@ export async function updateDoorProfile(
 
   const nextDoor: Door = { ...door, foyer: input.foyer, sisters: input.sisters };
   assertDoor(nextDoor);
-  await repositories.commitDoorMarker(nextDoor);
+  // Durable d'abord, affiché ensuite : un stockage local en panne ne laisse pas croire
+  // que la composition ou le marqueur ont été enregistrés.
   await markers.add({
     commandId: input.createId?.() ?? crypto.randomUUID(),
     authorId: input.authorId,
@@ -45,6 +46,7 @@ export async function updateDoorProfile(
     sisters: nextDoor.sisters,
     createdAt: (input.now ?? new Date()).toISOString()
   });
+  await repositories.commitDoorMarker(nextDoor);
   return nextDoor;
 }
 

@@ -53,7 +53,9 @@ Ouverte au tap sur une case. Sheet `detail`.
 - Retour vers le bâtiment, titre `Porte 12 · 1er` en mono 17px, sous-ligne descriptive.
 - **Résultat du passage** : grille 2×2 (Contact établi · Absent · Attaché à l'effort · Ne pas déranger)
   + une ligne pleine largeur « Accès bloqué (interphone / code) ».
-  `Attaché à l'effort` est mis en avant : c'est le seul qui sort la porte du cycle.
+  `Attaché à l'effort` est mis en avant : avec `Ne pas déranger`, il sort la porte du cycle de suivi.
+  Changer le résultat d'une porte « Ne pas déranger » demande une confirmation dans la fiche
+  (« Oui, corriger ») ; le passage précédent reste dans l'historique.
 - **Composition du foyer** : chips Femme seule · Homme seul · Couple · Famille · Non renseigné.
   Choisir « Femme seule » **active automatiquement** le marqueur sœurs, avec la mention
   « Activé automatiquement — tu peux le désactiver ». L'outil tire la conséquence sans retirer la décision.
