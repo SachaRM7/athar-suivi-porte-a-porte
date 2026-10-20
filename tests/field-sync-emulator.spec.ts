@@ -93,6 +93,12 @@ test('two terrain clients retain offline intentions and resolve a real Firestore
 
     await expect(first.getByText('Hors ligne', { exact: true })).toBeVisible();
     await expect(second.getByText('Hors ligne', { exact: true })).toBeVisible();
+    // Le bandeau réseau précède l'écriture asynchrone du passage : attendre la
+    // sauvegarde durable sur les deux appareils avant de recharger ou reconnecter.
+    await Promise.all([
+      expect.poll(() => outboxEntries(first, 'member-1')).toHaveLength(1),
+      expect.poll(() => outboxEntries(second, 'member-b')).toHaveLength(1)
+    ]);
     const pendingBeforeReload = await outboxEntries(second, 'member-b');
     expect(pendingBeforeReload).toHaveLength(1);
 
