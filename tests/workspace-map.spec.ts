@@ -36,7 +36,7 @@ async function clickOnMap(page: Page, target: { longitude: number; latitude: num
 
 async function openFieldMap(page: Page): Promise<void> {
   await page.goto('/technical-map');
-  await expect(page.getByText('2 batiment(s) dans la zone')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('2 bâtiment(s) suivis')).toBeVisible({ timeout: 15_000 });
   // Les sept emprises de l'échantillon doivent être tuilées avant tout appui sur la carte.
   await expect.poll(
     async () => Number((await page.getByLabel('Carte MapLibre des zones').getAttribute('data-footprints')) ?? '0'),
@@ -49,6 +49,15 @@ async function enterEdition(page: Page): Promise<void> {
   if (await desktopSwitch.isVisible()) await desktopSwitch.click();
   else await page.getByRole('button', { name: 'Passer en mode Édition' }).click();
 }
+
+test('shows the recorded door ratio instead of calling two touched buildings a fully covered zone', async ({ page }) => {
+  await openFieldMap(page);
+  // La fixture contient deux bâtiments touchés, mais seulement trois portes sur six.
+  await expect(page.getByTestId('zone-recorded-progress')).toHaveText('50%');
+  await expect(page.locator('.terrain-zone-copy')).toContainText('3/6 portes décrites avec passage');
+  await expect(page.locator('.terrain-zonechip')).toHaveAttribute('title', /^Relevé du /);
+  await expect(page.getByText(/Couverture de tous les bâtiments : indisponible/)).toBeVisible();
+});
 
 test('draws and saves an editable local zone over the prepared MapLibre package', async ({ page }) => {
   await page.goto('/technical-map');
@@ -98,7 +107,7 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
 
 test('refuses to delete a zone while its buildings and doors are still attached', async ({ page }) => {
   await page.goto('/technical-map');
-  await expect(page.getByText('2 batiment(s) dans la zone')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('2 bâtiment(s) suivis')).toBeVisible({ timeout: 15_000 });
   await enterEdition(page);
   await page.getByRole('button', { name: 'Supprimer' }).click();
   await expect(page.getByText(/Suppression impossible : 2 b.timent\(s\).*Aucun b.timent, aucune porte et aucun passage n.a .t. supprim./)).toBeVisible();

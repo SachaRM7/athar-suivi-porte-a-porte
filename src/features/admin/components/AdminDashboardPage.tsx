@@ -6,6 +6,8 @@ import type { Building, Status, Zone, ZoneStats } from '../../../domain/workspac
 import { createFirestoreWorkspaceReadRepositories } from '../../../infrastructure/firestore/firestore-workspace-read-repositories';
 import type { ReadMetrics } from '../../../domain/workspace/read-pagination';
 import { useGuardedSignOut } from '../../auth/components/GuardedSignOut';
+import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
+import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
 
 type DashboardData = {
   zones: readonly Zone[];
@@ -25,17 +27,6 @@ type ZoneIssue = {
   zoneId: string;
   message: string;
 };
-
-function percentage(stats: ZoneStats | null, unvisitedStatusId: string | undefined): number {
-  if (!stats || stats.doorCount === 0) return 0;
-  const unvisited = unvisitedStatusId ? stats.countsByStatus[unvisitedStatusId] ?? 0 : 0;
-  return Math.max(0, Math.min(100, Math.round(((stats.doorCount - unvisited) / stats.doorCount) * 100)));
-}
-
-function formatUpdatedAt(stats: ZoneStats | null): string {
-  if (!stats) return 'Projection indisponible';
-  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(stats.updatedAt));
-}
 
 export function AdminDashboardPage(): ReactElement {
   const { state } = useAuth();
@@ -103,9 +94,9 @@ export function AdminDashboardPage(): ReactElement {
   const selectedDetails = zoneDetails?.zoneId === selectedZoneId ? zoneDetails : null;
   const selectedZoneError = zoneIssue?.zoneId === selectedZoneId ? zoneIssue.message : null;
   const zoneLoading = Boolean(selectedZoneId && !selectedDetails && !selectedZoneError);
-  const selectedStats = selectedDetails?.stats ?? null;
+  const selectedStats = selectedZoneError ? null : selectedDetails?.stats ?? null;
   const selectedBuildings = selectedDetails?.buildings ?? [];
-  const unvisitedStatusId = data?.statuses.find((status) => status.id === 'unvisited')?.id;
+  const progress = zoneDoorProgress(selectedStats, selectedZoneId);
   const selectedStatus = data?.statuses.find((status) => status.id === selectedStatusId) ?? null;
   const selectedStatusCount = !selectedStats ? '-' : selectedStatus ? selectedStats.countsByStatus[selectedStatus.id] ?? 0 : selectedStats.doorCount;
 
@@ -151,13 +142,13 @@ export function AdminDashboardPage(): ReactElement {
                 {data.zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
               </select>
             </label>
-            <label>Statut
-              <select aria-label="Filtre par statut" onChange={(event) => setSelectedStatusId(event.target.value)} value={selectedStatusId}>
+            <label>Compteur à afficher
+              <select aria-label="Compteur par statut" onChange={(event) => setSelectedStatusId(event.target.value)} value={selectedStatusId}>
                 <option value="all">Tous les statuts</option>
                 {data.statuses.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}
               </select>
             </label>
-            <p className="dashboard-projection-note">zoneStats est une projection de lecture reparable, jamais la source de verite.</p>
+            <p className="dashboard-projection-note">Les compteurs décrivent le dernier relevé enregistré. Les nouveaux passages peuvent ne pas encore être comptés. Le choix du compteur ne filtre pas les bâtiments.</p>
           </section>
 
           {zoneLoading && <p className="dashboard-loading" role="status">Lecture de la zone selectionnee...</p>}
@@ -170,17 +161,18 @@ export function AdminDashboardPage(): ReactElement {
               <h2 id="zone-summary-title">{selectedZone.name}</h2>
               <p>{selectedZone.assigneeLabel ? `Terrain : ${selectedZone.assigneeLabel}` : 'Terrain non assigne'}</p>
             </div>
-            <div className="dashboard-progress" style={{ '--progress': `${percentage(selectedStats, unvisitedStatusId)}%` } as CSSProperties}>
-              <strong>{percentage(selectedStats, unvisitedStatusId)}%</strong>
-              <span>de portes traitees</span>
+            <div className="dashboard-progress" style={{ '--progress': `${progress.percent ?? 0}%` } as CSSProperties}>
+              <strong data-testid="zone-recorded-progress">{progress.percent === null ? '—' : `${progress.percent}%`}</strong>
+              <span>{zoneProgressSummary(progress)}</span>
             </div>
           </section>
+          <p className="dashboard-projection-note">Couverture des bâtiments de la zone : indisponible tant que leur inventaire complet n’est pas connu.</p>
 
           <section className="dashboard-metrics" aria-label="Compteurs de zone">
             <article><span>Portes suivies</span><strong data-testid="zone-door-count">{selectedStats?.doorCount ?? '-'}</strong></article>
             <article><span>{selectedStatus ? selectedStatus.label : 'Toutes portes'}</span><strong data-testid="zone-status-count">{selectedStatusCount}</strong></article>
             <article><span>Batiments lus</span><strong data-testid="zone-building-count">{selectedBuildings.length}</strong></article>
-            <article><span>Projection mise a jour</span><strong>{formatUpdatedAt(selectedStats)}</strong></article>
+            <article><span>Date du relevé</span><strong>{zoneProgressDate(progress)}</strong></article>
           </section>
 
           <section className="dashboard-statuses" aria-label="Repartition par statut">

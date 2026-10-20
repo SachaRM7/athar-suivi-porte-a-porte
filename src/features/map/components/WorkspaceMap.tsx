@@ -6,7 +6,9 @@ import { geohashForLocation } from 'geofire-common';
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import type { FeatureCollection, Point, Polygon } from 'geojson';
 import { withBasePath } from '../../../app/config/public-paths';
-import type { Building, GeoPoint, Status, Zone, ZoneGeometry } from '../../../domain/workspace/models';
+import type { Building, GeoPoint, Status, Zone, ZoneGeometry, ZoneStats } from '../../../domain/workspace/models';
+import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
+import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
 import { assertZone } from '../../../domain/workspace/invariants';
 import { boundingBoxForPolygon, buildingsAttachedToZone, closePolygon } from '../../zones/model/zone-geometry';
@@ -175,6 +177,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   /** Suggestions cadastrales lues sur les tuiles, indexées par ID-RNB. Jamais appliquées seules. */
   const footprintSuggestions = useRef(new Map<string, CadastralSuggestion>());
   const [zoneList, setZoneList] = useState<readonly Zone[]>([]);
+  const [zoneStats, setZoneStats] = useState<ReadonlyMap<string, ZoneStats | null>>(new Map());
   /** Tous les bâtiments de la zone choisie, cadrage ou pas : la liste sert à naviguer. */
   const [zoneBuildings, setZoneBuildings] = useState<readonly BuildingListEntry[]>([]);
   const [session, setSession] = useState<TerrainSession>({ trace: [], markedCount: 0, durationLabel: null });
@@ -314,15 +317,17 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     if (controller.signal.aborted || viewportRequest.current !== controller) return;
     const stats = await Promise.all(nextZones.map(async (zone) => {
       try {
-        return [zone.id, zoneProgressLabel(zone, await repositories.zones.getStats(zone.id))] as const;
+        return [zone.id, await repositories.zones.getStats(zone.id)] as const;
       } catch {
         // Une projection absente ou ancienne ne doit jamais empêcher l'entrée sur la carte.
-        return [zone.id, zone.name] as const;
+        return [zone.id, null] as const;
       }
     }));
     if (viewportRequest.current !== controller) return;
     zones.current = nextZones;
     setZoneList(nextZones);
+    const statsByZone = new Map(stats);
+    setZoneStats(statsByZone);
     const requestedZoneId = selectedZoneRef.current;
     const activeZoneId = nextZones.some((zone) => zone.id === requestedZoneId) ? requestedZoneId : nextZones[0]?.id ?? null;
     if (activeZoneId !== selectedZoneRef.current) {
@@ -337,7 +342,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       statuses: new Map<string, Status>(statuses.map((status) => [status.id, status])),
       untouchedColor: UNTOUCHED_COLOR
     };
-    (instance.getSource(ZONE_SOURCE) as GeoJSONSource | undefined)?.setData(zoneFeatures(nextZones, new Map(stats)));
+    (instance.getSource(ZONE_SOURCE) as GeoJSONSource | undefined)?.setData(zoneFeatures(nextZones,
+      new Map(nextZones.map((zone) => [zone.id, zoneProgressLabel(zone, statsByZone.get(zone.id) ?? null)]))
+    ));
     setVisibleBuildingCount(buildings.length);
     setSelectedZoneId((current) => current ?? nextZones[0]?.id ?? null);
     paintFootprints();
@@ -692,11 +699,10 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     }
   };
 
-  // Tout ce qui se compte ici se compte sur la zone entière, pas sur le rectangle à l'écran :
-  // c'est le secteur qu'on parcourt, pas le cadrage du moment, qui dit où on en est.
+  // La liste terrain peut contenir des intentions locales. L'anneau utilise le même
+  // relevé daté que le tableau administrateur ; il ne mesure pas les bâtiments détectés.
   const zoneBuildingCount = zoneBuildings.length;
-  const coveredBuildingCount = zoneBuildings.filter((entry) => entry.treatedCount > 0).length;
-  const coveragePercent = zoneBuildingCount === 0 ? 0 : Math.round((coveredBuildingCount / zoneBuildingCount) * 100);
+  const progress = zoneDoorProgress(zoneStats.get(selectedZoneId ?? '') ?? null, selectedZoneId ?? '');
   const todoCount = zoneBuildings.filter((entry) => entry.staleness.days === null).length;
   const staleCount = zoneBuildings.filter((entry) => entry.followUp.suggestedForRevisit).length;
   const zoneName = selectedZone?.name ?? 'Zone à choisir';
@@ -723,17 +729,17 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         </div>
 
         <div className="terrain-zone-picker" ref={zonePicker}>
-          <button aria-expanded={zoneMenuOpen} aria-haspopup="menu" className="terrain-zonechip" onClick={() => setZoneMenuOpen((value) => !value)} type="button">
-            <span className="terrain-zone-ring" style={{ '--terrain-progress': `${coveragePercent}` } as CSSProperties}>
+          <button aria-expanded={zoneMenuOpen} aria-haspopup="menu" className="terrain-zonechip" onClick={() => setZoneMenuOpen((value) => !value)} title={zoneProgressDate(progress)} type="button">
+            <span className="terrain-zone-ring" style={{ '--terrain-progress': `${progress.percent ?? 0}` } as CSSProperties}>
               <svg viewBox="0 0 36 36" aria-hidden="true">
                 <circle className="terrain-zone-ring-track" cx="18" cy="18" r="15" />
                 <circle className="terrain-zone-ring-value" cx="18" cy="18" r="15" pathLength="100" />
               </svg>
-              <b>{coveragePercent}</b>
+              <b data-testid="zone-recorded-progress">{progress.percent === null ? '—' : `${progress.percent}%`}</b>
             </span>
             <span className="terrain-zone-copy">
               <strong>{zoneName}</strong>
-              <span>{zoneBuildingCount} bât. · {coveredBuildingCount} faits</span>
+              <span>Relevé : {zoneProgressSummary(progress)}</span>
             </span>
             <span className="terrain-zone-caret" aria-hidden="true">⌄</span>
           </button>
@@ -842,14 +848,15 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
                 ))}
               </ul>}
             <span className="terrain-visible-count">
-              {zoneBuildingCount} batiment(s) dans la zone · {visibleBuildingCount} a l ecran
+              {zoneBuildingCount} bâtiment(s) suivis · {visibleBuildingCount} à l’écran
               {attachedBuildingCount !== null && <> · {attachedBuildingCount} rattache(s)</>}
             </span>
+            <p className="terrain-visible-count">{zoneProgressDate(progress)}. Les nouveaux passages peuvent ne pas encore être comptés. Couverture de tous les bâtiments : indisponible.</p>
           </div>
 
           <footer className="terrain-panel-foot">
-            <span className="ds-microlabel">Couverture de la zone</span>
-            <span className="terrain-coverage"><i style={{ width: `${coveragePercent}%` }} /></span>
+            <span className="ds-microlabel">Portes décrites · relevé</span>
+            <span className="terrain-coverage" aria-label={zoneProgressSummary(progress)}><i style={{ width: `${progress.percent ?? 0}%` }} /></span>
           </footer>
         </section>
       )}

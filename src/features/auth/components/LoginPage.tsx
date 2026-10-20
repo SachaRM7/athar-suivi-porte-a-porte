@@ -8,23 +8,13 @@ import type { Zone, ZoneStats } from '../../../domain/workspace/models';
 import { AccessState } from './AccessState';
 import { AuthBackdrop } from './AuthBackdrop';
 import { useGuardedSignOut } from './GuardedSignOut';
+import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
+import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
 
 type ZoneEntry = { zone: Zone; stats: ZoneStats | null };
 
 function routeForZone(zoneId: string | null): string {
   return zoneId ? `/?zone=${encodeURIComponent(zoneId)}` : '/';
-}
-
-function progressFor(entry: ZoneEntry): number {
-  if (!entry.stats || entry.stats.doorCount === 0) return 0;
-  const todo = entry.stats.countsByStatus.todo ?? entry.stats.countsByStatus.unvisited ?? 0;
-  return Math.round(((entry.stats.doorCount - todo) / entry.stats.doorCount) * 100);
-}
-
-function zoneDetail(entry: ZoneEntry): string {
-  if (!entry.stats || entry.stats.doorCount === 0) return 'Zone prête pour la prochaine sortie';
-  const todo = entry.stats.countsByStatus.todo ?? entry.stats.countsByStatus.unvisited ?? 0;
-  return `${entry.stats.doorCount} portes · ${todo} pas encore faites`;
 }
 
 function ActiveEntry(): ReactElement {
@@ -66,9 +56,10 @@ function ActiveEntry(): ReactElement {
       <p className="auth-microlabel">Première ouverture · {state.session.member.displayName}</p>
       <h1 id="zone-choice-title">Choisis la zone de la sortie.</h1>
       <p className="auth-lede">Tu pourras en changer à tout moment depuis la carte. Ce choix organise le terrain, il ne limite pas ton accès.</p>
+      <p className="auth-footnote">Progression des portes décrites au dernier relevé. Les nouveaux passages peuvent ne pas encore être comptés ; la couverture de tous les bâtiments reste indisponible.</p>
       <div className="auth-zone-list" role="radiogroup" aria-label="Zone de la sortie">
         {entries.map((entry) => {
-          const progress = progressFor(entry);
+          const progress = zoneDoorProgress(entry.stats, entry.zone.id);
           return (
             <button
               aria-checked={entry.zone.id === selected.zone.id}
@@ -78,8 +69,8 @@ function ActiveEntry(): ReactElement {
               role="radio"
               type="button"
             >
-              <span className="auth-zone-ring" style={{ '--zone-progress': `${progress * 3.6}deg` } as CSSProperties}><b>{progress}</b></span>
-              <span><strong>{entry.zone.name}</strong><small>{zoneDetail(entry)}</small></span>
+              <span className="auth-zone-ring" style={{ '--zone-progress': `${(progress.percent ?? 0) * 3.6}deg` } as CSSProperties}><b>{progress.percent === null ? '—' : `${progress.percent}%`}</b></span>
+              <span><strong>{entry.zone.name}</strong><small>{zoneProgressSummary(progress)}</small><small>{zoneProgressDate(progress)}</small></span>
               <i aria-hidden="true">›</i>
             </button>
           );

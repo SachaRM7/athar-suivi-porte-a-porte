@@ -1,6 +1,8 @@
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { point, polygon } from '@turf/helpers';
 import type { Building, Door, Status, Zone, ZoneStats } from '../../../domain/workspace/models';
+import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
+import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
 
 /**
  * Modèle de la couche cartographique du lot WP7.
@@ -87,10 +89,9 @@ export function doorsByBuilding(doors: readonly Door[]): ReadonlyMap<string, rea
 
 /** Progression agrégée affichée sur le polygone de zone en dessous du zoom 16. */
 export function zoneProgressLabel(zone: Zone, stats: ZoneStats | null): string {
-  if (!stats || stats.doorCount === 0) return `${zone.name} · aucune porte décrite`;
-  const untouched = stats.countsByStatus.unvisited ?? 0;
-  const done = Math.max(0, stats.doorCount - untouched);
-  return `${zone.name} · ${Math.round((done / stats.doorCount) * 100)} % · ${done}/${stats.doorCount} portes`;
+  const progress = zoneDoorProgress(stats, zone.id);
+  const label = `${zone.name} · ${progress.percent === null ? '' : `${progress.percent} % · `}${zoneProgressSummary(progress)}`;
+  return progress.updatedAt ? `${label} · ${zoneProgressDate(progress)}` : label;
 }
 
 /**

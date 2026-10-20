@@ -54,6 +54,7 @@ export type ZoneStats = {
   zoneId: EntityId;
   doorCount: number;
   countsByStatus: Readonly<Record<StatusId, number>>;
+  /** Date du relevé enregistré ; ne garantit ni la fraîcheur ni une reconstruction complète. */
   updatedAt: string;
 };
 

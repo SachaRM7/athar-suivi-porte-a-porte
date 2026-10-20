@@ -1,6 +1,7 @@
 import { GeoPoint, Timestamp, type DocumentData } from 'firebase/firestore';
 import type { Building, Door, Status, Visit, WorkspaceMember, WorkspaceSnapshot, Zone, ZoneStats } from '../../domain/workspace/models';
 import { assertBuilding, assertDoor, assertEntityId, assertStatus, assertVisit, assertZone } from '../../domain/workspace/invariants';
+import { assertZoneStats } from '../../domain/workspace/zone-progress';
 
 export type FirestoreSeedDocument = { path: string; data: DocumentData };
 
@@ -153,9 +154,9 @@ export function fromFirestoreZoneStats(zoneId: string, data: DocumentData): Zone
     if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) throw new Error('Zone stats status count must be a non-negative integer.');
     countsByStatus[statusId] = count;
   }
-  const projectedCount = Object.values(countsByStatus).reduce((total, count) => total + count, 0);
-  if (projectedCount > data.doorCount) throw new Error('Zone stats status counts exceed the door count.');
-  return { zoneId, doorCount: data.doorCount, countsByStatus, updatedAt: data.updatedAt.toDate().toISOString() };
+  const stats = { zoneId, doorCount: data.doorCount, countsByStatus, updatedAt: data.updatedAt.toDate().toISOString() };
+  assertZoneStats(stats);
+  return stats;
 }
 
 export function fromFirestoreVisit(id: string, data: DocumentData): Visit {

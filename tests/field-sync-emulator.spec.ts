@@ -241,16 +241,20 @@ test('the desktop dashboard is reserved to admins and reads a selected zone from
     await expect(admin.getByLabel('Zone suivie')).toHaveValue('carmes');
     await expect(admin.getByTestId('zone-door-count')).toHaveText('1');
     await expect(admin.getByTestId('zone-building-count')).toHaveText('1');
-    await admin.getByLabel('Filtre par statut').selectOption('unvisited');
+    await admin.getByLabel('Compteur par statut').selectOption('unvisited');
     await expect(admin.getByTestId('zone-status-count')).toHaveText('1');
     await expect(admin.getByText('1 rue du Pilote, Toulouse')).toBeVisible();
 
     await admin.getByLabel('Zone suivie').selectOption('saint-cyprien');
     await expect(admin.getByRole('alert')).toContainText('Projection de compteurs invalide');
+    await expect(admin.getByTestId('zone-recorded-progress')).toHaveText('—');
+    await expect(admin.getByText('Statistiques indisponibles', { exact: true })).toBeVisible();
     await expect(admin.getByTestId('zone-door-count')).toHaveText('-');
     await expect(admin.getByTestId('zone-building-count')).toHaveText('0');
 
     await admin.getByLabel('Zone suivie').selectOption('pagination');
+    await expect(admin.getByTestId('zone-recorded-progress')).toHaveText('—');
+    await expect(admin.getByText('Aucune porte décrite dans ce relevé')).toBeVisible();
     await expect(admin.getByTestId('zone-building-count')).toHaveText('50');
     await expect(admin.getByText('50 affiches / 51 lus')).toBeVisible();
     await admin.getByRole('button', { name: 'Suivants' }).click();
@@ -259,4 +263,41 @@ test('the desktop dashboard is reserved to admins and reads a selected zone from
   } finally {
     await adminContext.close();
   }
+});
+
+test('the desktop dashboard, map and zone choice share a dated projection and distinguish missing data @emulator', async ({ page }) => {
+  test.setTimeout(120_000);
+  // Relevé historique volontairement différent de l'état courant des portes de la fixture.
+  // Les trois écrans doivent afficher ce même relevé daté, sans prétendre être à jour.
+  const statsUrl = 'http://127.0.0.1:8180/v1/projects/athar-local/databases/(default)/documents/workspaces/main/zoneStats/carmes';
+  const response = await fetch(statsUrl, {
+    method: 'PATCH', headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: {
+      doorCount: { integerValue: '6' },
+      countsByStatus: { mapValue: { fields: { unvisited: { integerValue: '3' }, contacted: { integerValue: '2' }, retry: { integerValue: '1' } } } },
+      updatedAt: { timestampValue: '2026-08-03T08:00:00Z' }
+    } })
+  });
+  expect(response.ok).toBe(true);
+  await signIn(page, 'pilot.admin');
+  await expect(page.getByTestId('zone-recorded-progress')).toHaveText('50%');
+  await expect(page.locator('.terrain-zonechip')).toHaveAttribute('title', /^Relevé du /);
+  await page.goto('/admin');
+  await expect(page.getByTestId('zone-recorded-progress')).toHaveText('50%');
+  await expect(page.getByText('3/6 portes décrites avec passage', { exact: true })).toBeVisible();
+  await page.goto('/login');
+  const carmes = page.getByRole('radio').filter({ hasText: 'Carmes' });
+  await expect(carmes.locator('.auth-zone-ring')).toHaveText('50%');
+  await expect(carmes).toContainText('Relevé du');
+
+  expect((await fetch(statsUrl, { method: 'DELETE', headers: { Authorization: 'Bearer owner' } })).ok).toBe(true);
+  await page.reload();
+  await expect(carmes.locator('.auth-zone-ring')).toHaveText('—');
+  await expect(carmes).toContainText('Statistiques indisponibles');
+  await page.goto('/?zone=carmes');
+  await expect(page.getByRole('button', { name: '1 rue du Pilote, Toulouse' })).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('zone-recorded-progress')).toHaveText('—');
+  await page.goto('/admin');
+  await expect(page.getByText('Statistiques indisponibles', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('zone-recorded-progress')).toHaveText('—');
 });
