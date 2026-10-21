@@ -21,8 +21,12 @@ Auth, Firestore et Functions ne bougent pas. Seul le site est servi par Cloudfla
 
 1. **R2 → Create bucket** : `athar-cartes`.
 2. Dans ce bucket, **Upload** le fichier `public/fixtures/toulouse.pmtiles` sous la clé exacte
-   `fixtures/toulouse.pmtiles` (créer le dossier `fixtures`). Le tuileset départemental
-   `tiles/batiments-31.pmtiles` est relayé depuis Firebase Hosting tant qu'il n'est pas dans R2.
+   `fixtures/toulouse.pmtiles` (créer le dossier `fixtures`). Le tuileset départemental va sous
+   `tiles/batiments-31.pmtiles` : le récupérer sur https://athar-dev31.web.app/tiles/batiments-31.pmtiles.
+
+   Le relais depuis Firebase Hosting ne remplace pas cet envoi : les requêtes sortantes d'un Worker
+   acceptent toujours gzip/br, et Firebase applique alors la plage au flux compressé (servi en
+   `text/html`). L'en-tête `X-Athar-Archive` de la réponse 404 l'indique (`origin 206 text/html`).
 3. **Workers & Pages → Create → Import a repository** : `SachaRM7/athar-suivi-porte-a-porte`.
 
 | Champ | Valeur |
