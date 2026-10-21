@@ -20,5 +20,13 @@
   "vars": { "MAP_FALLBACK_ORIGIN": "https://athar-dev31.web.app" },
   "r2_buckets": [
     { "binding": "MAPS", "bucket_name": "athar-cartes" }
-  ]
+  ],
+  // Builds des branches autres que main (`wrangler preview`). Les archives ne sont que lues :
+  // partager le bucket et l'origine de production ne fait courir aucun risque d'écriture.
+  "previews": {
+    "vars": { "MAP_FALLBACK_ORIGIN": "https://athar-dev31.web.app" },
+    "r2_buckets": [
+      { "binding": "MAPS", "bucket_name": "athar-cartes" }
+    ]
+  }
 }
