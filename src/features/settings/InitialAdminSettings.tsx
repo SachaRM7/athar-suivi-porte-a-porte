@@ -1,4 +1,3 @@
-import { AppLink } from '../../app/routes/router';
 import { useRef, useState, type ReactElement } from 'react';
 import { useModalFocus } from '../../design/hooks/use-modal-focus';
 import type { WorkspaceMember } from '../../domain/workspace/models';
@@ -36,8 +35,6 @@ export function InitialAdminSettings({ allowInitialAdminActivation, member, onCl
     <section aria-label="Reglages" className="structure-sheet" role="dialog" aria-modal="true" tabIndex={-1} ref={panel}>
       <header><div><p className="eyebrow">Compte</p><h3>Reglages</h3></div><button aria-label="Fermer les reglages" className="icon-action" onClick={onClose} type="button">X</button></header>
       <p>{member.displayName} - {member.role === 'admin' ? 'administrateur' : 'membre'}</p>
-      <AppLink className="text-link" href="/outings">Sorties terrain</AppLink>
-      {member.role === 'admin' && <AppLink className="text-link" href="/admin">Pilotage et membres</AppLink>}
       <button aria-label="Version de l application" className="text-button" onClick={() => setTaps((value) => Math.min(10, value + 1))} type="button">Athar V1.0</button>
       {revealed && <div className="initial-admin-activation">
         <label>

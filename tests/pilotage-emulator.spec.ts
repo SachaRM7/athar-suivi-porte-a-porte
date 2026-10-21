@@ -119,7 +119,7 @@ test('an outing preserves an offline passage across reload and includes its late
     await expect(visitor.getByRole('heading',{ name:'Zones de Toulouse' })).toBeVisible({ timeout:30_000 });
     await expect.poll(entries).toMatchObject([{ outingId, state:'pending' }]);
     await lead.getByRole('button',{ name:'Terminer la sortie', exact:true }).click();
-    await lead.getByRole('dialog').getByRole('button',{ name:'Confirmer la fin' }).click();
+    await lead.getByRole('dialog').getByRole('button',{ name:'Terminer la sortie' }).click();
     await expect(lead.getByTestId('outing-summary')).toHaveText('0 passages synchronisés · 0 portes distinctes');
     await visitorContext.unroute(/127\.0\.0\.1:(8180|9199|5101)/);
     await visitor.evaluate(()=>{ localStorage.removeItem('athar.test-firebase-offline'); window.dispatchEvent(new Event('online')); });

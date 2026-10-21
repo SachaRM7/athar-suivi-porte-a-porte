@@ -320,3 +320,29 @@ Piste : lot dédié de mise en conformité des écrans secondaires (jetons, typo
 - 1.5 — La ligne d'état n'est plus masquée sur les écrans courts et passe au-dessus des boutons
   flottants ; « Choisir une emprise sur la carte » affiche un bandeau de consigne avec « Annuler ».
   Les messages de la carte sont tutoyés et accentués ; « Fond Toulouse local prêt. » ne s'affiche plus.
+
+**2026-10-21 — P1 traités** (branche `audit-ux`) :
+
+- §2 / 2.1 — Une seule mesure grand public, « 3/6 portes visitées », dans la chip, la liste et le
+  pied « Couverture de la zone », désormais segmenté par statut. Provenance, catalogue et
+  précautions de cache quittent le panneau terrain (le pilotage les garde) ; il reste une phrase de
+  fraîcheur. « Ajustement manuel » est réservé au coordinateur ; les ambiguïtés se tranchent sur
+  le numéro, l'étage et le statut, plus sur un identifiant.
+- 2.2 / 2.3 — Un étage d'« Absent » ou d'« Accès bloqué » affiche « N à revoir », plus « terminé ».
+  « Marquer 2 portes absentes » annonce son effet et nomme les portes avant d'écrire. La règle
+  « portes jamais visitées seulement » (`02-DATA-MODEL.md`) est conservée : question ouverte.
+- 2.4 — « Aujourd'hui dans la zone » : la décision B5 interdit de présenter l'activité reconstituée
+  comme une durée de sortie. Pas de durée affichée.
+- 2.5 — Sous-ligne « Contact établi · dernier passage il y a 10 j » ou « Jamais visitée » ;
+  résultat actuel signalé (`aria-pressed` et mention visible) ; « Attaché à l'effort » retrouve son
+  libellé figé, « sort du suivi » en sous-ligne, comme pour « Ne pas déranger » ; l'historique
+  affiche toujours le statut, puis la note.
+- 3.1 — La pastille d'un bâtiment porte son statut dominant, comme son emprise, avec le libellé en
+  toutes lettres.
+- 3.6 — Mobile : crayon pour passer en Édition, coche pour revenir, liste pour le membre ; la barre
+  d'édition affiche « Mode Édition ».
+- 3.8 — « Quitter la sortie » / « Terminer la sortie » selon l'action.
+- §5 — Sorties et Pilotage dans le menu du compte ; menu de zone vide adapté au membre ; écrans
+  d'accès avec « Réessayer » ou « Retour à la carte » ; « Marquer une porte » explique pourquoi il ne
+  peut pas agir au lieu d'être grisé. La réouverture du dernier bâtiment est conservée : c'est un
+  critère d'acceptation du lot C (C1). Voir `QUESTIONS.md`.

@@ -3,9 +3,9 @@ import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
 import type { ZoneDoorProgress } from '../../../domain/workspace/zone-progress';
 
 export function zoneProgressSummary(progress: ZoneDoorProgress): string {
-  if (progress.state === 'unavailable') return 'Statistiques indisponibles';
-  if (progress.state === 'empty') return 'Aucune porte décrite dans ce relevé';
-  return `${progress.visited}/${progress.total} portes décrites avec passage`;
+  if (progress.state === 'unavailable') return 'Progression indisponible';
+  if (progress.state === 'empty') return 'Aucune porte décrite pour l’instant';
+  return `${progress.visited}/${progress.total} portes visitées`;
 }
 
 export function zoneProgressDate(progress: ZoneDoorProgress): string {

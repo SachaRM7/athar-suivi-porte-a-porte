@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { AppLink } from '../../../app/routes/router';
+
+export type AccountMenuLink = { label: string; href: string };
 
 type AccountMenuProps = {
   displayName: string;
+  /** Écrans d'équipe atteints depuis la carte : sorties, pilotage. */
+  links?: readonly AccountMenuLink[];
   onOpenSettings(): void;
   onSignOut(): void;
 };
@@ -17,7 +22,7 @@ function initialsOf(displayName: string): string {
  * Le compte est la seule porte d'entrée vers les réglages et la déconnexion : ces deux
  * actions n'ont pas à flotter au-dessus de la carte, où elles recouvraient la barre du haut.
  */
-export function AccountMenu({ displayName, onOpenSettings, onSignOut }: AccountMenuProps): ReactElement {
+export function AccountMenu({ displayName, links = [], onOpenSettings, onSignOut }: AccountMenuProps): ReactElement {
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
 
@@ -51,6 +56,7 @@ export function AccountMenu({ displayName, onOpenSettings, onSignOut }: AccountM
       </button>
       {open && (
         <div className="terrain-account-menu" role="menu">
+          {links.map((link) => <AppLink className="terrain-account-link" href={link.href} key={link.href} onClick={() => setOpen(false)} role="menuitem">{link.label}</AppLink>)}
           <button onClick={() => { setOpen(false); onOpenSettings(); }} role="menuitem" type="button">
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="3.2" />

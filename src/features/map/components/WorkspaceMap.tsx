@@ -8,7 +8,9 @@ import type { FeatureCollection, Point, Polygon } from 'geojson';
 import { withBasePath } from '../../../app/config/public-paths';
 import type { Building, GeoPoint, Status, Zone, ZoneGeometry, ZoneStats } from '../../../domain/workspace/models';
 import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
-import { zoneProgressDate, zoneProgressSummary, zoneStatsProvenance, zoneBuildingCoverage } from '../../zones/model/zone-progress-label';
+import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
+import { isWorkspaceStatusId, WORKSPACE_VISUAL_STATUS } from '../../../domain/workspace/status-ids';
+import { STATUS_LABEL, type DoorStatus } from '../../../design/status';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
 import { assertZone } from '../../../domain/workspace/invariants';
 import { boundingBoxForPolygon, buildingsAttachedToZone, closePolygon } from '../../zones/model/zone-geometry';
@@ -102,7 +104,7 @@ type WorkspaceMapProps = {
   /** Incrémenté quand un document disparaît ailleurs : la carte relit son cadrage. */
   reloadToken?: number;
   /** Absent hors session : la maquette et le laboratoire affichent la carte sans compte. */
-  account?: { displayName: string; onOpenSettings(): void; onSignOut(): void };
+  account?: { displayName: string; links?: readonly { label: string; href: string }[]; onOpenSettings(): void; onSignOut(): void };
 };
 
 /**
@@ -114,6 +116,24 @@ function motionDuration(milliseconds: number): number {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return milliseconds;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : milliseconds;
 }
+
+/**
+ * Statut affiché pour un bâtiment : le même statut dominant que son emprise sur la carte.
+ * La couleur ne porte que le statut ; l'ancienneté a sa propre colonne.
+ */
+function buildingVisualStatus(doors: readonly import('../../../domain/workspace/models').Door[]): DoorStatus {
+  const statusId = dominantStatusId(doors);
+  return statusId && isWorkspaceStatusId(statusId) ? WORKSPACE_VISUAL_STATUS[statusId] : 'todo';
+}
+
+/** Ordre des segments de la barre de couverture, du plus abouti au plus fragile. */
+const COVERAGE_SEGMENTS: readonly { id: string; status: DoorStatus }[] = [
+  { id: 'linked', status: 'linked' },
+  { id: 'contacted', status: 'open' },
+  { id: 'retry', status: 'away' },
+  { id: 'locked', status: 'locked' },
+  { id: 'do-not-return', status: 'dnd' }
+];
 
 const BUILDING_LIST_FILTERS: readonly { id: BuildingListFilter; label: string }[] = [
   { id: 'all', label: 'Tous' },
@@ -195,12 +215,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(initialZoneId);
   const loadedZoneId = zoneList.some(zone => zone.id === selectedZoneId) ? selectedZoneId : null;
   const terrainPage = useTerrainPage(repositories, loadedZoneId, reloadToken);
-  const zoneBuildings = useMemo(() => buildingListEntries(terrainPage.buildings, groupDoorsByBuilding(terrainPage.doors)), [terrainPage.buildings, terrainPage.doors]);
+  const listDoorGroups = useMemo(() => groupDoorsByBuilding(terrainPage.doors), [terrainPage.doors]);
+  const zoneBuildings = useMemo(() => buildingListEntries(terrainPage.buildings, listDoorGroups), [terrainPage.buildings, listDoorGroups]);
   const session = useMemo(() => terrainSession(terrainPage.doors), [terrainPage.doors]);
   const [zoneMenuOpen, setZoneMenuOpen] = useState(false);
   const zonePicker = useRef<HTMLDivElement>(null);
   const [visibleBuildingCount, setVisibleBuildingCount] = useState(0);
-  const [attachedBuildingCount, setAttachedBuildingCount] = useState<number | null>(null);
   const [editing, setEditing] = useState<'drawing' | 'editing' | null>(null);
   const [placing, setPlacing] = useState(false);
   /** Après « Choisir une emprise sur la carte » : la consigne reste affichée jusqu'à l'appui. */
@@ -658,7 +678,6 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     setSelectedZoneId(null);
     setZoneDraft({ name: 'Nouvelle zone', color: DEFAULT_ZONE_COLOR });
     setEditing('drawing');
-    setAttachedBuildingCount(null);
     setMessage('Trace le contour, puis renseigne le nom et la couleur.');
   };
 
@@ -703,7 +722,6 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     draw.current = next;
     setZoneDraft({ name: zone.name, color: zone.color });
     setEditing('editing');
-    setAttachedBuildingCount(null);
     setMessage(`Édition de ${zone.name}. Ajuste le contour, le nom ou la couleur.`);
   };
 
@@ -725,7 +743,6 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       await repositories.zones.save(zone);
       const buildings = await repositories.buildings.listByViewport(zone.bbox);
       const attachedCount = buildingsAttachedToZone(zone, buildings).length;
-      setAttachedBuildingCount(attachedCount);
       selectZone(zone.id);
       draw.current?.stop();
       draw.current = null;
@@ -761,14 +778,13 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       setSavingZone(true);
       const buildings = await repositories.buildings.listByZone(selectedZone.id);
       if (buildings.length > 0) {
-        setMessage(`Suppression impossible : ${buildings.length} bâtiment(s) sont encore rattaché(s) à cette zone. Aucun bâtiment, aucune porte et aucun passage n’a été supprimé.`);
+        setMessage(`Suppression impossible : ${buildings.length > 1 ? `${buildings.length} bâtiments sont encore rattachés` : 'un bâtiment est encore rattaché'} à cette zone. Aucun bâtiment, aucune porte et aucun passage n’a été supprimé.`);
         return;
       }
       if (!confirmed) { setConfirmZoneDeletion(true); return; }
       setConfirmZoneDeletion(false);
       await repositories.zones.delete(selectedZone.id);
       selectZone(null);
-      setAttachedBuildingCount(null);
       setMessage(`Zone « ${selectedZone.name} » supprimée. Aucun bâtiment, aucune porte et aucun passage n’a été supprimé.`);
       await refreshViewport();
     } catch (error) {
@@ -801,6 +817,10 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     setMarkingOpen(true);
   };
   const zoneName = selectedZone?.name ?? 'Zone à choisir';
+  const coverageLabel = selectedStats && progress.percent !== null
+    ? [zoneProgressSummary(progress), ...COVERAGE_SEGMENTS.filter((segment) => (selectedStats.countsByStatus[segment.id] ?? 0) > 0)
+      .map((segment) => `${selectedStats.countsByStatus[segment.id]} ${STATUS_LABEL[segment.status]}`)].join(' · ')
+    : zoneProgressSummary(progress);
 
   return (
     <section className="terrain-shell" data-mode={mode} data-panel={panelHeight} aria-label="Carte des zones et batiments">
@@ -839,14 +859,14 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
             </span>
             <span className="terrain-zone-copy">
               <strong>{zoneName}</strong>
-              <span>Relevé : {zoneProgressSummary(progress)}</span>
+              <span>{zoneProgressSummary(progress)}</span>
             </span>
             <span className="terrain-zone-caret" aria-hidden="true">⌄</span>
           </button>
           {zoneMenuOpen && (
             <div aria-label="Choisir une zone" className="terrain-zone-menu" role="menu">
               {zoneList.length === 0
-                ? <p className="terrain-zone-menu-empty">Aucune zone tracée pour l’instant. Passe en mode Édition pour en dessiner une.</p>
+                ? <p className="terrain-zone-menu-empty">{canEditZones ? 'Aucune zone tracée pour l’instant. Passe en mode Édition pour en dessiner une.' : 'Aucune zone pour l’instant. Demande à ton coordinateur d’en tracer une.'}</p>
                 : zoneList.map((zone) => (
                   <button
                     aria-current={zone.id === selectedZoneId}
@@ -885,11 +905,17 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           onClick={() => canEditZones ? setMode((current) => current === 'terrain' ? 'edition' : 'terrain') : setPanelHeight((height) => height === 'full' ? 'peek' : 'full')}
           type="button"
         >
-          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          {/* Un pictogramme par geste : le crayon change de mode, la liste déplie le panneau. */}
+          {canEditZones
+            ? (mode === 'terrain'
+              ? <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></svg>
+              : <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12l5 5L20 7" /></svg>)
+            : <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 7h11M9 12h11M9 17h11M4 7h.01M4 12h.01M4 17h.01" /></svg>}
         </button>
         {account && (
           <AccountMenu
             displayName={account.displayName}
+            links={account.links}
             onOpenSettings={account.onOpenSettings}
             onSignOut={account.onSignOut}
           />
@@ -902,13 +928,14 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
 
           <div className="terrain-panel-head">
             <div className="terrain-field-tools">{syncNotice}{selectedZone && renderPreparation?.(selectedZone)}</div>
+            {/* Activité reconstituée depuis les portes (lot B5) : ce n'est pas la durée d'une sortie. */}
             <div className="terrain-session-line">
-              <span className="ds-microlabel">Activité du jour · {terrainPage.partial ? 'page chargée' : 'zone'}</span>
-              <span>{!listReady ? 'activité indisponible pendant la lecture' : session.markedCount === 0
+              <span className="ds-microlabel">Aujourd’hui {terrainPage.partial ? 'sur cette page' : 'dans la zone'}</span>
+              <span>{!listReady ? 'lecture en cours…' : session.markedCount === 0
                 ? 'aucune porte marquée'
-                : `${session.markedCount} marqué${session.markedCount > 1 ? 's' : ''} · dernières visites connues`}</span>
+                : `${session.markedCount} porte${session.markedCount > 1 ? 's' : ''} marquée${session.markedCount > 1 ? 's' : ''}`}</span>
             </div>
-            <TraceBar entries={listReady ? session.trace : []} /><small>Derniers passages connus, tous auteurs · peut inclure des passages en attente sur cet appareil</small>
+            <TraceBar entries={listReady ? session.trace : []} />
             <label className="terrain-search">
               <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></svg>
               <span className="terrain-sr-only">Rechercher parmi les bâtiments suivis</span>
@@ -917,7 +944,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           </div>
 
           <div className="terrain-panel-scroll" aria-busy={terrainPage.phase === 'loading'}>
-            {terrainPage.partial && <p className="terrain-page-scope">Recherche, filtres, tri et activité sur cette page de bâtiments. Consulte les autres pages pour poursuivre.</p>}
+            {terrainPage.partial && <p className="terrain-page-scope">La recherche et les filtres portent sur cette page. Les autres bâtiments sont sur les pages suivantes.</p>}
             <div className="building-list-controls">
               <div className="building-list-filters" role="group" aria-label="Filtrer les bâtiments">
                 {BUILDING_LIST_FILTERS.map((filter) => (
@@ -936,31 +963,37 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
             {!listReady ? <p className="building-list-empty" role="status">{terrainPage.phase === 'error' ? <>Liste indisponible. Vérifie le réseau ou la préparation hors ligne. <button type="button" onClick={terrainPage.retry}>Réessayer</button></> : !loadedZoneId && !metadataError ? 'Choisis une zone pour voir ses bâtiments.' : 'Chargement des bâtiments…'}</p> : listedBuildings.length === 0
               ? <p className="building-list-empty">{normalizedSearch ? <>Aucune adresse correspondante parmi les bâtiments chargés. <button type="button" onClick={() => { setSearchQuery(''); setListFilter('all'); }}>Effacer la recherche et les filtres</button></> : listFilter === 'stale' ? 'Aucun bâtiment ne correspond à ce filtre de revisite.' : listFilter === 'todo' ? 'Aucun bâtiment suivi ne correspond au filtre « Pas encore fait ».' : terrainPage.partial ? 'Aucun résultat sur cette page. Consulte la suivante ou change les filtres.' : 'Aucun bâtiment décrit dans cette zone. Touche une emprise pour commencer.'}</p>
               : <ul className="building-list-rows">
-                {listedBuildings.map((entry) => (
-                  <li key={entry.building.id}>
+                {listedBuildings.map((entry) => {
+                  const visual = buildingVisualStatus(listDoorGroups.get(entry.building.id) ?? []);
+                  return <li key={entry.building.id}>
                     <button className="building-row" onClick={() => openListedBuilding(entry.building)} type="button">
-                      <span className={`terrain-building-pin terrain-building-pin--${entry.treatedCount === 0 ? 'todo' : entry.followUp.suggestedForRevisit ? 'away' : entry.followUp.outOfFollowUp ? 'linked' : 'open'}`} />
+                      <span aria-hidden="true" className={`terrain-building-pin terrain-building-pin--${visual}`} />
                       <span className="terrain-building-copy">
                         <span className="building-row-address">{entry.building.addressLabel}</span>
-                        <span className="building-row-progress">{entry.treatedCount}/{entry.doorCount} portes chargées avec passage</span>
+                        <span className="building-row-progress">{entry.doorCount === 0 ? 'Structure à décrire' : `${STATUS_LABEL[visual]} · ${entry.treatedCount}/${entry.doorCount} portes visitées`}</span>
                       </span>
                       <span className={entry.followUp.suggestedForRevisit ? 'building-row-age alert' : 'building-row-age'}>{buildingAgeLabel(entry)}</span>
                     </button>
-                  </li>
-                ))}
+                  </li>;
+                })}
               </ul>}
             {canCreateBuildings && selectedZone && mode === 'terrain' && <button className="building-list-add" disabled={placing} onClick={startBuildingPlacement} type="button">+ Ajouter un bâtiment absent de la carte</button>}
             {(terrainPage.partial || terrainPage.index > 0) && <nav className="terrain-pagination" aria-label="Pages des bâtiments"><button disabled={terrainPage.index === 0 || terrainPage.phase === 'loading'} onClick={terrainPage.previous} type="button">Précédente</button><span>Page {terrainPage.index + 1}</span><button disabled={!terrainPage.nextCursor || terrainPage.phase !== 'ready'} onClick={terrainPage.next} type="button">Suivante</button></nav>}
-            <span className="terrain-visible-count">
-              {listReady ? `${zoneBuildingCount} bâtiment(s) ${terrainPage.partial ? 'sur cette page' : 'suivis'}` : 'Liste en attente de lecture'} · {mapError ? 'carte indisponible' : `${visibleBuildingCount} chargés à l’écran`}
-              {attachedBuildingCount !== null && <> · {attachedBuildingCount} rattache(s)</>}
+            <span className="terrain-visible-count" data-visible-buildings={visibleBuildingCount}>
+              {listReady ? `${zoneBuildingCount} bâtiment${zoneBuildingCount > 1 ? 's' : ''} suivi${zoneBuildingCount > 1 ? 's' : ''}${terrainPage.partial ? ' sur cette page' : ''}` : 'Chargement de la liste…'}{mapError && ' · carte indisponible'}
             </span>
-            <p className="terrain-visible-count">{zoneProgressDate(progress)}. Les nouveaux passages peuvent ne pas encore être comptés. {zoneBuildingCoverage(selectedStats)}. {zoneStatsProvenance(selectedStats)}</p>
+            {/* Une seule mention de fraîcheur : le détail de provenance relève du pilotage. */}
+            <p className="terrain-visible-count">{progress.updatedAt ? `Progression comptée le ${zoneProgressDate(progress).replace(/^Relevé du /, '')}, hors saisies en attente sur ce téléphone.` : 'Progression pas encore comptée.'}</p>
           </div>
 
           <footer className="terrain-panel-foot">
-            <span className="ds-microlabel">Portes décrites · relevé</span>
-            <span className="terrain-coverage" aria-label={zoneProgressSummary(progress)}><i style={{ width: `${progress.percent ?? 0}%` }} /></span>
+            <span className="ds-microlabel">Couverture de la zone · {zoneProgressSummary(progress)}</span>
+            <span className="terrain-coverage" role="img" aria-label={coverageLabel}>
+              {selectedStats && progress.percent !== null && selectedStats.doorCount > 0 && COVERAGE_SEGMENTS.map((segment) => {
+                const count = selectedStats.countsByStatus[segment.id] ?? 0;
+                return count > 0 && <i key={segment.id} style={{ width: `${(count / selectedStats.doorCount) * 100}%`, background: `var(--st-${segment.status})` }} />;
+              })}
+            </span>
           </footer>
         </section>
       )}
@@ -978,6 +1011,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
 
       {mode === 'edition' && (
         <div className="terrain-editbar" aria-label="Outils de zone">
+          <span className="terrain-editbar-mode">Mode Édition</span>
           <select aria-label="Zone a modifier" value={selectedZoneId ?? ''} onChange={(event) => selectZone(event.target.value || null)}>
             {!selectedZoneId && <option value="">Choisir une zone</option>}
             {zoneList.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
@@ -1002,7 +1036,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         <button aria-label={locating ? 'Recherche de position en cours' : 'Ma position'} disabled={locating} className="terrain-fab terrain-fab-ghost" onClick={() => void locate()} type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5" /><circle cx="12" cy="12" r="8" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3" /></svg>
         </button>
-        <button className="terrain-fab terrain-fab-primary" disabled={!selectedZone || !listReady || !onBuildingSelect} onClick={startMarking} type="button">
+        <button aria-disabled={!selectedZone || !listReady} className="terrain-fab terrain-fab-primary" disabled={!onBuildingSelect} onClick={() => {
+          // Un bouton grisé ne dit pas pourquoi : l'appui l'explique et oriente vers la suite.
+          if (!selectedZone) { setMessage('Choisis d’abord une zone dans le menu en haut.'); setZoneMenuOpen(true); return; }
+          if (!listReady) { setMessage(terrainPage.phase === 'error' ? 'Liste indisponible : touche « Réessayer » dans le panneau.' : 'Les bâtiments de la zone se chargent, réessaie dans un instant.'); return; }
+          startMarking();
+        }} type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
           Marquer une porte
         </button>

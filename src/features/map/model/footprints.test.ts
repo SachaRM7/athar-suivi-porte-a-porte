@@ -138,10 +138,10 @@ describe('doorsByBuilding', () => {
 describe('zoneProgressLabel', () => {
   it('aggregates the zone progress read below zoom 16', () => {
     const stats: ZoneStats = { zoneId: 'carmes', doorCount: 6, countsByStatus: { unvisited: 3, retry: 1, contacted: 2 }, updatedAt: '2026-07-29T10:30:00.000Z' };
-    expect(zoneProgressLabel(zone, stats)).toContain('Carmes · 50 % · 3/6 portes décrites avec passage · Relevé du ');
+    expect(zoneProgressLabel(zone, stats)).toContain('Carmes · 50 % · 3/6 portes visitées · Relevé du ');
   });
 
   it('does not confuse a missing projection with a zone without doors', () => {
-    expect(zoneProgressLabel(zone, null)).toBe('Carmes · Statistiques indisponibles');
+    expect(zoneProgressLabel(zone, null)).toBe('Carmes · Progression indisponible');
   });
 });

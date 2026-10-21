@@ -4,7 +4,7 @@ import type { Building, Door, DoorFoyer, Status, Visit } from '../../../domain/w
 import type { DoorStructureTarget } from '../../../domain/workspace/building-structure';
 import { buildBuildingStructureDiff, normalizeDoorLabel, type StructureAmbiguity } from '../../../domain/workspace/building-structure';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
-import { floorLabel, floorProgress, overallProgress, compareDoorsForFloor } from '../model/building-detail';
+import { floorLabel, floorProgress, isFloorComplete, overallProgress, compareDoorsForFloor } from '../model/building-detail';
 import { recordLocalVisit, recordLocalVisits } from '../../visits/model/record-local-visit';
 import { markDoorForSisters, updateDoorProfile } from '../../visits/model/mark-door-for-sisters';
 import type { DoorMarkerOutbox } from '../../../domain/sync/door-marker-outbox';
@@ -75,6 +75,29 @@ function statusForeground(color: string): string {
   return red * .299 + green * .587 + blue * .114 < 145 ? '#fffdf6' : '#17211e';
 }
 
+/** Résultats proposés dans la fiche porte. Libellés du vocabulaire figé, explication en sous-ligne. */
+const RESULT_CHOICES: readonly { statusId: string; label: string; className: string; hint?: string }[] = [
+  { statusId: 'contacted', label: 'Contact établi', className: 'open-result' },
+  { statusId: 'retry', label: 'Absent', className: 'away-result' },
+  { statusId: 'linked', label: "Attaché à l'effort", className: 'linked-result', hint: 'sort du suivi' },
+  { statusId: 'do-not-return', label: 'Ne pas déranger', className: 'dnd-result', hint: 'sort du suivi' },
+  { statusId: 'locked', label: 'Accès bloqué (interphone / code)', className: 'locked-result' }
+];
+
+/** « Contact établi · dernier passage il y a 3 j », ou « Jamais visitée ». */
+function doorSubline(door: Door, statusLabel: string | undefined): string {
+  if (!door.lastVisitId) return 'Jamais visitée';
+  const staleness = buildingStaleness(door.lastVisitAt, new Date(), true);
+  const when = staleness.days === null ? 'date du dernier passage inconnue' : `dernier passage ${staleness.label}`;
+  return `${statusLabel ?? 'Statut indisponible'} · ${when}`;
+}
+
+/** Un choix de porte historique se fait sur ce que le frère voit : numéro, étage, statut. */
+function ambiguityChoiceLabel(door: Door | undefined, statuses: ReadonlyMap<string, Status>): string {
+  if (!door) return 'Conserver cette porte';
+  return `Conserver la porte ${door.label} (${floorLabel(door.floor)}, ${statuses.get(door.currentStatusId)?.label ?? 'statut indisponible'}${door.active ? '' : ', archivée'})`;
+}
+
 function parseManualTargets(value: string): ManualTarget[] {
   return value.split('\n').flatMap((line, index): ManualTarget[] => {
     const [floor, label, identity] = line.split('|').map((part) => part.trim());
@@ -129,6 +152,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const [editing, setEditing] = useState(false);
   const [confirmDeletion, setConfirmDeletion] = useState<string | null>(null);
   const [confirmFloorDeletion, setConfirmFloorDeletion] = useState<number | null>(null);
+  /** Étage dont l'absence groupée attend confirmation : le geste écrit plusieurs passages d'un coup. */
+  const [confirmFloorAbsence, setConfirmFloorAbsence] = useState<number | null>(null);
   const [confirmStructureReset, setConfirmStructureReset] = useState(false);
   /** Un plan qui archive des portes demande un second geste explicite. */
   const [confirmStructureArchive, setConfirmStructureArchive] = useState(false);
@@ -264,7 +289,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     ?? sync?.entries.find((entry) => doors.some(door => door.id === entry.doorId) && entry.state !== 'pending')
     ?? sync?.entries.find((entry) => doors.some(door => door.id === entry.doorId) && entry.doorId === selectedDoorId && entry.state === 'pending');
   const pendingEntries = sync?.entries.filter((entry) => entry.state === 'pending').length ?? pendingCount;
-  const syncLabel = !sync ? (pendingEntries > 0 ? `${pendingEntries} changement(s) en attente` : 'À jour') : sync.status.label;
+  const syncLabel = !sync ? (pendingEntries > 0 ? `${pendingEntries} changement${pendingEntries > 1 ? 's' : ''} en attente` : 'À jour') : sync.status.label;
   const syncDetail = sync?.status.detail ?? null;
 
   const loadDoorVisits = useCallback(async (doorId: string): Promise<readonly (Visit & { authorName: string })[]> => {
@@ -419,7 +444,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       await refresh().catch(() => setLoadError(true));
       await sync?.refresh();
       void sync?.synchronize();
-      setMessage(`${results.length} passage(s) « Absent » enregistrés sur l’appareil pour cet étage.`);
+      setMessage(`${results.length} porte${results.length > 1 ? 's' : ''} de l’étage marquée${results.length > 1 ? 's' : ''} « Absent » sur l’appareil.`);
       for (const door of targets) sync?.reportLocalSave(door.id);
     } catch (error) {
       // Groupe atomique : en cas d'échec, aucune porte n'a été marquée.
@@ -712,8 +737,16 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
                   {editing ? <span className="building-floor-edit-actions">
                     <button onClick={() => openFloorCreation(item.floor)} type="button">+ porte</button>
                     {confirmFloorDeletion === item.floor ? <span className="floor-delete-confirm"><b>Supprimer l’étage et son historique ?</b><button aria-label={`Confirmer la suppression du ${floorLabel(item.floor)}`} onClick={() => void removeFloor(item.floor)} type="button">Oui</button><button aria-label={`Annuler la suppression du ${floorLabel(item.floor)}`} onClick={() => setConfirmFloorDeletion(null)} type="button">Non</button></span> : <button className="floor-delete" onClick={() => void removeFloor(item.floor)} type="button">supprimer l’étage</button>}
-                  </span> : <span>{item.treatedCount}/{item.doorCount} · {item.treatedCount === item.doorCount ? <strong className="building-floor-complete">terminé</strong> : <button disabled={saving} onClick={() => void markFloorAway(levelDoors)} type="button">tout marquer absent</button>}</span>}
+                  </span> : <span>{item.treatedCount}/{item.doorCount} visitée{item.treatedCount > 1 ? 's' : ''} · {item.firstVisitCount > 0
+                    ? <button aria-expanded={confirmFloorAbsence === item.floor} disabled={saving} onClick={() => setConfirmFloorAbsence((current) => current === item.floor ? null : item.floor)} type="button">Marquer {item.firstVisitCount} porte{item.firstVisitCount > 1 ? 's' : ''} absente{item.firstVisitCount > 1 ? 's' : ''}</button>
+                    : isFloorComplete(item) ? <strong className="building-floor-complete">terminé</strong>
+                      : <span className="building-floor-revisit">{item.toRevisitCount} à revoir</span>}</span>}
                 </header>
+                {!editing && confirmFloorAbsence === item.floor && item.firstVisitCount > 0 && <div className="floor-absence-confirm" role="alert">
+                  <b>Enregistrer « Absent » pour {doorsForGroupedAbsence(levelDoors).map((door) => door.label).join(', ')} ?</b>
+                  <span>Seules les portes jamais visitées de l’étage sont marquées. Les autres ne changent pas.</span>
+                  <span className="floor-absence-actions"><button disabled={saving} onClick={() => { setConfirmFloorAbsence(null); void markFloorAway(levelDoors); }} type="button">Oui, marquer</button><button onClick={() => setConfirmFloorAbsence(null)} type="button">Non</button></span>
+                </div>}
                 <div className="door-grid" aria-label={`Portes ${floorLabel(item.floor)}`}>
               {levelDoors.map((door) => {
                 const status = statusesById.get(door.currentStatusId);
@@ -744,13 +777,16 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
           <section aria-label={`Fiche de la porte ${paletteDoor.label}`} className="door-status-sheet door-detail-sheet" role="dialog" aria-modal="true" tabIndex={-1} ref={doorPanel}>
             <button className="door-detail-back" onClick={() => setOpenPaletteDoorId(null)} type="button">‹ {building.addressLabel}</button>
             <h3>Porte {paletteDoor.label} · {floorLabel(paletteDoor.floor)}</h3>
-            <p className="door-detail-subline">Dernier passage {buildingStaleness(paletteDoor.lastVisitAt, new Date(), Boolean(paletteDoor.lastVisitId)).label}</p>
+            <p className="door-detail-subline">{doorSubline(paletteDoor, statusesById.get(paletteDoor.currentStatusId)?.label)}</p>
             <p className="eyebrow">Résultat du passage</p>
             {/* La note part avec le résultat : elle s'écrit avant, car toucher un résultat ferme la fiche. */}
             {showPassageNote
               ? <label className="passage-note-field">Note jointe au passage<textarea aria-label={`Note pour porte ${paletteDoor.label}`} autoFocus maxLength={280} onChange={(event) => setNote(event.target.value)} placeholder="Écris la note, puis touche le résultat" rows={2} value={note} /></label>
               : <button aria-expanded={false} className="passage-note-toggle" onClick={() => setShowPassageNote(true)} type="button">+ note pour ce passage</button>}
-            <div className="status-palette"><button disabled={saving || !statusesById.get('contacted')?.active} className="status-swatch open-result" onClick={() => void savePassage(paletteDoor, 'contacted')} type="button"><span aria-hidden="true" /><b>Contact établi</b></button><button disabled={saving || !statusesById.get('retry')?.active} className="status-swatch away-result" onClick={() => void savePassage(paletteDoor, 'retry')} type="button"><span aria-hidden="true" /><b>Absent</b></button><button disabled={saving || !statusesById.get('linked')?.active} className="status-swatch linked-result" onClick={() => void savePassage(paletteDoor, 'linked')} type="button"><span aria-hidden="true" /><b>Attaché à l'effort — plus à revisiter</b></button><button disabled={saving || !statusesById.get('do-not-return')?.active} className="status-swatch dnd-result" onClick={() => void savePassage(paletteDoor, 'do-not-return')} type="button"><span aria-hidden="true" /><b>Ne pas déranger</b></button><button disabled={saving || !statusesById.get('locked')?.active} className="status-swatch locked-result" onClick={() => void savePassage(paletteDoor, 'locked')} type="button"><span aria-hidden="true" /><b>Accès bloqué (interphone / code)</b></button></div>
+            <div className="status-palette">{RESULT_CHOICES.map((choice) => {
+              const current = paletteDoor.lastVisitId !== null && paletteDoor.currentStatusId === choice.statusId;
+              return <button aria-pressed={current} className={`status-swatch ${choice.className}`} disabled={saving || !statusesById.get(choice.statusId)?.active} key={choice.statusId} onClick={() => void savePassage(paletteDoor, choice.statusId)} type="button"><span aria-hidden="true" /><b>{choice.label}</b>{(choice.hint || current) && <small aria-hidden="true">{current ? 'résultat actuel' : choice.hint}</small>}</button>;
+            })}</div>
             {dndCorrection?.doorId === paletteDoor.id && <div className="dnd-correction" role="alert">
               <b>Cette personne a demandé à ne plus être dérangée.</b>
               <span>Enregistrer « {statusesById.get(dndCorrection.statusId)?.label ?? 'Statut indisponible'} » à la place ? Le passage « Ne pas déranger » reste dans l’historique.</span>
@@ -761,7 +797,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
             <button aria-pressed={sisters} className="sisters-toggle" onClick={() => void toggleSisters(paletteDoor, !sisters, false)} type="button"><span className="sisters-toggle-copy"><strong>À confier aux sœurs</strong><span>Le prochain passage sera fait par les sœurs.</span></span><i aria-hidden="true" className="sisters-toggle-control" /></button>
             {autoSisters && <p className="sisters-auto">Activé automatiquement — tu peux le désactiver.</p>}
             <p className="eyebrow">Historique des passages</p>
-            <ol className="door-history">{historyState !== 'ready' ? <li className="door-history-empty">{historyState === 'loading' ? 'Chargement de l’historique…' : 'Historique indisponible. Les passages conservés n’ont pas été effacés.'}</li> : doorVisits.length === 0 ? <li className="door-history-empty">Aucun passage enregistré.</li> : doorVisits.slice(0, historyLimit).map((visit) => { const status = statusesById.get(visit.statusId); return <li key={visit.id} style={{ '--history-status': status?.color ?? 'var(--st-todo)' } as CSSProperties}><i aria-hidden="true" className="door-history-dot" /><span className="door-history-body"><strong>{new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(visit.occurredAt))} · {buildingStaleness(visit.occurredAt).label}</strong><span>{visit.authorName}{visit.note ? ` — « ${visit.note} »` : status ? ` — ${status.label}` : ''}</span></span></li>; })}</ol>
+            <ol className="door-history">{historyState !== 'ready' ? <li className="door-history-empty">{historyState === 'loading' ? 'Chargement de l’historique…' : 'Historique indisponible. Les passages conservés n’ont pas été effacés.'}</li> : doorVisits.length === 0 ? <li className="door-history-empty">Aucun passage enregistré.</li> : doorVisits.slice(0, historyLimit).map((visit) => { const status = statusesById.get(visit.statusId); return <li key={visit.id} style={{ '--history-status': status?.color ?? 'var(--st-todo)' } as CSSProperties}><i aria-hidden="true" className="door-history-dot" /><span className="door-history-body"><strong>{new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(visit.occurredAt))} · {buildingStaleness(visit.occurredAt).label}</strong><span>{visit.authorName} — {status?.label ?? 'Statut indisponible'}{visit.note ? ` · « ${visit.note} »` : ''}</span></span></li>; })}</ol>
             {historyState === 'error' && <button type="button" onClick={() => void openDoor(paletteDoor)}>Réessayer l’historique</button>}
             {historyState === 'ready' && historyLimit < doorVisits.length && <button type="button" onClick={() => setHistoryLimit(limit => limit + 25)}>Afficher les passages précédents ({doorVisits.length - historyLimit})</button>}
             <p className="privacy-note">La composition et ce marqueur ne sont visibles que dans cette fiche.</p>
@@ -789,10 +825,10 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
                 <span className="structure-reset-actions"><button disabled={structurePending} onClick={() => void applyStructurePlan()} type="button">Oui, retirer</button><button onClick={() => setConfirmStructureArchive(false)} type="button">Non</button></span>
               </div>}
               <button className="primary-action" disabled={structurePending || (structurePlan.created === 0 && structurePlan.archived.length === 0)} onClick={() => void applyStructurePlan()} type="button">{structurePending ? 'Enregistrement…' : structurePlanLabel(structurePlan)}</button>
-              <button className="text-button" onClick={() => { if (!showManual) setManualPlan(structureDoors.filter((door) => door.active).map((door) => `${door.floor} | ${door.label} | ${door.id}`).join('\n')); setShowManual((current) => !current); }} type="button">Ajustement manuel</button>
-              {showManual && <><label className="manual-plan-label">Plan manuel (etage | porte | ID ou new:ID)<textarea aria-label="Plan manuel de portes" onChange={(event) => setManualPlan(event.target.value)} rows={5} value={manualPlan} /></label><button className="secondary-action" onClick={() => void runStructure(() => parseManualTargets(manualPlan))} type="button">Appliquer le plan manuel</button></>}
+              {canDeleteVisitedDoors && <button className="text-button" onClick={() => { if (!showManual) setManualPlan(structureDoors.filter((door) => door.active).map((door) => `${door.floor} | ${door.label} | ${door.id}`).join('\n')); setShowManual((current) => !current); }} type="button">Ajustement manuel</button>}
+              {canDeleteVisitedDoors && showManual && <><label className="manual-plan-label">Plan manuel (etage | porte | ID ou new:ID)<textarea aria-label="Plan manuel de portes" onChange={(event) => setManualPlan(event.target.value)} rows={5} value={manualPlan} /></label><button className="secondary-action" onClick={() => void runStructure(() => parseManualTargets(manualPlan))} type="button">Appliquer le plan manuel</button></>}
               <details className="structure-advanced"><summary>Portes archivées</summary>
-              {ambiguities.length > 0 && <section className="structure-ambiguities" aria-label="Renommages ambigus"><p>Choisir la porte historique:</p>{ambiguities.map((ambiguity) => <div key={`${ambiguity.target.floor}-${ambiguity.target.label}`}><strong>{floorLabel(ambiguity.target.floor)} / {ambiguity.target.label}</strong>{ambiguity.candidateDoorIds.map((doorId) => <button className="secondary-action" key={doorId} onClick={() => resolveAmbiguity(ambiguity, doorId)} type="button">Conserver {doorId}</button>)}</div>)}</section>}
+              {ambiguities.length > 0 && <section className="structure-ambiguities" aria-label="Renommages ambigus"><p>Choisir la porte historique:</p>{ambiguities.map((ambiguity) => <div key={`${ambiguity.target.floor}-${ambiguity.target.label}`}><strong>{floorLabel(ambiguity.target.floor)} / {ambiguity.target.label}</strong>{ambiguity.candidateDoorIds.map((doorId) => <button className="secondary-action" key={doorId} onClick={() => resolveAmbiguity(ambiguity, doorId)} type="button">{ambiguityChoiceLabel(structureDoors.find((door) => door.id === doorId), statusesById)}</button>)}</div>)}</section>}
               <div className="archived-doors"><p className="eyebrow">Archivees</p>{structureDoors.filter((door) => !door.active).length === 0 ? <span>Aucune</span> : structureDoors.filter((door) => !door.active).map((door) => <span key={door.id}>{floorLabel(door.floor)} / {door.label}</span>)}</div>
               </details>
             </div>}

@@ -36,7 +36,7 @@ async function clickOnMap(page: Page, target: { longitude: number; latitude: num
 
 async function openFieldMap(page: Page): Promise<void> {
   await page.goto('/technical-map');
-  await expect(page.getByText('2 bâtiment(s) suivis')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('2 bâtiments suivis')).toBeVisible({ timeout: 15_000 });
   // Les sept emprises de l'échantillon doivent être tuilées avant tout appui sur la carte.
   await expect.poll(
     async () => Number((await page.getByLabel('Carte MapLibre des zones').getAttribute('data-footprints')) ?? '0'),
@@ -52,13 +52,13 @@ async function enterEdition(page: Page): Promise<void> {
 
 test('shows the recorded door ratio instead of calling two touched buildings a fully covered zone', async ({ page }) => {
   await page.goto('/technical-map');
-  await expect(page.getByText('2 bâtiment(s) suivis')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('2 bâtiments suivis')).toBeVisible({ timeout: 15_000 });
   // Le cadrage mobile charge moins de tuiles : la progression n'en dépend pas.
   // La fixture contient deux bâtiments touchés, mais seulement trois portes sur six.
   await expect(page.getByTestId('zone-recorded-progress')).toHaveText('50%');
-  await expect(page.locator('.terrain-zone-copy')).toContainText('3/6 portes décrites avec passage');
+  await expect(page.locator('.terrain-zone-copy')).toContainText('3/6 portes visitées');
   await expect(page.locator('.terrain-zonechip')).toHaveAttribute('title', /^Relevé du /);
-  await expect(page.getByText(/Couverture des bâtiments indisponible/)).toBeVisible();
+  await expect(page.getByText(/^Progression comptée le /)).toBeVisible();
 });
 
 test('draws and saves an editable local zone over the prepared MapLibre package', async ({ page }) => {
@@ -76,7 +76,6 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await page.getByLabel('Couleur de la zone').fill('#D8A200');
   await page.getByRole('button', { name: 'Enregistrer la zone' }).click();
   await expect(page.getByText('Zone enregistrée · 2 bâtiments dans son contour.')).toBeVisible();
-  await expect(page.getByText('2 rattache(s)')).toBeVisible();
 
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
   await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
@@ -88,10 +87,14 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await expect(page.getByText('Porte 11 : passage enregistré sur l’appareil.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Porte 11, Absent' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'tout marquer absent' }).first().click();
-  await expect(page.getByText('1 passage(s) « Absent » enregistrés sur l’appareil pour cet étage.')).toBeVisible();
-  await expect(page.locator('.building-floor').first().getByText('terminé', { exact: true })).toBeVisible();
-  await expect(page.getByText('2 changement(s) en attente')).toBeVisible();
+  await page.getByRole('button', { name: 'Marquer 1 porte absente' }).first().click();
+  // Le geste groupé nomme les portes qu'il va écrire avant d'écrire quoi que ce soit.
+  await expect(page.getByText('Enregistrer « Absent » pour 12 ?')).toBeVisible();
+  await page.getByRole('button', { name: 'Oui, marquer' }).click();
+  await expect(page.getByText('1 porte de l’étage marquée « Absent » sur l’appareil.')).toBeVisible();
+  // Deux absents ne terminent pas un étage : il faudra repasser.
+  await expect(page.locator('.building-floor').first().getByText('2 à revoir', { exact: true })).toBeVisible();
+  await expect(page.getByText('2 changements en attente')).toBeVisible();
 
   await page.getByRole('button', { name: 'Configurer le batiment' }).click();
   await page.getByRole('button', { name: 'Ajustement manuel' }).click();
@@ -109,10 +112,10 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
 
 test('refuses to delete a zone while its buildings and doors are still attached', async ({ page }) => {
   await page.goto('/technical-map');
-  await expect(page.getByText('2 bâtiment(s) suivis')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('2 bâtiments suivis')).toBeVisible({ timeout: 15_000 });
   await enterEdition(page);
   await page.getByRole('button', { name: 'Supprimer' }).click();
-  await expect(page.getByText(/Suppression impossible : 2 b.timent\(s\).*Aucun b.timent, aucune porte et aucun passage n.a .t. supprim./)).toBeVisible();
+  await expect(page.getByText(/Suppression impossible : 2 bâtiments sont encore rattachés.*Aucun b.timent, aucune porte et aucun passage n.a .t. supprim./)).toBeVisible();
   await expect(page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' })).toBeVisible();
   await page.getByRole('button', { name: 'Terrain' }).click();
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
@@ -281,13 +284,15 @@ test('records the five real passage results and keeps the previous history immut
   const detail = page.getByRole('dialog', { name: 'Fiche de la porte 11' });
   await expect(detail.getByRole('button', { name: 'Contact établi' })).toBeVisible();
   await expect(detail.getByRole('button', { name: 'Absent', exact: true })).toBeVisible();
-  await expect(detail.getByRole('button', { name: "Attaché à l'effort — plus à revisiter" })).toBeVisible();
+  await expect(detail.getByRole('button', { name: "Attaché à l'effort" })).toBeVisible();
   await expect(detail.getByRole('button', { name: 'Ne pas déranger' })).toBeVisible();
   await expect(detail.getByRole('button', { name: 'Accès bloqué (interphone / code)' })).toBeVisible();
+  await expect(detail.getByRole('button', { name: 'Contact établi' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(detail.getByText(/^Contact établi · dernier passage /)).toBeVisible();
   await expect(detail.locator('.door-history li')).toHaveCount(1);
-  await expect(detail.locator('.door-history')).toContainText('Terrain 31');
+  await expect(detail.locator('.door-history')).toContainText('Terrain 31 — Contact établi');
 
-  await detail.getByRole('button', { name: "Attaché à l'effort — plus à revisiter" }).click();
+  await detail.getByRole('button', { name: "Attaché à l'effort" }).click();
   await expect(page.getByRole('button', { name: "Porte 11, Attaché à l'effort" })).toBeVisible();
   await page.getByRole('button', { name: "Porte 11, Attaché à l'effort" }).click();
   await expect(page.getByRole('dialog', { name: 'Fiche de la porte 11' }).locator('.door-history li')).toHaveCount(2);
@@ -510,7 +515,7 @@ test('writes the passage note before choosing the result', async ({ browser }) =
   await detail.getByLabel('Note pour porte 12').fill('Repasser le soir');
   await detail.getByRole('button', { name: 'Absent', exact: true }).click();
   await page.getByRole('button', { name: 'Porte 12, Absent' }).click();
-  await expect(page.getByRole('dialog', { name: 'Fiche de la porte 12' }).locator('.door-history')).toContainText('Repasser le soir');
+  await expect(page.getByRole('dialog', { name: 'Fiche de la porte 12' }).locator('.door-history')).toContainText('Absent · « Repasser le soir »');
   await page.close();
 });
 
@@ -530,3 +535,17 @@ test('keeps the map feedback visible on a short phone screen', async ({ browser 
   await expect(page.locator('.terrain-status')).toHaveText('Pose annulée. Rien n’a été créé.');
   await page.close();
 });
+
+test('colours each listed building by its status, as on the map, and says it in words', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await openFieldMap(page);
+  const languedoc = page.getByRole('button', { name: /18 rue du Languedoc/ });
+  await expect(languedoc).toContainText('Contact établi · 2/4 portes visitées');
+  await expect(languedoc.locator('.terrain-building-pin--open')).toHaveCount(1);
+  const filatiers = page.getByRole('button', { name: /7 rue des Filatiers/ });
+  await expect(filatiers).toContainText('Absent · 1/2 portes visitées');
+  await expect(filatiers.locator('.terrain-building-pin--away')).toHaveCount(1);
+  await expect(page.getByText('Couverture de la zone · 3/6 portes visitées')).toBeVisible();
+  await page.close();
+});
+

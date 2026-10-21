@@ -61,7 +61,7 @@ function ActiveEntry(): ReactElement {
   const selected = entries.find((entry) => entry.zone.id === selectedId) ?? entries[0];
   return (
     <AuthBackdrop labelledBy="zone-choice-title">
-      <p className="auth-microlabel">Première ouverture · {state.session.member.displayName}</p>
+      <p className="auth-microlabel">Connecté · {state.session.member.displayName}</p>
       <h1 id="zone-choice-title">Choisis la zone de la sortie.</h1>
       <p className="auth-lede">Tu pourras en changer à tout moment depuis la carte. Ce choix organise le terrain, il ne limite pas ton accès.</p>
       <p className="auth-footnote">Progression des portes décrites au dernier relevé. Les nouveaux passages peuvent ne pas encore être comptés ; les compteurs restent datés et excluent les passages en attente de synchronisation.</p>
@@ -180,6 +180,6 @@ export function LoginPage(): ReactElement {
   if (state.status === 'loading') return <AccessState title="Vérification en cours" message="Athar vérifie la session et l’accès au workspace." />;
   if (state.status === 'inactive') return <AccessState canSignOut title="Accès suspendu" message="Ce compte existe, mais son accès au workspace est inactif. Demande sa réactivation à ton coordinateur." />;
   if (state.status === 'unregistered') return <NoAccess signedIn />;
-  if (state.status === 'error') return <AccessState canSignOut title="Vérification impossible" message="Athar ne peut pas vérifier cet accès. Vérifie la connexion, puis réessaie." />;
+  if (state.status === 'error') return <AccessState canSignOut next="retry" title="Vérification impossible" message="Athar ne peut pas vérifier cet accès. Vérifie la connexion, puis réessaie." />;
   return <LoginForm />;
 }

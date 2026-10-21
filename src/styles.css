@@ -286,7 +286,7 @@ h2 { font-size: 22px; }
 .building-floor-heading { align-items: center; color: var(--ink-soft); display: flex; font: var(--t-115) var(--font-data); justify-content: space-between; margin-bottom: 4px; }
 .building-floor-heading > span:last-child { white-space: nowrap; }
 .building-floor-heading button { align-items: center; background: transparent; border: 0; color: var(--brand-lift); cursor: pointer; display: inline-flex; font: inherit; min-height: var(--touch); padding: 0 2px; text-decoration: underline; text-underline-offset: 3px; }
-.building-floor-complete { color: var(--st-open); font-weight: 500; }
+.building-floor-complete { color: var(--ink); font-weight: 500; }
 .door-grid { gap: 7px; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); padding-top: 0; }
 .door-row, .door-add { aspect-ratio: 1 / .86; border-radius: var(--r-door); min-height: 52px; }
 .door-row { background: color-mix(in srgb, var(--status-color) 10%, var(--paper)); border: 1px solid color-mix(in srgb, var(--status-color) 45%, var(--paper)); box-shadow: inset 0 -3px 0 var(--status-color); color: var(--ink); display: grid; padding: 8px; place-items: start; }
@@ -539,3 +539,16 @@ h2 { font-size: 22px; }
 .building-address-actions .primary-action { background: var(--brand); border-color: var(--brand); border-radius: var(--r-field); color: var(--paper); font: 500 var(--t-125) var(--font-ui); }
 .building-address-error { color: var(--ink); font: var(--t-125)/1.4 var(--font-ui); margin: 0; }
 .structure-archive-confirm { margin: 0; }
+
+/* Correctifs d'audit (P1) : étages à revoir, absence groupée confirmée, fiche porte. */
+.building-floor-revisit { color: var(--ink); }
+.floor-absence-confirm { background: var(--sunk); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); display: grid; gap: 5px; margin: 2px 0 8px; padding: 9px 11px; }
+.floor-absence-confirm b { font: 500 var(--t-125) var(--font-ui); }
+.floor-absence-confirm > span { color: var(--ink-soft); font: var(--t-115)/1.4 var(--font-ui); }
+.floor-absence-actions { display: flex; gap: 6px; }
+.floor-absence-actions button { background: var(--paper); border: 1px solid var(--brand); border-radius: var(--r-field); color: var(--brand); cursor: pointer; font: var(--t-115) var(--font-ui); min-height: var(--touch); padding: 4px 12px; }
+.floor-absence-actions button:first-child { background: var(--brand); color: var(--paper); }
+.door-detail-sheet .status-swatch { flex-wrap: wrap; }
+.door-detail-sheet .status-swatch small { color: var(--ink-soft); flex-basis: 100%; font: var(--t-10)/1.2 var(--font-data); letter-spacing: .04em; padding-left: 17px; }
+.door-detail-sheet .status-swatch[aria-pressed='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+a.auth-primary { align-items: center; display: flex; justify-content: center; text-decoration: none; }

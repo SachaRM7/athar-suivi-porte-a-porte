@@ -599,7 +599,7 @@
 }
 
 .terrain-coverage {
-  display: block;
+  display: flex;
   height: 5px;
   overflow: hidden;
   border-radius: var(--r-pill);
@@ -609,8 +609,7 @@
 .terrain-coverage i {
   display: block;
   height: 100%;
-  border-radius: inherit;
-  background: var(--st-open);
+  flex: none;
 }
 
 .terrain-legend {
@@ -1026,3 +1025,28 @@
 
   .terrain-status:empty { display: none; }
 }
+
+/* Correctifs d'audit (P1) : liens d'équipe dans le compte, mode Édition visible. */
+.terrain-account-link {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch);
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: var(--ink);
+  font: 500 var(--t-125)/1 var(--font-ui);
+  text-decoration: none;
+}
+
+.terrain-account-link:hover { background: color-mix(in srgb, var(--brand) 8%, transparent); }
+
+.terrain-editbar-mode {
+  padding: 0 10px 0 8px;
+  color: var(--paper);
+  font: 600 var(--t-10)/1 var(--font-data);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.terrain-fab-primary[aria-disabled='true'] { opacity: .55; }

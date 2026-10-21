@@ -99,8 +99,13 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
     if (wasPersisted) setDataVersion((version) => version + 1);
   }, [opened]);
   const account = useMemo(
-    () => ({ displayName: member.displayName, onOpenSettings: () => setSettingsOpen(true), onSignOut: requestSignOut }),
-    [member.displayName, requestSignOut]
+    () => ({
+      displayName: member.displayName,
+      links: [{ label: 'Sorties terrain', href: '/outings' }, ...(member.role === 'admin' ? [{ label: 'Pilotage et membres', href: '/admin' }] : [])],
+      onOpenSettings: () => setSettingsOpen(true),
+      onSignOut: requestSignOut
+    }),
+    [member.displayName, member.role, requestSignOut]
   );
   const initialAdmin = useMemo(() => {
     const client = getFirebaseClient();

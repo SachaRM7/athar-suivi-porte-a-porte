@@ -5,6 +5,23 @@ Une question résolue est déplacée dans « Tranchées » avec la décision.
 
 ---
 
+### 2026-10-21 — Audit UX (P1) · Trois recommandations de l'audit heurtent une décision écrite
+
+L'audit (`AUDIT-UX.md`) proposait trois changements qui contredisent des règles déjà actées. Ils
+n'ont **pas** été appliqués ; seule la présentation a été clarifiée.
+
+1. **« Tout marquer absent » sur une seconde tournée.** `02-DATA-MODEL.md` (cycle de suivi, lot A2)
+   n'autorise l'action groupée que sur les portes jamais visitées. Lors d'une revisite, il faut donc
+   encore marquer les absents porte par porte. Appliqué : le bouton annonce son effet
+   (« Marquer 2 portes absentes »), nomme les portes avant d'écrire, et un étage d'« Absent » affiche
+   « 2 à revoir » au lieu de « terminé ». Question : autoriser l'action groupée sur les portes en
+   revisite qui n'ont pas de passage aujourd'hui ?
+2. **« Sortie du jour » et sa durée.** Le lot B5 (`06-VERITE-DONNEES.md`) demande de ne pas présenter
+   l'activité reconstituée comme une durée de sortie. Appliqué : « Aujourd'hui dans la zone » et un
+   nombre de portes marquées, sans durée. Relier la trace à la sortie active (lot E) reste à décider.
+3. **« Marquer une porte » rouvre le dernier bâtiment.** C'est un critère d'acceptation du lot C (C1).
+   L'audit y voyait un risque d'ouvrir la mauvaise fiche après avoir changé de rue. Inchangé.
+
 ### 2026-10-21 — Audit UX · Qui peut corriger l'adresse d'un bâtiment déjà enregistré ?
 
 Le correctif P0 de l'audit (`AUDIT-UX.md` §1.1) permet de saisir l'adresse dans l'en-tête de la fiche.

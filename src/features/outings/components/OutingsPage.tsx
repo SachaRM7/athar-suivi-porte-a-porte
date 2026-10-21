@@ -111,7 +111,7 @@ export function OutingsPage() {
     <Dialog open={Boolean(confirmation)} title={confirmation?.action === 'end' ? 'Terminer la sortie' : 'Quitter la sortie'} onClose={() => { if (!pending) setConfirmation(null); }}>
       <p>{confirmation?.outing.title}</p><p>Synchronise les passages de chaque appareil dès que possible. Ceux enregistrés avant la fin puis reçus plus tard compléteront le bilan. Les passages hors période seront signalés séparément.</p>
       {error && <p role="alert">{error}</p>}
-      <div className="pilotage-actions"><button className="secondary-action" disabled={pending} onClick={() => setConfirmation(null)} type="button">Annuler</button><button className="primary-action" disabled={pending} onClick={() => confirmation && void act(confirmation.action, confirmation.outing.id)} type="button">Confirmer la fin</button></div>
+      <div className="pilotage-actions"><button className="secondary-action" disabled={pending} onClick={() => setConfirmation(null)} type="button">Annuler</button><button className="primary-action" disabled={pending} onClick={() => confirmation && void act(confirmation.action, confirmation.outing.id)} type="button">{confirmation?.action === 'leave' ? 'Quitter la sortie' : 'Terminer la sortie'}</button></div>
     </Dialog>
   </main>;
 }

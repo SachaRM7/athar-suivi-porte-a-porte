@@ -290,7 +290,7 @@ test('the desktop dashboard, map and zone choice share a dated projection and di
   await expect(page.locator('.terrain-zonechip')).toHaveAttribute('title', /^Relevé du /);
   await page.goto('/admin');
   await expect(page.getByTestId('zone-recorded-progress')).toHaveText('50%');
-  await expect(page.getByText('3/6 portes décrites avec passage', { exact: true })).toBeVisible();
+  await expect(page.getByText('3/6 portes visitées', { exact: true })).toBeVisible();
   await page.goto('/login');
   const carmes = page.getByRole('radio').filter({ hasText: 'Carmes' });
   await expect(carmes.locator('.auth-zone-ring')).toHaveText('50%');
