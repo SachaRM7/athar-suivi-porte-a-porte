@@ -10,8 +10,10 @@ Auth, Firestore et Functions ne bougent pas. Seul le site est servi par Cloudfla
   nécessaire au service worker hors ligne).
 - `worker/index.ts` : sert les archives `.pmtiles` avec lecture par plages (206). Le fond de carte
   `fixtures/toulouse.pmtiles` (44,6 Mo) dépasse la limite de 25 Mio d'un asset : il vit dans le
-  bucket R2 `athar-cartes`. Une archive absente de R2 retombe sur l'asset statique (échantillon des
-  Carmes), jamais sur `index.html`.
+  bucket R2 `athar-cartes`. Ordre de lecture d'une archive : R2, puis asset statique (échantillon des
+  Carmes), puis relais depuis `MAP_FALLBACK_ORIGIN` (`wrangler.jsonc`, l'hébergement Firebase qui
+  sert déjà `tiles/batiments-31.pmtiles`). Jamais de repli sur `index.html` : une réponse HTML vaut
+  absence. Téléverser une archive dans R2 la rend indépendante de Firebase Hosting.
 - `public/.assetsignore` : exclut de l'envoi les archives servies par R2.
 - `public/_headers` : mêmes en-têtes que `firebase.json`.
 
@@ -19,8 +21,8 @@ Auth, Firestore et Functions ne bougent pas. Seul le site est servi par Cloudfla
 
 1. **R2 → Create bucket** : `athar-cartes`.
 2. Dans ce bucket, **Upload** le fichier `public/fixtures/toulouse.pmtiles` sous la clé exacte
-   `fixtures/toulouse.pmtiles` (créer le dossier `fixtures`). Le tuileset départemental, s'il existe,
-   va sous `tiles/batiments-31.pmtiles`.
+   `fixtures/toulouse.pmtiles` (créer le dossier `fixtures`). Le tuileset départemental
+   `tiles/batiments-31.pmtiles` est relayé depuis Firebase Hosting tant qu'il n'est pas dans R2.
 3. **Workers & Pages → Create → Import a repository** : `SachaRM7/athar-suivi-porte-a-porte`.
 
 | Champ | Valeur |
