@@ -1,0 +1,22 @@
+// Déploiement Cloudflare Workers (assets statiques + fond de carte sur R2).
+// Mode d'emploi : docs/athar/DEPLOIEMENT-CLOUDFLARE.md. Firebase Hosting reste possible en parallèle.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "athar-suivi-porte-a-porte",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // Application monopage : toute route inconnue rend index.html (équivalent du rewrite Firebase).
+    "not_found_handling": "single-page-application",
+    // Sans réécriture : /index.html doit rester une page 200. Le service worker le met en cache
+    // pour la navigation hors ligne, et une redirection en cache ne peut pas servir de page.
+    "html_handling": "none",
+    // Seules les archives lourdes passent par le Worker ; le reste est servi directement.
+    "run_worker_first": ["/fixtures/*.pmtiles", "/tiles/*"]
+  },
+  "r2_buckets": [
+    { "binding": "MAPS", "bucket_name": "athar-cartes" }
+  ]
+}

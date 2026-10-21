@@ -1,0 +1,3 @@
+# Archives cartographiques servies depuis R2 par worker/index.ts (limite de 25 Mio par asset).
+fixtures/toulouse.pmtiles
+tiles/

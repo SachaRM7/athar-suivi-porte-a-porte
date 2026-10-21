@@ -22,3 +22,6 @@ towncenter/
 data/
 public/tiles/
 __pycache__/
+
+# État local de Wrangler (wrangler dev, R2 simulé)
+.wrangler/

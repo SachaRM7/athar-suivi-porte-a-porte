@@ -1,0 +1,15 @@
+# En-têtes des assets statiques sur Cloudflare Workers, alignés sur firebase.json.
+# « ! En-tête » retire la valeur héritée d'une règle plus générale avant de la remplacer.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/fixtures/*
+  ! Cache-Control
+  Cache-Control: public, max-age=3600
+
+/fixtures/*.pmtiles
+  ! Cache-Control
+  Cache-Control: public, max-age=86400, must-revalidate

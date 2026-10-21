@@ -30,7 +30,7 @@ export default defineConfig(({ command, mode }) => {
     },
     test: {
       environment: 'node',
-      include: ['src/**/*.test.ts']
+      include: ['src/**/*.test.ts', 'worker/**/*.test.ts']
     }
   };
 });
