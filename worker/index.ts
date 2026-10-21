@@ -37,7 +37,8 @@ function mapHeaders(object: R2Object): Headers {
   });
 }
 
-const MISSING_ARCHIVE = () => new Response('Archive cartographique absente.', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+/** `X-Athar-Archive` dit pourquoi l'archive manque : diagnostic sans accès aux journaux du Worker. */
+const MISSING_ARCHIVE = (reason: string) => new Response('Archive cartographique absente.', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Athar-Archive': reason } });
 
 /**
  * Relaie la lecture vers l'origine de repli en transmettant la plage. Une réponse HTML (page de
@@ -45,10 +46,16 @@ const MISSING_ARCHIVE = () => new Response('Archive cartographique absente.', { 
  */
 async function serveFromOrigin(request: Request, env: Env, key: string): Promise<Response> {
   const origin = env.MAP_FALLBACK_ORIGIN?.replace(/\/+$/, '');
-  if (!origin) return MISSING_ARCHIVE();
+  if (!origin) return MISSING_ARCHIVE('no-fallback-origin');
   const range = request.headers.get('Range');
-  const upstream = await fetch(`${origin}/${key}`, { method: request.method, headers: range ? { Range: range } : {} });
-  if (![200, 206, 416].includes(upstream.status) || (upstream.headers.get('Content-Type') ?? '').includes('text/html')) return MISSING_ARCHIVE();
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${origin}/${key}`, { method: request.method, headers: range ? { Range: range } : {} });
+  } catch (error) {
+    return MISSING_ARCHIVE(`origin-unreachable ${error instanceof Error ? error.message : 'unknown'}`.slice(0, 200));
+  }
+  const upstreamType = upstream.headers.get('Content-Type') ?? '';
+  if (![200, 206, 416].includes(upstream.status) || upstreamType.includes('text/html')) return MISSING_ARCHIVE(`origin ${upstream.status} ${upstreamType}`.slice(0, 200));
   const headers = new Headers({ 'Accept-Ranges': 'bytes', 'Cache-Control': MAP_CACHE, 'Content-Type': 'application/octet-stream', 'X-Content-Type-Options': 'nosniff' });
   for (const name of ['Content-Length', 'Content-Range', 'ETag']) {
     const value = upstream.headers.get(name);
