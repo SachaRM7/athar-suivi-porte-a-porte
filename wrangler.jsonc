@@ -14,7 +14,7 @@
     // pour la navigation hors ligne, et une redirection en cache ne peut pas servir de page.
     "html_handling": "none",
     // Seules les archives lourdes passent par le Worker ; le reste est servi directement.
-    "run_worker_first": ["/fixtures/*.pmtiles", "/tiles/*"]
+    "run_worker_first": ["/fixtures/*.pmtiles", "/tiles/*", "/telecharger/*"]
   },
   // Archives absentes de R2 relayées depuis l'hébergement Firebase (cf. worker/index.ts).
   "vars": { "MAP_FALLBACK_ORIGIN": "https://athar-dev31.web.app" },

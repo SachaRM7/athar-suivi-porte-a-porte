@@ -120,9 +120,37 @@ async function serveMap(request: Request, env: Env, key: string): Promise<Respon
   return new Response(object.body, { headers });
 }
 
+/** Archives proposées au téléchargement par `/telecharger/<nom>`, avec leur chemin d'origine. */
+const DOWNLOADABLE_ARCHIVES: Readonly<Record<string, string>> = {
+  'batiments-31.pmtiles': 'tiles/batiments-31.pmtiles',
+  'toulouse.pmtiles': 'fixtures/toulouse.pmtiles'
+};
+
+/**
+ * Téléchargement complet d'une archive, pour la téléverser dans R2 depuis un téléphone. Lu en
+ * entier (sans plage), le flux compressé de Firebase Hosting redonne le fichier exact ; la
+ * pièce jointe force Safari à l'enregistrer au lieu de l'afficher comme du texte.
+ */
+async function downloadArchive(env: Env, name: string): Promise<Response> {
+  const key = DOWNLOADABLE_ARCHIVES[name];
+  const origin = env.MAP_FALLBACK_ORIGIN?.replace(/\/+$/, '');
+  if (!key || !origin) return MISSING_ARCHIVE('download-unavailable');
+  const upstream = await fetch(`${origin}/${key}`);
+  if (upstream.status !== 200) return MISSING_ARCHIVE(`download-origin ${upstream.status}`);
+  return new Response(upstream.body, {
+    headers: {
+      'Cache-Control': 'no-store',
+      'Content-Disposition': `attachment; filename="${name}"`,
+      'Content-Type': 'application/octet-stream',
+      'X-Content-Type-Options': 'nosniff'
+    }
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const key = decodeURIComponent(new URL(request.url).pathname).replace(/^\/+/, '');
+    if (key.startsWith('telecharger/')) return downloadArchive(env, key.slice('telecharger/'.length));
     if (key.endsWith('.pmtiles')) return serveMap(request, env, key);
     return env.ASSETS.fetch(request);
   }
