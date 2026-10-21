@@ -50,10 +50,14 @@ async function serveFromOrigin(request: Request, env: Env, key: string): Promise
   const range = request.headers.get('Range');
   let upstream: Response;
   try {
-    upstream = await fetch(`${origin}/${key}`, { method: request.method, headers: range ? { Range: range } : {} });
+    // Sans `identity`, Firebase Hosting compresse l'archive et applique la plage aux octets
+    // compressés (servis en `text/html`) : les positions lues par PMTiles ne correspondent plus.
+    upstream = await fetch(`${origin}/${key}`, { method: request.method, headers: { 'Accept-Encoding': 'identity', ...(range ? { Range: range } : {}) } });
   } catch (error) {
     return MISSING_ARCHIVE(`origin-unreachable ${error instanceof Error ? error.message : 'unknown'}`.slice(0, 200));
   }
+  const upstreamEncoding = upstream.headers.get('Content-Encoding');
+  if (upstreamEncoding && upstreamEncoding !== 'identity') return MISSING_ARCHIVE(`origin-compressed ${upstreamEncoding}`);
   const upstreamType = upstream.headers.get('Content-Type') ?? '';
   if (![200, 206, 416].includes(upstream.status) || upstreamType.includes('text/html')) return MISSING_ARCHIVE(`origin ${upstream.status} ${upstreamType}`.slice(0, 200));
   const headers = new Headers({ 'Accept-Ranges': 'bytes', 'Cache-Control': MAP_CACHE, 'Content-Type': 'application/octet-stream', 'X-Content-Type-Options': 'nosniff' });
