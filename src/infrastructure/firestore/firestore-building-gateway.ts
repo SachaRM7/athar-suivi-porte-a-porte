@@ -1,4 +1,4 @@
-import { GeoPoint, collection, deleteDoc, doc, getDocs, limit, query, runTransaction, serverTimestamp, where, type Firestore } from 'firebase/firestore';
+import { GeoPoint, collection, deleteDoc, doc, getDocs, limit, query, runTransaction, serverTimestamp, updateDoc, where, type Firestore } from 'firebase/firestore';
 import type { Building, Status } from '../../domain/workspace/models';
 
 const DEFAULT_STATUSES: readonly Status[] = [
@@ -49,6 +49,17 @@ export class FirestoreBuildingGateway {
         structureRevision: 0,
         updatedAt: serverTimestamp()
       });
+    });
+  }
+
+  /**
+   * Les règles réservent ce changement à l'administrateur actif : un membre saisit
+   * l'adresse avant la création du document, pas après.
+   */
+  async rename(buildingId: string, addressLabel: string): Promise<void> {
+    await updateDoc(doc(this.db, `workspaces/${this.workspaceId}/buildings/${buildingId}`), {
+      addressLabel,
+      updatedAt: serverTimestamp()
     });
   }
 

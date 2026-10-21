@@ -5,6 +5,18 @@ Une question résolue est déplacée dans « Tranchées » avec la décision.
 
 ---
 
+### 2026-10-21 — Audit UX · Qui peut corriger l'adresse d'un bâtiment déjà enregistré ?
+
+Le correctif P0 de l'audit (`AUDIT-UX.md` §1.1) permet de saisir l'adresse dans l'en-tête de la fiche.
+Avant la création du document, tout membre la saisit : elle part avec le bâtiment, rien n'est écrit
+avant la description de la structure. Après, `firestore.rules` réserve `addressLabel` à
+l'administrateur actif ; un membre voit « Adresse à compléter par un coordinateur ».
+
+Les bâtiments déjà créés sous l'étiquette `Bâtiment <ID-RNB>` ne peuvent donc être nommés que par un
+coordinateur. Question : ouvrir aux membres actifs une mise à jour limitée à
+`['addressLabel', 'updatedAt']` ? L'adresse n'est qu'une étiquette (l'ancrage reste l'ID-RNB) et un
+membre peut déjà la choisir à la création. Non fait ici : cela touche les règles et leur déploiement.
+
 ### 2026-08-08 — La liste des bâtiments est empilée au lieu de flotter (WP8)
 
 `04-SCREENS.md` §1 place la liste, ses filtres et son pied dans le **panneau gauche flottant**

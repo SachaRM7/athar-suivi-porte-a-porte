@@ -71,11 +71,11 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await expect(page.getByLabel('Outils de zone')).toBeHidden();
   await enterEdition(page);
   await page.getByRole('button', { name: 'Redessiner' }).click();
-  await expect(page.getByText('Edition de Carmes. Ajustez le contour, le nom ou la couleur.')).toBeVisible();
+  await expect(page.getByText('Édition de Carmes. Ajuste le contour, le nom ou la couleur.')).toBeVisible();
   await page.getByRole('textbox', { name: 'Nom de la zone' }).fill('Carmes centre');
   await page.getByLabel('Couleur de la zone').fill('#D8A200');
   await page.getByRole('button', { name: 'Enregistrer la zone' }).click();
-  await expect(page.getByText(/Zone enregistree\. 2 batiment\(s\) rattache\(s\) par point-dans-polygone\./)).toBeVisible();
+  await expect(page.getByText('Zone enregistrée · 2 bâtiments dans son contour.')).toBeVisible();
   await expect(page.getByText('2 rattache(s)')).toBeVisible();
 
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
@@ -199,7 +199,7 @@ test('announces manual placement and opens a local building without persisting i
   await expect(hint).toBeVisible();
   await page.getByRole('button', { name: 'Annuler' }).click();
   await expect(hint).toBeHidden();
-  await expect(page.getByText('Pose annulee. Rien n a ete cree.')).toBeVisible();
+  await expect(page.getByText('Pose annulée. Rien n’a été créé.')).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Nouveau batiment' })).toBeHidden();
 
   await page.getByRole('button', { name: 'Ajouter un bâtiment' }).click();
@@ -354,7 +354,7 @@ test('suggests the cadastral structure without ever creating a door on its own',
   await page.getByRole('button', { name: 'Décrire le bâtiment' }).click();
   const notice = page.getByText('suggestion d’après le cadastre — à confirmer');
   await expect(notice).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Créer 1 portes' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Créer 1 porte' })).toBeVisible();
 
   // La mention s'efface dès qu'un frère ajuste un réglage : ce n'est plus le cadastre.
   await page.getByRole('button', { name: 'Augmenter — Étages au-dessus du rez-de-chaussée' }).click();
@@ -378,10 +378,11 @@ test('updates the structure preview live and protects a visited door from one-cl
   await expect(page.getByText('suggestion d’après le cadastre — à confirmer')).toBeHidden();
   await page.getByRole('button', { name: 'Augmenter — Étages au-dessus du rez-de-chaussée' }).click();
   await expect(page.getByRole('region', { name: 'Aperçu vivant' }).getByText('2ème')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Créer 6 portes' })).toBeVisible();
+  // Les quatre portes décrites sont conservées : le bouton annonce seulement l'ajout.
+  await expect(page.getByRole('button', { name: 'Ajouter 2 portes' })).toBeVisible();
   await page.getByRole('dialog', { name: 'Configurer le batiment' }).getByRole('button', { name: 'Fermer la configuration' }).click();
 
-  await page.getByRole('button', { name: 'Modifier' }).click();
+  await page.getByRole('button', { name: 'Modifier', exact: true }).click();
   await expect(page.getByRole('button', { name: '+ Ajouter un étage au-dessus' })).toBeVisible();
   await expect(page.getByRole('button', { name: '+ porte' })).toHaveCount(2);
   await page.getByRole('button', { name: 'Supprimer la porte 11' }).click();
@@ -442,5 +443,90 @@ test('opens any zone from the chip and flies the camera to it', async ({ browser
   await expect
     .poll(async () => page.getByLabel('Carte MapLibre des zones').getAttribute('data-viewport'), { timeout: 10_000 })
     .not.toBe(before);
+  await page.close();
+});
+
+test('lets a brother name an undescribed footprint before it exists, then finds it by address', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await openFieldMap(page);
+
+  await clickOnMap(page, FOOTPRINTS.todo);
+  await expect(page.getByRole('heading', { name: 'Bâtiment PG31CARMES002' })).toBeVisible();
+  await expect(page.getByText(/Adresse à saisir/)).toBeVisible();
+  await page.getByRole('button', { name: 'Saisir l’adresse' }).click();
+  await page.getByLabel('Adresse du bâtiment').fill('  4 rue   Pharaon ');
+  await page.getByRole('button', { name: 'Enregistrer l’adresse' }).click();
+  await expect(page.getByRole('heading', { name: '4 rue Pharaon' })).toBeVisible();
+  // L'adresse seule ne matérialise rien : la liste ne bouge qu'à la description.
+  await expect(page.locator('.building-row')).toHaveCount(2);
+
+  await page.getByRole('button', { name: 'C\'est un pavillon — une seule porte' }).click();
+  await expect(page.getByRole('button', { name: 'Porte 01, Pas encore fait' })).toBeVisible();
+  await page.getByRole('button', { name: 'Retour à la zone' }).click();
+  await page.getByPlaceholder('Adresse d’un bâtiment suivi').fill('pharaon 4');
+  await expect(page.getByRole('button', { name: /4 rue Pharaon/ })).toBeVisible();
+  await page.close();
+});
+
+test('keeps described doors when the structure is revalidated and confirms any removal', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await openFieldMap(page);
+  await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
+
+  await page.getByRole('button', { name: 'Configurer le batiment' }).click();
+  const structure = page.getByRole('dialog', { name: 'Configurer le batiment' });
+  await expect(structure.getByRole('button', { name: 'Structure inchangée' })).toBeDisabled();
+  await structure.getByRole('button', { name: 'Diminuer — Portes par étage' }).click();
+  await structure.getByRole('button', { name: 'Retirer 2 portes' }).click();
+  const confirmation = structure.getByRole('alert');
+  await expect(confirmation).toContainText('RDC 02, 1er 12');
+  await confirmation.getByRole('button', { name: 'Non' }).click();
+  await expect(confirmation).toBeHidden();
+  await structure.getByRole('button', { name: 'Fermer la configuration' }).click();
+  await expect(page.getByRole('button', { name: 'Porte 12, Pas encore fait' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeVisible();
+  await page.close();
+});
+
+test('offers manual placement from the terrain list, without the edition mode', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await openFieldMap(page);
+
+  await page.getByRole('button', { name: '+ Ajouter un bâtiment absent de la carte' }).click();
+  await expect(page.getByText('Touche la carte à l’emplacement exact du bâtiment')).toBeVisible();
+  await clickOnMap(page, FOOTPRINTS.vide);
+  await expect(page.getByRole('heading', { name: 'Bâtiment posé manuellement' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Saisir l’adresse' })).toBeVisible();
+  await page.close();
+});
+
+test('writes the passage note before choosing the result', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await openFieldMap(page);
+  await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
+  await page.getByRole('button', { name: 'Porte 12, Pas encore fait' }).click();
+  const detail = page.getByRole('dialog', { name: 'Fiche de la porte 12' });
+  await detail.getByRole('button', { name: '+ note pour ce passage' }).click();
+  await detail.getByLabel('Note pour porte 12').fill('Repasser le soir');
+  await detail.getByRole('button', { name: 'Absent', exact: true }).click();
+  await page.getByRole('button', { name: 'Porte 12, Absent' }).click();
+  await expect(page.getByRole('dialog', { name: 'Fiche de la porte 12' }).locator('.door-history')).toContainText('Repasser le soir');
+  await page.close();
+});
+
+test('keeps the map feedback visible on a short phone screen', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 375, height: 640 } });
+  await page.goto('/technical-map');
+  // Le cadrage mobile charge moins d'emprises : seule la liste conditionne ce parcours.
+  await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 45_000 });
+  await page.getByRole('button', { name: 'Marquer une porte' }).click();
+  await page.getByRole('button', { name: 'Choisir une emprise sur la carte' }).click();
+  await expect(page.getByText('Touche l’emprise du bâtiment sur la carte')).toBeVisible();
+  await page.getByRole('button', { name: 'Annuler' }).click();
+  await enterEdition(page);
+  await page.getByRole('button', { name: 'Ajouter un bâtiment' }).click();
+  await page.getByRole('button', { name: 'Annuler' }).click();
+  await expect(page.locator('.terrain-status')).toBeVisible();
+  await expect(page.locator('.terrain-status')).toHaveText('Pose annulée. Rien n’a été créé.');
   await page.close();
 });

@@ -92,6 +92,12 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
     opened.select(building, { persisted: true, suggestion: null });
     setDataVersion((version) => version + 1);
   }, [opened]);
+  // Une adresse écrite en base doit remonter dans la liste et la recherche de la zone.
+  const renameBuilding = useCallback(async (addressLabel: string) => {
+    const wasPersisted = opened.persisted;
+    await opened.rename(addressLabel);
+    if (wasPersisted) setDataVersion((version) => version + 1);
+  }, [opened]);
   const account = useMemo(
     () => ({ displayName: member.displayName, onOpenSettings: () => setSettingsOpen(true), onSignOut: requestSignOut }),
     [member.displayName, requestSignOut]
@@ -124,6 +130,8 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
         ensureBuildingExists={opened.ensureExists}
         markers={markers}
         onBuildingChange={changeBuilding}
+        canRenameBuilding={member.role === 'admin' || !opened.persisted}
+        onRenameBuilding={renameBuilding}
         onBuildingDelete={() => setDataVersion((version) => version + 1)}
         onClose={() => { opened.close(); setDataVersion(version => version + 1); }}
         outbox={outbox}

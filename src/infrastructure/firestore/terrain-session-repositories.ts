@@ -19,6 +19,7 @@ export type ZoneWriter = {
 
 export type BuildingWriter = {
   create(building: Building): Promise<void>;
+  rename(buildingId: string, addressLabel: string): Promise<void>;
   delete(buildingId: string): Promise<void>;
 };
 
@@ -162,6 +163,9 @@ export function createTerrainSessionRepositories(input: {
       async create(building) {
         await input.buildingWriter.create(building);
         cacheBuildings([building]);
+      },
+      async rename(buildingId, addressLabel) {
+        await input.buildingWriter.rename(buildingId, addressLabel);
       },
       async delete(buildingId) {
         await input.buildingWriter.delete(buildingId);

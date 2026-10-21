@@ -27,6 +27,11 @@ export function MapPreview(): ReactElement {
     opened.select(building, { persisted: true, suggestion: null });
     setDataVersion((version) => version + 1);
   }, [opened]);
+  const renameBuilding = useCallback(async (addressLabel: string) => {
+    const wasPersisted = opened.persisted;
+    await opened.rename(addressLabel);
+    if (wasPersisted) setDataVersion((version) => version + 1);
+  }, [opened]);
   return (
     <>
       <MapLoadingBoundary><Suspense fallback={<div className="workspace-map-loading" role="status">Chargement de la carte…</div>}>
@@ -48,6 +53,8 @@ export function MapPreview(): ReactElement {
         ensureBuildingExists={opened.ensureExists}
         markers={markers}
         onBuildingChange={changeBuilding}
+        canRenameBuilding
+        onRenameBuilding={renameBuilding}
         onBuildingDelete={() => setDataVersion((version) => version + 1)}
         onClose={opened.close}
         outbox={outbox}

@@ -12,6 +12,8 @@ import type { FieldVisitSync } from '../../visits/model/use-field-visit-sync';
 import { isTrustedDevice, setTrustedDevice } from '../../../infrastructure/offline/device-storage';
 import { CADASTRAL_SUGGESTION_NOTICE, type CadastralSuggestion } from '../model/cadastral-structure';
 import { buildingStaleness } from '../model/building-staleness';
+import { hasPlaceholderAddress, MAX_ADDRESS_LENGTH, normalizeAddressLabel } from '../model/building-address';
+import { planStructureFromPreview, structurePlanLabel } from '../model/structure-plan';
 import { doorsForGroupedAbsence, requiresDoNotDisturbConfirmation } from '../../../domain/workspace/follow-up';
 import { Stepper } from '../../../design/components';
 import { firestoreWriteErrorMessage } from '../../../infrastructure/firebase/firestore-errors';
@@ -49,6 +51,9 @@ type BuildingVisitSheetProps = {
    */
   ensureBuildingExists?(): Promise<void>;
   onBuildingChange(building: Building): void;
+  /** Vrai si ce compte peut saisir l'adresse : avant la création du document, ou en coordinateur. */
+  canRenameBuilding?: boolean;
+  onRenameBuilding?(addressLabel: string): Promise<void>;
   /** Le bâtiment n'a plus de document : la carte et la liste doivent le laisser retomber en gris. */
   onBuildingDelete?(building: Building): void;
   onClose(): void;
@@ -90,7 +95,7 @@ function manualTargetLine(target: DoorStructureTarget): string {
   return `${target.floor} | ${target.label} | ${identity}`;
 }
 
-export function BuildingVisitSheet({ authorId, building, canEditStructure, canDeleteVisitedDoors, outbox, markers, repositories, structureSuggestion = null, sync, ensureBuildingExists, onBuildingChange, onBuildingDelete, onClose }: BuildingVisitSheetProps): ReactElement | null {
+export function BuildingVisitSheet({ authorId, building, canEditStructure, canDeleteVisitedDoors, outbox, markers, repositories, structureSuggestion = null, sync, ensureBuildingExists, onBuildingChange, canRenameBuilding = false, onRenameBuilding, onBuildingDelete, onClose }: BuildingVisitSheetProps): ReactElement | null {
   const [doors, setDoors] = useState<readonly Door[]>([]);
   const [structureDoors, setStructureDoors] = useState<readonly Door[]>([]);
   const [statuses, setStatuses] = useState<readonly Status[]>([]);
@@ -125,6 +130,12 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const [confirmDeletion, setConfirmDeletion] = useState<string | null>(null);
   const [confirmFloorDeletion, setConfirmFloorDeletion] = useState<number | null>(null);
   const [confirmStructureReset, setConfirmStructureReset] = useState(false);
+  /** Un plan qui archive des portes demande un second geste explicite. */
+  const [confirmStructureArchive, setConfirmStructureArchive] = useState(false);
+  /** Brouillon d'adresse, rattaché au bâtiment pour ne jamais fuir vers un autre. */
+  const [addressDraft, setAddressDraft] = useState<{ buildingId: string; value: string } | null>(null);
+  const [addressPending, setAddressPending] = useState(false);
+  const [addressMessage, setAddressMessage] = useState('');
   const [ambiguities, setAmbiguities] = useState<readonly StructureAmbiguity[]>([]);
   const [structureMessage, setStructureMessage] = useState('');
   const [structurePending, setStructurePending] = useState(false);
@@ -228,6 +239,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
   const showsCadastralNotice = applicableStructureSuggestion !== null && draft === null;
   const editStructureDraft = (changes: Partial<{ floorCount: string; doorsPerFloor: string }>) => {
     setStructureDraft({ buildingId: openedBuildingId ?? '', floorCount, doorsPerFloor, ...changes });
+    setConfirmStructureArchive(false);
   };
 
   const statusesById = useMemo(() => byId(statuses), [statuses]);
@@ -242,6 +254,11 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       return `${floorIndex}${index + 1}`.padStart(2, '0');
     }));
   }, [floorCount, doorsPerFloor, numbering]);
+  // Identifiants provisoires : ce plan sert à annoncer l'effet du bouton, pas à écrire.
+  const structurePlan = useMemo(() => {
+    let previewId = 0;
+    return planStructureFromPreview(structurePreview, structureDoors, () => `preview-door-${previewId++}`);
+  }, [structurePreview, structureDoors]);
   const paletteDoor = structureLoadedBuildingId === building?.id ? doors.find((door) => door.id === openPaletteDoorId) ?? null : null;
   const selectedEntry = sync?.entries.find((entry) => doors.some(door => door.id === entry.doorId) && entry.doorId === selectedDoorId && entry.state !== 'pending')
     ?? sync?.entries.find((entry) => doors.some(door => door.id === entry.doorId) && entry.state !== 'pending')
@@ -416,6 +433,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
 
   function openStructure(mode: 'quick-floor' | 'manage'): void {
     setStructureMessage('');
+    setConfirmStructureArchive(false);
     setStructureMode(mode);
   }
 
@@ -594,6 +612,45 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     }
   }
 
+  function chooseNumbering(next: typeof numbering): void {
+    setNumbering(next);
+    setConfirmStructureArchive(false);
+  }
+
+  async function applyStructurePlan(): Promise<void> {
+    const archivesVisitedDoors = structurePlan.archived.some((door) => door.lastVisitId);
+    if (archivesVisitedDoors && !canDeleteVisitedDoors) {
+      reportStructure('Ce réglage retirerait des portes déjà visitées : seul le coordinateur peut le faire. Pour ajouter des portes ou un étage, augmente les réglages ou utilise « Modifier ».');
+      return;
+    }
+    if (structurePlan.archived.length > 0 && !confirmStructureArchive) {
+      setConfirmStructureArchive(true);
+      return;
+    }
+    setConfirmStructureArchive(false);
+    await runStructure(() => planStructureFromPreview(structurePreview, structureDoors, () => `door-${crypto.randomUUID()}`).targets);
+  }
+
+  async function saveAddress(): Promise<void> {
+    if (!addressDraft || !onRenameBuilding || addressPending) return;
+    const label = normalizeAddressLabel(addressDraft.value);
+    if (!label) {
+      setAddressMessage('Saisis une adresse, par exemple « 12 rue des Filatiers ».');
+      return;
+    }
+    setAddressPending(true);
+    setAddressMessage('');
+    try {
+      await onRenameBuilding(label);
+      setAddressDraft(null);
+      setMessage(doors.length === 0 ? 'Adresse retenue : elle sera enregistrée avec la structure du bâtiment.' : 'Adresse enregistrée.');
+    } catch (error) {
+      setAddressMessage(firestoreWriteErrorMessage(error, 'L’adresse n’a pas été enregistrée. Vérifie la connexion puis réessaie.'));
+    } finally {
+      setAddressPending(false);
+    }
+  }
+
   function resolveAmbiguity(ambiguity: StructureAmbiguity, doorId: string): void {
     const lines = parseManualTargets(manualPlan).map((target) => (
       target.floor === ambiguity.target.floor && normalizeDoorLabel(target.label) === normalizeDoorLabel(ambiguity.target.label)
@@ -610,7 +667,18 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
       <aside aria-label="Detail du batiment" className={`building-sheet${paletteDoor ? ' building-sheet--door-detail' : ''}`} role="dialog" aria-modal="true" tabIndex={-1} ref={buildingPanel}>
         <section className="building-identity">
           <button className="building-zone-back" onClick={onClose} type="button">‹ Retour à la zone</button>
-          <h2>{building.addressLabel}</h2>
+          {addressDraft?.buildingId === building.id ? <form className="building-address-form" onSubmit={(event) => { event.preventDefault(); void saveAddress(); }}>
+            <label>Adresse du bâtiment<input autoFocus maxLength={MAX_ADDRESS_LENGTH} onChange={(event) => setAddressDraft({ buildingId: building.id, value: event.target.value })} placeholder="12 rue des Filatiers" value={addressDraft.value} /></label>
+            <span className="building-address-actions"><button className="primary-action" disabled={addressPending} type="submit">{addressPending ? 'Enregistrement…' : 'Enregistrer l’adresse'}</button><button className="text-button" disabled={addressPending} onClick={() => { setAddressDraft(null); setAddressMessage(''); }} type="button">Annuler</button></span>
+            {addressMessage && <p className="building-address-error" role="alert">{addressMessage}</p>}
+          </form> : <>
+            <h2>{building.addressLabel}</h2>
+            {hasPlaceholderAddress(building)
+              ? <p className="building-address-missing">{canRenameBuilding && onRenameBuilding
+                ? <>Adresse à saisir : c’est elle qui permet de retrouver ce bâtiment dans la liste. <button className="text-button" onClick={() => { setAddressDraft({ buildingId: building.id, value: '' }); setAddressMessage(''); }} type="button">Saisir l’adresse</button></>
+                : 'Adresse à compléter par un coordinateur.'}</p>
+              : canRenameBuilding && onRenameBuilding && <button className="text-button building-address-edit" onClick={() => { setAddressDraft({ buildingId: building.id, value: building.addressLabel }); setAddressMessage(''); }} type="button">Modifier l’adresse</button>}
+          </>}
           <div className="building-meta-row">
             {doors.length > 0 && <p className="building-structure-summary">{floors.length} niveau{floors.length > 1 ? 'x' : ''} · {total.doorCount} portes</p>}
             {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => { setEditing((current) => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => openStructure('manage')} type="button">Structure</button>{canDeleteVisitedDoors && <button aria-label={doors.length > 0 ? 'Supprimer la structure du bâtiment' : 'Retirer le bâtiment'} className="structure-reset" disabled={structurePending} onClick={() => void resetStructure()} title={doors.length > 0 ? 'Supprimer la structure' : 'Retirer le bâtiment'} type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>}</div>}
@@ -678,6 +746,10 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
             <h3>Porte {paletteDoor.label} · {floorLabel(paletteDoor.floor)}</h3>
             <p className="door-detail-subline">Dernier passage {buildingStaleness(paletteDoor.lastVisitAt, new Date(), Boolean(paletteDoor.lastVisitId)).label}</p>
             <p className="eyebrow">Résultat du passage</p>
+            {/* La note part avec le résultat : elle s'écrit avant, car toucher un résultat ferme la fiche. */}
+            {showPassageNote
+              ? <label className="passage-note-field">Note jointe au passage<textarea aria-label={`Note pour porte ${paletteDoor.label}`} autoFocus maxLength={280} onChange={(event) => setNote(event.target.value)} placeholder="Écris la note, puis touche le résultat" rows={2} value={note} /></label>
+              : <button aria-expanded={false} className="passage-note-toggle" onClick={() => setShowPassageNote(true)} type="button">+ note pour ce passage</button>}
             <div className="status-palette"><button disabled={saving || !statusesById.get('contacted')?.active} className="status-swatch open-result" onClick={() => void savePassage(paletteDoor, 'contacted')} type="button"><span aria-hidden="true" /><b>Contact établi</b></button><button disabled={saving || !statusesById.get('retry')?.active} className="status-swatch away-result" onClick={() => void savePassage(paletteDoor, 'retry')} type="button"><span aria-hidden="true" /><b>Absent</b></button><button disabled={saving || !statusesById.get('linked')?.active} className="status-swatch linked-result" onClick={() => void savePassage(paletteDoor, 'linked')} type="button"><span aria-hidden="true" /><b>Attaché à l'effort — plus à revisiter</b></button><button disabled={saving || !statusesById.get('do-not-return')?.active} className="status-swatch dnd-result" onClick={() => void savePassage(paletteDoor, 'do-not-return')} type="button"><span aria-hidden="true" /><b>Ne pas déranger</b></button><button disabled={saving || !statusesById.get('locked')?.active} className="status-swatch locked-result" onClick={() => void savePassage(paletteDoor, 'locked')} type="button"><span aria-hidden="true" /><b>Accès bloqué (interphone / code)</b></button></div>
             {dndCorrection?.doorId === paletteDoor.id && <div className="dnd-correction" role="alert">
               <b>Cette personne a demandé à ne plus être dérangée.</b>
@@ -692,8 +764,6 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
             <ol className="door-history">{historyState !== 'ready' ? <li className="door-history-empty">{historyState === 'loading' ? 'Chargement de l’historique…' : 'Historique indisponible. Les passages conservés n’ont pas été effacés.'}</li> : doorVisits.length === 0 ? <li className="door-history-empty">Aucun passage enregistré.</li> : doorVisits.slice(0, historyLimit).map((visit) => { const status = statusesById.get(visit.statusId); return <li key={visit.id} style={{ '--history-status': status?.color ?? 'var(--st-todo)' } as CSSProperties}><i aria-hidden="true" className="door-history-dot" /><span className="door-history-body"><strong>{new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(visit.occurredAt))} · {buildingStaleness(visit.occurredAt).label}</strong><span>{visit.authorName}{visit.note ? ` — « ${visit.note} »` : status ? ` — ${status.label}` : ''}</span></span></li>; })}</ol>
             {historyState === 'error' && <button type="button" onClick={() => void openDoor(paletteDoor)}>Réessayer l’historique</button>}
             {historyState === 'ready' && historyLimit < doorVisits.length && <button type="button" onClick={() => setHistoryLimit(limit => limit + 25)}>Afficher les passages précédents ({doorVisits.length - historyLimit})</button>}
-            <button aria-expanded={showPassageNote} className="passage-note-toggle" onClick={() => setShowPassageNote((current) => !current)} type="button">+ note courte</button>
-            {showPassageNote && <label className="passage-note-field">Note du passage<textarea aria-label={`Note pour porte ${paletteDoor.label}`} maxLength={280} onChange={(event) => setNote(event.target.value)} rows={2} value={note} /></label>}
             <p className="privacy-note">La composition et ce marqueur ne sont visibles que dans cette fiche.</p>
           </section>
         </div>}
@@ -711,9 +781,14 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
               {showsCadastralNotice && <p className="structure-suggestion">{CADASTRAL_SUGGESTION_NOTICE}</p>}
               <div className="structure-fields"><label><span>Étages au-dessus du rez-de-chaussée</span><Stepper label="Étages au-dessus du rez-de-chaussée" max={20} min={0} onChange={(value) => editStructureDraft({ floorCount: String(value) })} unit="étages" value={Math.max(0, Number(floorCount) || 0)} gloss={`RDC compris = ${Math.max(1, Number(floorCount) + 1)} niveaux`} /></label><label><span>Portes par étage</span><Stepper label="Portes par étage" max={50} min={1} onChange={(value) => editStructureDraft({ doorsPerFloor: String(value) })} value={Math.max(1, Number(doorsPerFloor) || 1)} gloss="modifiable étage par étage" /></label></div>
               <p className="structure-numbering-label">Numérotation</p>
-              <div className="numbering-options" aria-label="Numérotation"><button aria-pressed={numbering === 'floor'} onClick={() => setNumbering('floor')} type="button">01, 02 · 11, 12</button><button aria-pressed={numbering === 'hundreds'} onClick={() => setNumbering('hundreds')} type="button">101, 102 · 201</button><button aria-pressed={numbering === 'serial'} onClick={() => setNumbering('serial')} type="button">1 à {structurePreview.flat().length}, en suite</button></div>
+              <div className="numbering-options" aria-label="Numérotation"><button aria-pressed={numbering === 'floor'} onClick={() => chooseNumbering('floor')} type="button">01, 02 · 11, 12</button><button aria-pressed={numbering === 'hundreds'} onClick={() => chooseNumbering('hundreds')} type="button">101, 102 · 201</button><button aria-pressed={numbering === 'serial'} onClick={() => chooseNumbering('serial')} type="button">1 à {structurePreview.flat().length}, en suite</button></div>
               <section className="structure-preview" aria-label="Aperçu vivant"><p className="eyebrow">Aperçu</p>{structurePreview.slice().reverse().map((labels, reverseIndex) => { const floorNumber = structurePreview.length - reverseIndex - 1; return <div key={floorNumber}><strong>{floorLabel(floorNumber)}</strong>{labels.map((label) => <span key={label}>{label}</span>)}</div>; })}<small>Rue · entrée principale</small></section>
-              <button className="primary-action" disabled={structurePending} onClick={() => void runStructure(() => structurePreview.flatMap((labels, floorIndex) => labels.map((label, index) => ({ floor: floorIndex, label, sortOrder: floorIndex * labels.length + index, newDoorId: `door-${crypto.randomUUID()}` }))))} type="button">{structurePending ? 'Enregistrement…' : `Créer ${structurePreview.flat().length} portes`}</button>
+              {confirmStructureArchive && structurePlan.archived.length > 0 && <div className="structure-reset-confirm structure-archive-confirm" role="alert">
+                <b>Retirer {structurePlan.archived.length === 1 ? 'la porte' : `ces ${structurePlan.archived.length} portes`} : {structurePlan.archived.map((door) => `${floorLabel(door.floor)} ${door.label}`).join(', ')} ?</b>
+                <span>Elles disparaissent de la coupe. Leurs passages restent dans l’historique. Les {structurePlan.kept} autres portes gardent leur suivi.</span>
+                <span className="structure-reset-actions"><button disabled={structurePending} onClick={() => void applyStructurePlan()} type="button">Oui, retirer</button><button onClick={() => setConfirmStructureArchive(false)} type="button">Non</button></span>
+              </div>}
+              <button className="primary-action" disabled={structurePending || (structurePlan.created === 0 && structurePlan.archived.length === 0)} onClick={() => void applyStructurePlan()} type="button">{structurePending ? 'Enregistrement…' : structurePlanLabel(structurePlan)}</button>
               <button className="text-button" onClick={() => { if (!showManual) setManualPlan(structureDoors.filter((door) => door.active).map((door) => `${door.floor} | ${door.label} | ${door.id}`).join('\n')); setShowManual((current) => !current); }} type="button">Ajustement manuel</button>
               {showManual && <><label className="manual-plan-label">Plan manuel (etage | porte | ID ou new:ID)<textarea aria-label="Plan manuel de portes" onChange={(event) => setManualPlan(event.target.value)} rows={5} value={manualPlan} /></label><button className="secondary-action" onClick={() => void runStructure(() => parseManualTargets(manualPlan))} type="button">Appliquer le plan manuel</button></>}
               <details className="structure-advanced"><summary>Portes archivées</summary>

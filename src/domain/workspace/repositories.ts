@@ -24,6 +24,8 @@ export interface ZoneRepository {
 export interface BuildingRepository {
   get(id: string): Promise<Building | null>;
   create(building: Building): Promise<void>;
+  /** Remplace l'étiquette d'adresse. L'ancrage reste l'ID-RNB : rien n'est géocodé. */
+  rename(buildingId: string, addressLabel: string): Promise<void>;
   /**
    * Dématérialise un bâtiment : le document disparaît et l'emprise redevient une simple
    * forme grise du fond de carte (principe 7). Refusé tant qu'une porte subsiste, même

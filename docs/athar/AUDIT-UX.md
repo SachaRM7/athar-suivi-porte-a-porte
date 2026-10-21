@@ -5,7 +5,8 @@ Périmètre : tous les écrans livrés (connexion, carte terrain desktop/mobile,
 dialogue de structure, préparation hors ligne, sorties, pilotage, membres, réglages), comparés à
 `00-BRIEF.md`, `01-DESIGN-SYSTEM.md` et `04-SCREENS.md`.
 
-Rien n'a été corrigé : ce document liste et priorise. Chaque entrée donne le constat, l'endroit dans
+Ce document liste et priorise. Les cinq points P0 (§1) ont été corrigés ensuite, voir
+« Suivi » en fin de document. Chaque entrée donne le constat, l'endroit dans
 le code, l'effet sur l'usage et une piste.
 
 Gravité :
@@ -300,3 +301,22 @@ Piste : lot dédié de mise en conformité des écrans secondaires (jetons, typo
 4. **Uniformiser** : écrans secondaires sur les jetons (4), tutoiement et accents (3.3, 3.4),
    navigation du compte (5).
 5. **Nettoyer** : écarts de spec restants (6), dette (8).
+
+---
+
+## Suivi
+
+**2026-10-21 — P0 corrigés** (branche `audit-ux`) :
+
+- 1.1 — L'adresse se saisit dans l'en-tête de la fiche. Tout membre la saisit avant la création du
+  document (elle part avec lui) ; ensuite, le coordinateur seul, selon les règles actuelles
+  (question ouverte dans `QUESTIONS.md`). Une étiquette de repli invite à la saisir.
+- 1.2 — Le dialogue de structure conserve les portes déjà décrites au même étage sous le même numéro.
+  Le bouton annonce l'effet réel (« Créer 16 portes », « Ajouter 2 portes », « Retirer 3 portes ») ;
+  retirer des portes demande une confirmation qui les nomme, et retirer une porte visitée reste
+  réservé au coordinateur.
+- 1.3 — « + Ajouter un bâtiment absent de la carte » en fin de liste, en mode Terrain.
+- 1.4 — « + note pour ce passage » est placé au-dessus des résultats.
+- 1.5 — La ligne d'état n'est plus masquée sur les écrans courts et passe au-dessus des boutons
+  flottants ; « Choisir une emprise sur la carte » affiche un bandeau de consigne avec « Annuler ».
+  Les messages de la carte sont tutoyés et accentués ; « Fond Toulouse local prêt. » ne s'affiche plus.

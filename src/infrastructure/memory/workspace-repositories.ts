@@ -61,6 +61,11 @@ export function createMemoryWorkspaceRepositories(snapshot: WorkspaceSnapshot): 
         if (!zones.has(building.zoneId)) throw new Error('The building zone does not exist.');
         buildings.set(building.id, copy(building));
       },
+      async rename(buildingId, addressLabel) {
+        const building = buildings.get(buildingId);
+        if (!building) throw new Error('Building not found.');
+        buildings.set(buildingId, { ...copy(building), addressLabel });
+      },
       async delete(buildingId) {
         if ([...doors.values()].some((door) => door.buildingId === buildingId)) {
           throw new Error('Retire d’abord les portes de ce bâtiment : leurs passages ne peuvent pas rester sans bâtiment.');

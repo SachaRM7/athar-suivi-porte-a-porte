@@ -21,7 +21,7 @@ function setup(remote: WorkspaceReadRepositories, outbox = new MemoryOutbox(), m
       markers,
       structureWriter: { apply: async () => { throw new Error('not used'); } },
       zoneWriter: { save: async () => { throw new Error('not used'); }, delete: async () => { throw new Error('not used'); } },
-      buildingWriter: { create: async () => { throw new Error('not used'); }, delete: async () => { throw new Error('not used'); } }
+      buildingWriter: { create: async () => { throw new Error('not used'); }, rename: async () => { throw new Error('not used'); }, delete: async () => { throw new Error('not used'); } }
     })
   };
 }

@@ -45,6 +45,7 @@ import {
 } from '../../buildings/model/building-staleness';
 import { cadastralSuggestion, type CadastralSuggestion } from '../../buildings/model/cadastral-structure';
 import { AccountMenu } from './AccountMenu';
+import { footprintBuildingLabel, MANUAL_BUILDING_LABEL } from '../../buildings/model/building-address';
 import type { SelectBuildingOptions } from '../model/use-opened-building';
 import { LocalPmtilesSource } from '../infrastructure/local-pmtiles-source';
 import { firstAvailableArchive } from '../model/footprint-archive';
@@ -202,6 +203,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const [attachedBuildingCount, setAttachedBuildingCount] = useState<number | null>(null);
   const [editing, setEditing] = useState<'drawing' | 'editing' | null>(null);
   const [placing, setPlacing] = useState(false);
+  /** Après « Choisir une emprise sur la carte » : la consigne reste affichée jusqu'à l'appui. */
+  const [pickingFootprint, setPickingFootprint] = useState(false);
   /**
    * `null` signifie « pas encore touché » : les champs reflètent alors la zone sélectionnée.
    * Les brouillons sont dérivés au rendu plutôt que recopiés par un effet, sinon chaque
@@ -449,7 +452,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       id: identifier,
       // Le tuileset ne porte aucune adresse et `03-CARTO.md` écarte le géocodage : l'ID-RNB
       // tient lieu d'étiquette jusqu'à ce que quelqu'un saisisse l'adresse dans la fiche.
-      addressLabel: typeof feature.properties?.label === 'string' ? feature.properties.label : `Bâtiment ${identifier}`,
+      addressLabel: typeof feature.properties?.label === 'string' ? feature.properties.label : footprintBuildingLabel(identifier),
       location: { latitude, longitude },
       geohash: geohashForLocation([latitude, longitude]),
       zoneId: zone.id,
@@ -549,13 +552,13 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           instance.getCanvas().style.cursor = '';
           const zone = footprintContext.current.zone;
           if (!zone) {
-            setMessage('Choisissez une zone avant de poser un bâtiment.');
+            setMessage('Choisis une zone avant de poser un bâtiment.');
             return;
           }
           const location: GeoPoint = { latitude: event.lngLat.lat, longitude: event.lngLat.lng };
           const building: Building = {
             id: `local_${crypto.randomUUID()}`,
-            addressLabel: 'Bâtiment posé manuellement',
+            addressLabel: MANUAL_BUILDING_LABEL,
             location,
             geohash: geohashForLocation([location.latitude, location.longitude]),
             zoneId: zone.id,
@@ -578,6 +581,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           .find((feature) => feature.source === LOCAL_BUILDING_SOURCE || feature.state?.inZone === true);
         // Appui dans le vide : aucune création, aucune écriture.
         if (!hit) return;
+        setPickingFootprint(false);
         void openFootprint(hit).catch(() => setMessage('Bâtiment indisponible. Vérifie le réseau ou la préparation hors ligne puis réessaie.'));
       });
 
@@ -587,7 +591,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       instance.on('sourcedata', (event) => { if (event.sourceId === FOOTPRINT_SOURCE && event.isSourceLoaded) paintFootprints(); });
       instance.addControl(new NavigationControl({ showCompass: false }), 'top-right');
       setMapError(false);
-      setMessage((current) => current.startsWith('Emprises indisponibles') ? current : 'Fond Toulouse local prêt.');
+      // Une carte prête n'a rien à annoncer : la ligne d'état reste libre pour les vrais retours.
+      setMessage((current) => current.startsWith('Emprises indisponibles') ? current : '');
       void refreshViewport().catch((error) => { if (!(error instanceof Error) || error.name !== 'ReadAbortedError') setMessage('Données de carte incomplètes. Rapproche la carte ou réessaie.'); });
     };
     const initializeAfterStyleLoad = () => {
@@ -654,20 +659,23 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     setZoneDraft({ name: 'Nouvelle zone', color: DEFAULT_ZONE_COLOR });
     setEditing('drawing');
     setAttachedBuildingCount(null);
-    setMessage('Tracez le contour, puis renseignez le nom et la couleur.');
+    setMessage('Trace le contour, puis renseigne le nom et la couleur.');
   };
 
   const startBuildingPlacement = () => {
     if (!canCreateBuildings) return;
     if (!footprintContext.current.zone) {
-      setMessage('Choisissez une zone avant de poser un bâtiment.');
+      setMessage('Choisis une zone avant de poser un bâtiment.');
       return;
     }
     placingBuilding.current = true;
     setPlacing(true);
+    setPickingFootprint(false);
+    setPanelHeight('peek');
     const canvas = map.current?.getCanvas();
     if (canvas) canvas.style.cursor = 'crosshair';
-    setMessage('Touchez la carte a l emplacement exact du batiment.');
+    // La consigne vit dans le bandeau : la ligne d'état ne la répète pas.
+    setMessage('');
   };
 
   const cancelBuildingPlacement = () => {
@@ -675,7 +683,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     setPlacing(false);
     const canvas = map.current?.getCanvas();
     if (canvas) canvas.style.cursor = '';
-    setMessage('Pose annulee. Rien n a ete cree.');
+    setMessage('Pose annulée. Rien n’a été créé.');
   };
 
   const startEditing = () => {
@@ -696,12 +704,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     setZoneDraft({ name: zone.name, color: zone.color });
     setEditing('editing');
     setAttachedBuildingCount(null);
-    setMessage(`Edition de ${zone.name}. Ajustez le contour, le nom ou la couleur.`);
+    setMessage(`Édition de ${zone.name}. Ajuste le contour, le nom ou la couleur.`);
   };
 
   const saveZone = async () => {
     const draft = draw.current?.getSnapshot().map(geometryFromFeature).find((geometry): geometry is ZoneGeometry => geometry !== null);
-    if (!draft) { setMessage('Aucun polygone valide a enregistrer.'); return; }
+    if (!draft) { setMessage('Trace un contour fermé avant d’enregistrer la zone.'); return; }
     const name = draftZoneName.trim();
     if (!name) { setMessage('Le nom de la zone est obligatoire.'); return; }
     const previous = editing === 'editing' ? zones.current.find((zone) => zone.id === selectedZoneId) : undefined;
@@ -722,7 +730,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       draw.current?.stop();
       draw.current = null;
       setEditing(null);
-      setMessage(`Zone enregistree. ${attachedCount} batiment(s) rattache(s) par point-dans-polygone.`);
+      setMessage(`Zone enregistrée · ${attachedCount} bâtiment${attachedCount > 1 ? 's' : ''} dans son contour.`);
       await refreshViewport();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Enregistrement de la zone impossible.');
@@ -738,7 +746,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       assertZone(zone);
       setSavingZone(true);
       await repositories.zones.save(zone);
-      setMessage(`Zone « ${zone.name} » mise a jour.`);
+      setMessage(`Zone « ${zone.name} » mise à jour.`);
       await refreshViewport();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Modification de la zone impossible.');
@@ -799,10 +807,15 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       <h1 className="terrain-sr-only">Zones de Toulouse</h1>
 
       <div className="terrain-map-stage">
-        {placing && (
+        {placing ? (
           <p className="hint" role="status">
             Touche la carte à l’emplacement exact du bâtiment
             <button onClick={cancelBuildingPlacement} type="button">Annuler</button>
+          </p>
+        ) : pickingFootprint && (
+          <p className="hint" role="status">
+            Touche l’emprise du bâtiment sur la carte
+            <button onClick={() => setPickingFootprint(false)} type="button">Annuler</button>
           </p>
         )}
         <div aria-label="Carte MapLibre des zones" className={placing ? 'workspace-map placing' : 'workspace-map'} ref={element} />
@@ -936,6 +949,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
                   </li>
                 ))}
               </ul>}
+            {canCreateBuildings && selectedZone && mode === 'terrain' && <button className="building-list-add" disabled={placing} onClick={startBuildingPlacement} type="button">+ Ajouter un bâtiment absent de la carte</button>}
             {(terrainPage.partial || terrainPage.index > 0) && <nav className="terrain-pagination" aria-label="Pages des bâtiments"><button disabled={terrainPage.index === 0 || terrainPage.phase === 'loading'} onClick={terrainPage.previous} type="button">Précédente</button><span>Page {terrainPage.index + 1}</span><button disabled={!terrainPage.nextCursor || terrainPage.phase !== 'ready'} onClick={terrainPage.next} type="button">Suivante</button></nav>}
             <span className="terrain-visible-count">
               {listReady ? `${zoneBuildingCount} bâtiment(s) ${terrainPage.partial ? 'sur cette page' : 'suivis'}` : 'Liste en attente de lecture'} · {mapError ? 'carte indisponible' : `${visibleBuildingCount} chargés à l’écran`}
@@ -999,7 +1013,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         <label className="terrain-search"><span className="terrain-sr-only">Adresse du bâtiment à marquer</span><input placeholder="Adresse d’un bâtiment suivi" value={markingSearch} onChange={event => setMarkingSearch(event.target.value)} /></label>
         <ul className="marking-candidates">{candidates.filter(entry => matchesAddress(entry.building.addressLabel, markingSearch)).map(entry => <li key={entry.building.id}><button type="button" onClick={() => openListedBuilding(entry.building)}>{entry.building.addressLabel}<small>{entry.doorCount} portes décrites</small></button></li>)}</ul>
         {candidates.filter(entry => matchesAddress(entry.building.addressLabel, markingSearch)).length === 0 && <p>Aucun bâtiment suivi disponible pour ce choix. Les portes sorties du suivi ne sont pas proposées.</p>}
-        <button className="ds-button ds-button--brand" type="button" onClick={() => { setMarkingOpen(false); setPanelHeight('peek'); setMessage('Touche l’emprise du bâtiment sur la carte pour ouvrir sa fiche.'); }}>Choisir une emprise sur la carte</button>
+        <button className="ds-button ds-button--brand" type="button" onClick={() => { setMarkingOpen(false); setPanelHeight('peek'); setMessage(''); setPickingFootprint(true); }}>Choisir une emprise sur la carte</button>
         <button className="ds-button ds-button--ghost" type="button" onClick={() => setMarkingOpen(false)}>Annuler</button>
       </Dialog>
       <Dialog open={confirmZoneDeletion && selectedZone !== null} title="Supprimer cette zone ?" onClose={() => setConfirmZoneDeletion(false)}><p>Supprimer « {selectedZone?.name} » ? Aucun bâtiment, aucune porte et aucun passage ne sera supprimé.</p><button className="ds-button ds-button--brand" disabled={savingZone} onClick={() => void deleteSelectedZone(true)} type="button">Supprimer la zone</button><button className="ds-button ds-button--ghost" onClick={() => setConfirmZoneDeletion(false)} type="button">Annuler</button></Dialog>

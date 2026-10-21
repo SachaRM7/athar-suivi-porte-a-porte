@@ -984,3 +984,45 @@
   .terrain-pagination { flex-wrap: wrap; }
   .terrain-toolbar { gap: 4px; }
 }
+
+/* Correctifs d'audit (P0) : ajout de bâtiment en mode Terrain et retours toujours visibles. */
+.terrain-status:empty { display: none; }
+
+.building-list-add {
+  width: 100%;
+  min-height: var(--touch);
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1.5px dashed var(--hairline);
+  border-radius: var(--r-field);
+  background: none;
+  color: var(--brand);
+  cursor: pointer;
+  font: 500 var(--t-125)/1.2 var(--font-ui);
+}
+
+.building-list-add:disabled { color: var(--ink-faint); cursor: default; }
+
+@media (max-width: 760px) {
+  /* La ligne d'état passe au-dessus des boutons flottants au lieu de les chevaucher. */
+  .terrain-status {
+    right: 14px;
+    bottom: calc(var(--h-peek) + 16px + var(--touch) + 10px);
+  }
+
+  /* Liste dépliée : plus de place au-dessus de la sheet, la ligne d'état passe sous la barre haute. */
+  .terrain-shell[data-panel='full'] .terrain-status {
+    top: calc(max(12px, env(safe-area-inset-top)) + 58px);
+    bottom: auto;
+  }
+}
+
+@media (max-height: 700px) and (max-width: 760px) {
+  /* Masquée ici auparavant : la plupart des téléphones perdaient tous les retours de la carte. */
+  .terrain-status {
+    display: block;
+    bottom: calc(min(var(--h-peek), 42dvh) + 12px + var(--touch) + 10px);
+  }
+
+  .terrain-status:empty { display: none; }
+}

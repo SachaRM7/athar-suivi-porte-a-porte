@@ -15,8 +15,15 @@ export type OpenedBuilding = {
   suggestion: CadastralSuggestion | null;
   select(building: Building, options: SelectBuildingOptions): void;
   close(): void;
+  /** Faux tant que le bâtiment ouvert n'a pas de document Firestore. */
+  persisted: boolean;
   /** Écrit le document du bâtiment uniquement s'il n'existe pas encore. */
   ensureExists(): Promise<void>;
+  /**
+   * Avant la création du document, l'adresse reste en mémoire et part avec lui ;
+   * après, elle est écrite tout de suite.
+   */
+  rename(addressLabel: string): Promise<Building>;
 };
 
 /**
@@ -28,10 +35,12 @@ export function useOpenedBuilding(repositories: WorkspaceRepositories): OpenedBu
   const [building, setBuilding] = useState<Building | null>(null);
   const [suggestion, setSuggestion] = useState<CadastralSuggestion | null>(null);
   const persisted = useRef(true);
+  const [persistedState, setPersistedState] = useState(true);
   const opened = useRef<Building | null>(null);
 
   const select = useCallback((next: Building, options: SelectBuildingOptions) => {
     persisted.current = options.persisted;
+    setPersistedState(options.persisted);
     opened.current = next;
     setBuilding(next);
     setSuggestion(options.suggestion ?? null);
@@ -40,6 +49,7 @@ export function useOpenedBuilding(repositories: WorkspaceRepositories): OpenedBu
   const close = useCallback(() => {
     opened.current = null;
     persisted.current = true;
+    setPersistedState(true);
     setBuilding(null);
     setSuggestion(null);
   }, []);
@@ -49,7 +59,21 @@ export function useOpenedBuilding(repositories: WorkspaceRepositories): OpenedBu
     if (!current || persisted.current) return;
     await repositories.buildings.create(current);
     persisted.current = true;
+    setPersistedState(true);
   }, [repositories]);
 
-  return { building, suggestion, select, close, ensureExists };
+  const rename = useCallback(async (addressLabel: string) => {
+    const current = opened.current;
+    if (!current) throw new Error('No building is open.');
+    if (persisted.current) await repositories.buildings.rename(current.id, addressLabel);
+    const next = { ...current, addressLabel };
+    // Le bâtiment a pu être fermé ou changé pendant l'écriture : on ne rouvre rien.
+    if (opened.current?.id === next.id) {
+      opened.current = next;
+      setBuilding(next);
+    }
+    return next;
+  }, [repositories]);
+
+  return { building, suggestion, persisted: persistedState, select, close, ensureExists, rename };
 }

@@ -527,3 +527,15 @@ h2 { font-size: 22px; }
 .admin-shell .text-link, .pilotage-section .text-link { display: inline-flex; min-height: 44px; align-items: center; }
 .admin-shell :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 .admin-shell .dashboard-pagination { flex-wrap: wrap; gap: 12px; }
+
+/* Correctifs d'audit (P0) : saisie de l'adresse dans l'en-tête de la fiche bâtiment. */
+.building-address-missing { color: var(--ink-soft); font: var(--t-125)/1.4 var(--font-ui); margin: 6px 0 0; }
+.building-address-missing .text-button, .building-address-edit { color: var(--brand-lift); }
+.building-address-edit { font: var(--t-125) var(--font-ui); }
+.building-address-form { display: grid; gap: 8px; margin-top: 6px; }
+.building-address-form label { color: var(--ink-soft); display: grid; font: 500 var(--t-10)/1 var(--font-data); gap: 6px; letter-spacing: .12em; text-transform: uppercase; }
+.building-address-form input { background: var(--sunk); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); font: 500 var(--t-15) var(--font-data); letter-spacing: 0; min-height: var(--touch); padding: 8px 10px; text-transform: none; }
+.building-address-actions { align-items: center; display: flex; gap: 12px; }
+.building-address-actions .primary-action { background: var(--brand); border-color: var(--brand); border-radius: var(--r-field); color: var(--paper); font: 500 var(--t-125) var(--font-ui); }
+.building-address-error { color: var(--ink); font: var(--t-125)/1.4 var(--font-ui); margin: 0; }
+.structure-archive-confirm { margin: 0; }
