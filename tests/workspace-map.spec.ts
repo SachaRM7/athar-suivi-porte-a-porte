@@ -44,6 +44,12 @@ async function openFieldMap(page: Page): Promise<void> {
   ).toBe(7);
 }
 
+async function leaveEdition(page: Page): Promise<void> {
+  const desktopSwitch = page.getByRole('button', { name: 'Terrain', exact: true });
+  if (await desktopSwitch.isVisible()) await desktopSwitch.click();
+  else await page.getByRole('button', { name: 'Revenir en mode Terrain' }).click();
+}
+
 async function enterEdition(page: Page): Promise<void> {
   const desktopSwitch = page.getByRole('button', { name: 'Édition' });
   if (await desktopSwitch.isVisible()) await desktopSwitch.click();
@@ -77,6 +83,8 @@ test('draws and saves an editable local zone over the prepared MapLibre package'
   await page.getByRole('button', { name: 'Enregistrer la zone' }).click();
   await expect(page.getByText('Zone enregistrée · 2 bâtiments dans son contour.')).toBeVisible();
 
+  // Sur téléphone, l'Édition remplace la liste : on revient au Terrain pour ouvrir un bâtiment.
+  await leaveEdition(page);
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
   await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '18 rue du Languedoc, Toulouse' })).toBeVisible();
@@ -116,8 +124,8 @@ test('refuses to delete a zone while its buildings and doors are still attached'
   await enterEdition(page);
   await page.getByRole('button', { name: 'Supprimer' }).click();
   await expect(page.getByText(/Suppression impossible : 2 bâtiments sont encore rattachés.*Aucun b.timent, aucune porte et aucun passage n.a .t. supprim./)).toBeVisible();
+  await leaveEdition(page);
   await expect(page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' })).toBeVisible();
-  await page.getByRole('button', { name: 'Terrain' }).click();
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
   await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeVisible();
 });
@@ -549,3 +557,35 @@ test('colours each listed building by its status, as on the map, and says it in 
   await page.close();
 });
 
+
+test('opens one top-bar state at a time on a phone', async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto('/technical-map');
+  await expect(page.locator('.building-row')).toHaveCount(2, { timeout: 45_000 });
+  await page.getByRole('button', { name: 'Agrandir le panneau' }).click();
+
+  // L'Édition remplace la liste : plus de barre d'outils posée sur les bâtiments.
+  await page.getByRole('button', { name: 'Passer en mode Édition' }).click();
+  await expect(page.getByLabel('Batiments visibles')).toBeHidden();
+  await expect(page.getByLabel('Outils de zone')).toBeVisible();
+  await expect(page.getByLabel('Proprietes de la zone')).toBeVisible();
+
+  // Le menu de zone masque le formulaire de zone qu'il recouvrirait.
+  await page.locator('.terrain-zonechip').click();
+  await expect(page.getByRole('menu', { name: 'Choisir une zone' })).toBeVisible();
+  await expect(page.getByLabel('Proprietes de la zone')).toBeHidden();
+
+  // La recherche ramène au Terrain et referme le menu.
+  await page.getByRole('button', { name: 'Rechercher parmi les bâtiments suivis' }).click();
+  await expect(page.getByRole('menu', { name: 'Choisir une zone' })).toBeHidden();
+  await expect(page.getByLabel('Outils de zone')).toBeHidden();
+  await expect(page.getByLabel('Batiments visibles')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Rechercher parmi les bâtiments suivis' })).toBeFocused();
+  await page.close();
+});
+
+test('lets only the map zoom on a phone', async ({ page }) => {
+  await page.goto('/technical-map');
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute('content', /maximum-scale=1, user-scalable=no/);
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).touchAction)).toBe('manipulation');
+});

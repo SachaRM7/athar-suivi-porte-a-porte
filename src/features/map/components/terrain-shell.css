@@ -1050,3 +1050,13 @@
 }
 
 .terrain-fab-primary[aria-disabled='true'] { opacity: .55; }
+
+/* Un seul état à la fois sur mobile : l'Édition remplace la liste au lieu de s'y superposer. */
+@media (max-width: 760px) {
+  .terrain-shell[data-mode='edition'] .terrain-panel { display: none; }
+  .terrain-shell[data-mode='edition'] .terrain-editbar { bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .terrain-shell[data-mode='edition'] .terrain-status {
+    top: auto;
+    bottom: calc(14px + env(safe-area-inset-bottom) + var(--touch) + 24px);
+  }
+}

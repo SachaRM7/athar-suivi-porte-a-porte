@@ -257,6 +257,16 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const draftZoneName = zoneDraft?.name ?? selectedZone?.name ?? '';
   const draftZoneColor = zoneDraft?.color ?? selectedZone?.color ?? DEFAULT_ZONE_COLOR;
 
+  /**
+   * Un seul état ouvert à la fois en haut de l'écran : changer de mode replie la liste et
+   * ferme le menu de zone. Sur mobile, l'Édition masque la liste (cf. `terrain-shell.css`).
+   */
+  const switchMode = (next: 'terrain' | 'edition') => {
+    setMode(next);
+    setPanelHeight('peek');
+    setZoneMenuOpen(false);
+  };
+
   const selectZone = (zoneId: string | null) => {
     setSelectedZoneId(zoneId);
     setZoneDraft(null);
@@ -887,12 +897,15 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
 
         {canEditZones && (
           <div className="terrain-modes" role="group" aria-label="Mode de la carte">
-            <button aria-pressed={mode === 'terrain'} disabled={editing !== null || placing} onClick={() => setMode('terrain')} type="button">Terrain</button>
-            <button aria-pressed={mode === 'edition'} onClick={() => setMode('edition')} type="button">Édition</button>
+            <button aria-pressed={mode === 'terrain'} disabled={editing !== null || placing} onClick={() => switchMode('terrain')} type="button">Terrain</button>
+            <button aria-pressed={mode === 'edition'} onClick={() => switchMode('edition')} type="button">Édition</button>
           </div>
         )}
 
-        <button aria-label="Rechercher parmi les bâtiments suivis" className="terrain-mobile-action terrain-search-action" onClick={() => {
+        <button aria-label="Rechercher parmi les bâtiments suivis" className="terrain-mobile-action terrain-search-action" disabled={editing !== null || placing} onClick={() => {
+          // La recherche est un geste de terrain : elle quitte l'Édition au lieu de s'y superposer.
+          if (mode === 'edition') setMode('terrain');
+          setZoneMenuOpen(false);
           setPanelHeight('full');
           window.setTimeout(() => searchInput.current?.focus(), 0);
         }} type="button">
@@ -902,7 +915,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           aria-label={canEditZones ? (mode === 'terrain' ? 'Passer en mode Édition' : 'Revenir en mode Terrain') : (panelHeight === 'full' ? 'Réduire la liste' : 'Afficher la liste complète')}
           className="terrain-mobile-action"
           disabled={canEditZones && (editing !== null || placing)}
-          onClick={() => canEditZones ? setMode((current) => current === 'terrain' ? 'edition' : 'terrain') : setPanelHeight((height) => height === 'full' ? 'peek' : 'full')}
+          onClick={() => canEditZones ? switchMode(mode === 'terrain' ? 'edition' : 'terrain') : setPanelHeight((height) => height === 'full' ? 'peek' : 'full')}
           type="button"
         >
           {/* Un pictogramme par geste : le crayon change de mode, la liste déplie le panneau. */}
@@ -1024,7 +1037,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         </div>
       )}
 
-      {mode === 'edition' && canEditZones && !placing && (selectedZone || editing) && (
+      {mode === 'edition' && canEditZones && !placing && !zoneMenuOpen && (selectedZone || editing) && (
         <div className="terrain-zone-properties" aria-label="Proprietes de la zone">
           <label>Nom de la zone<input aria-label="Nom de la zone" maxLength={80} onChange={(event) => setZoneDraft({ name: event.target.value, color: draftZoneColor })} value={draftZoneName} /></label>
           <label>Couleur<input aria-label="Couleur de la zone" onChange={(event) => setZoneDraft({ name: draftZoneName, color: event.target.value })} type="color" value={draftZoneColor} /></label>

@@ -552,3 +552,6 @@ h2 { font-size: 22px; }
 .door-detail-sheet .status-swatch small { color: var(--ink-soft); flex-basis: 100%; font: var(--t-10)/1.2 var(--font-data); letter-spacing: .04em; padding-left: 17px; }
 .door-detail-sheet .status-swatch[aria-pressed='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 a.auth-primary { align-items: center; display: flex; justify-content: center; text-decoration: none; }
+
+/* Le double appui ne zoome plus l'interface : seule la carte se zoome. */
+html { touch-action: manipulation; }

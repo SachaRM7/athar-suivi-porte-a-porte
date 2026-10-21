@@ -23,6 +23,15 @@ if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   }
 }
 
+// Seule la carte se zoome. Safari iOS ignore `user-scalable=no` pour le pincement : ses
+// événements `gesture*` sont donc bloqués hors du canevas MapLibre, qui gère le sien.
+// La taille du texte suit toujours le réglage du système (jetons en rem, lot D).
+for (const type of ['gesturestart', 'gesturechange'] as const) {
+  document.addEventListener(type, (event) => {
+    if (!(event.target instanceof Element && event.target.closest('.maplibregl-canvas-container'))) event.preventDefault();
+  }, { passive: false });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppProviders>
