@@ -7,6 +7,10 @@
  * à téléverser à la main. Cf. `docs/athar/DEPLOIEMENT-CLOUDFLARE.md`.
  */
 import { contentRange, type R2Range } from './r2-range';
+import { PMTILES_HEADER_BYTES, pmtilesTotalSize } from './pmtiles-size';
+
+/** Flux de longueur annoncée du runtime Workers : R2 exige une taille connue pour un flux. */
+declare const FixedLengthStream: new (length: number) => TransformStream<Uint8Array, Uint8Array>;
 
 type R2Object = {
   size: number;
@@ -20,6 +24,7 @@ type Env = {
   MAPS: {
     get(key: string, options?: { range?: Headers }): Promise<R2Object | null>;
     head(key: string): Promise<R2Object | null>;
+    put(key: string, value: ReadableStream): Promise<unknown>;
   };
   /** Origine qui sert aussi les archives, sans barre finale (ex. `https://athar-dev31.web.app`). */
   MAP_FALLBACK_ORIGIN?: string;
@@ -147,10 +152,56 @@ async function downloadArchive(env: Env, name: string): Promise<Response> {
   });
 }
 
+/**
+ * Copie une archive de l'origine vers R2, sans passer par un téléphone. Lu en entier, le flux de
+ * Firebase Hosting redonne le fichier exact ; sa taille vient de l'en-tête PMTiles. Sans effet si
+ * R2 contient déjà l'archive complète : la source et la destination sont fixes.
+ */
+async function repairArchive(env: Env, name: string): Promise<Response> {
+  const text = (status: number, body: string) => new Response(`${body}\n`, { status, headers: { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' } });
+  const key = DOWNLOADABLE_ARCHIVES[name];
+  const origin = env.MAP_FALLBACK_ORIGIN?.replace(/\/+$/, '');
+  if (!key || !origin) return text(404, 'Archive inconnue.');
+  const upstream = await fetch(`${origin}/${key}`);
+  if (upstream.status !== 200 || !upstream.body) return text(502, `Origine indisponible (${upstream.status}).`);
+  const reader = upstream.body.getReader();
+  const head: Uint8Array[] = [];
+  let headLength = 0;
+  while (headLength < PMTILES_HEADER_BYTES) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    head.push(value);
+    headLength += value.length;
+  }
+  const first = new Uint8Array(headLength);
+  head.reduce((offset, chunk) => { first.set(chunk, offset); return offset + chunk.length; }, 0);
+  const total = pmtilesTotalSize(first.subarray(0, PMTILES_HEADER_BYTES));
+  if (total === null) { await reader.cancel(); return text(502, 'La réponse de l’origine n’est pas une archive PMTiles.'); }
+  const existing = await env.MAPS.head(key);
+  if (existing?.size === total) { await reader.cancel(); return text(200, `Déjà complète dans R2 : ${key}, ${total} octets.`); }
+  const { readable, writable } = new FixedLengthStream(total);
+  const stored = env.MAPS.put(key, readable);
+  const writer = writable.getWriter();
+  try {
+    await writer.write(first);
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      await writer.write(value);
+    }
+    await writer.close();
+    await stored;
+  } catch (error) {
+    return text(500, `Copie interrompue : ${error instanceof Error ? error.message : 'erreur inconnue'}. Rouvre ce lien pour recommencer.`);
+  }
+  return text(200, `Copie terminée : ${key}, ${total} octets dans R2.`);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const key = decodeURIComponent(new URL(request.url).pathname).replace(/^\/+/, '');
     if (key.startsWith('telecharger/')) return downloadArchive(env, key.slice('telecharger/'.length));
+    if (key.startsWith('reparer/')) return repairArchive(env, key.slice('reparer/'.length));
     if (key.endsWith('.pmtiles')) return serveMap(request, env, key);
     return env.ASSETS.fetch(request);
   }

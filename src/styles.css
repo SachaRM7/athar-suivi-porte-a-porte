@@ -555,3 +555,44 @@ a.auth-primary { align-items: center; display: flex; justify-content: center; te
 
 /* Le double appui ne zoome plus l'interface : seule la carte se zoome. */
 html { touch-action: manipulation; }
+
+/* Coupe du bâtiment : portes dessinées, une rangée défilante par étage, escalier dans la marge. */
+.building-floor { grid-template-columns: 58px minmax(0, 1fr); }
+.building-floor-label { align-content: start; color: var(--brand); display: grid; font: 600 var(--t-135) var(--font-data); gap: 10px; justify-items: center; padding: 16px 6px 0 0; text-align: center; }
+.building-floor-stairs { fill: none; height: auto; stroke: var(--brand); stroke-linecap: square; stroke-width: 1.6; width: 40px; }
+.building-floor-stairs--mirrored { transform: scaleX(-1); }
+
+.door-scroller { position: relative; }
+.door-grid { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; padding: 6px 2px 8px; scroll-snap-type: x proximity; scrollbar-width: none; }
+.door-grid::-webkit-scrollbar { display: none; }
+.door-card { flex: 0 0 auto; scroll-snap-align: start; }
+.door-card--confirm { flex-basis: 150px; }
+
+.door-row, .door-add { aspect-ratio: auto; border-radius: var(--r-pill) var(--r-pill) 0 0; height: 92px; min-height: 0; width: 64px; }
+.door-row { background: color-mix(in srgb, var(--status-color) 10%, var(--paper)); border: 2px solid color-mix(in srgb, var(--status-color) 70%, var(--paper)); box-shadow: inset 0 -4px 0 var(--status-color); color: var(--ink); display: block; padding: 0; position: relative; }
+/* Panneaux de la porte : décor seulement, la couleur du cadre et de la poignée porte le statut. */
+.door-row::before, .door-row::after { border: 1.5px solid color-mix(in srgb, var(--status-color) 35%, var(--paper)); content: ''; left: 9px; position: absolute; right: 9px; }
+.door-row::before { border-radius: var(--r-pill) var(--r-pill) 0 0; height: 36px; top: 9px; }
+.door-row::after { bottom: 11px; height: 24px; }
+.door-row-label { color: var(--ink); font: 600 var(--t-15)/1 var(--font-data); left: 0; position: absolute; right: 0; text-align: center; top: 22px; z-index: 1; }
+.door-state-dot { background: var(--status-color); border-radius: 50%; display: block; height: 7px; opacity: 1; position: absolute; right: 5px; top: 50px; width: 7px; }
+.door-row-status { clip: rect(0 0 0 0); display: block; height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+.door-row[aria-expanded="true"] { outline: 3px solid var(--ink); outline-offset: 2px; }
+.door-row--sisters { outline: 2px solid var(--st-sisters); outline-offset: 2px; }
+.door-add { align-content: center; background: transparent; border: 1.5px dashed var(--hairline); color: var(--ink-soft); display: grid; justify-items: center; }
+.door-add b { font: 400 var(--t-19) var(--font-ui); }
+
+.door-scroller-next { align-items: center; background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-pill); box-shadow: var(--shadow); color: var(--brand); cursor: pointer; display: flex; height: var(--touch); justify-content: center; padding: 0; position: absolute; right: -4px; top: 30px; width: var(--touch); z-index: 2; }
+.door-scroller-next svg { fill: none; height: 20px; stroke: currentColor; stroke-width: 2.2; width: 20px; }
+.door-scroller-foot { align-items: center; display: flex; gap: 10px; margin-top: 2px; }
+.door-scroller-track { background: var(--sunk); border-radius: var(--r-pill); flex: 1; height: 4px; overflow: hidden; position: relative; }
+.door-scroller-track i { background: var(--brand); border-radius: inherit; height: 100%; position: absolute; top: 0; }
+.door-scroller-hint { color: var(--ink-soft); font: var(--t-10) var(--font-data); white-space: nowrap; }
+
+@media (max-width: 380px) {
+  .building-floor { grid-template-columns: 48px minmax(0, 1fr); }
+  .building-floor-stairs { width: 32px; }
+}
+/* Fondu à droite tant qu'il reste des portes à voir ; marge haute pour la pastille de suppression. */
+.door-scroller[data-overflow="true"][data-at-end="false"] .door-grid { mask-image: linear-gradient(to right, #000 78%, transparent); }
+.building-cut--editing .door-grid { padding-top: 12px; }

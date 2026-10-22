@@ -16,6 +16,7 @@ import { hasPlaceholderAddress, MAX_ADDRESS_LENGTH, normalizeAddressLabel } from
 import { planStructureFromPreview, structurePlanLabel } from '../model/structure-plan';
 import { doorsForGroupedAbsence, requiresDoNotDisturbConfirmation } from '../../../domain/workspace/follow-up';
 import { Stepper } from '../../../design/components';
+import { DoorScroller, FloorStairs } from './DoorScroller';
 import { firestoreWriteErrorMessage } from '../../../infrastructure/firebase/firestore-errors';
 import { localWriteErrorMessage } from '../../visits/model/field-sync-status';
 
@@ -727,10 +728,10 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
 
         {structureLoadedBuildingId !== building.id ? <section className="building-empty-state" role="status"><h3>{loadError ? 'Bâtiment indisponible' : 'Chargement du bâtiment…'}</h3>{loadError && <button type="button" onClick={() => void refresh().catch(() => setLoadError(true))}>Réessayer</button>}</section> : doors.length === 0 ? <section className="building-empty-state" aria-label="Bâtiment non décrit"><span aria-hidden="true">⌂</span><h3>Bâtiment non décrit</h3><p>Aucun étage ni porte enregistré. Décris la structure une fois — tout le suivi viendra s'y accrocher.</p>{canEditStructure && <div><button className="primary-action" onClick={() => openStructure('manage')} type="button">Décrire le bâtiment</button><button className="text-button" disabled={structurePending} onClick={() => void runStructure(() => [{ floor: 0, label: '01', sortOrder: 0, newDoorId: `door-${crypto.randomUUID()}` }])} type="button">{structurePending ? 'Enregistrement…' : "C'est un pavillon — une seule porte"}</button></div>}</section> : <section className={`building-cut${editing ? ' building-cut--editing' : ''}`} aria-label="Coupe verticale du bâtiment">
           {editing && <button className="building-add-floor" onClick={() => openFloorCreation(Math.max(...floors.map((item) => item.floor)) + 1)} type="button">+ Ajouter un étage au-dessus</button>}
-          {floors.slice().reverse().map((item) => {
+          {floors.slice().reverse().map((item, floorIndex) => {
             const levelDoors = doors.filter((door) => door.floor === item.floor).sort(compareDoorsForFloor);
             return <section className="building-floor" key={item.floor}>
-              <div className="building-floor-label"><span>{floorLabel(item.floor)}</span></div>
+              <div className="building-floor-label"><span>{floorLabel(item.floor)}</span><FloorStairs mirrored={floorIndex % 2 === 1} /></div>
               <div className="building-floor-content">
                 <header className="building-floor-heading">
                   <span>{item.doorCount} porte{item.doorCount > 1 ? 's' : ''}</span>
@@ -747,7 +748,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
                   <span>Seules les portes jamais visitées de l’étage sont marquées. Les autres ne changent pas.</span>
                   <span className="floor-absence-actions"><button disabled={saving} onClick={() => { setConfirmFloorAbsence(null); void markFloorAway(levelDoors); }} type="button">Oui, marquer</button><button onClick={() => setConfirmFloorAbsence(null)} type="button">Non</button></span>
                 </div>}
-                <div className="door-grid" aria-label={`Portes ${floorLabel(item.floor)}`}>
+                <DoorScroller label={`Portes ${floorLabel(item.floor)}`}>
               {levelDoors.map((door) => {
                 const status = statusesById.get(door.currentStatusId);
                 const open = openPaletteDoorId === door.id;
@@ -758,7 +759,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
                 </div>;
               })}
               {canEditStructure && !editing && <button aria-label={`Ajouter des portes au ${floorLabel(item.floor)}`} className="door-add" onClick={() => { setFloor(item.floor); setQuickFirstLabel(String((Math.max(0, ...levelDoors.map((door) => Number(door.label) || 0))) + 1)); openStructure('quick-floor'); }} type="button"><b aria-hidden="true">+</b><span>Ajouter</span></button>}
-                </div>
+                </DoorScroller>
               </div>
             </section>;
           })}
