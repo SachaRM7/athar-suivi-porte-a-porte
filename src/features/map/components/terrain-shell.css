@@ -1060,3 +1060,6 @@
     bottom: calc(14px + env(safe-area-inset-bottom) + var(--touch) + 24px);
   }
 }
+
+.terrain-zone-menu-empty button { margin-top: 10px; min-height: var(--touch); padding: 8px 12px; border: 1px solid var(--hairline); border-radius: var(--r-field); background: var(--paper); color: var(--brand); cursor: pointer; font: 500 var(--t-125)/1.2 var(--font-ui); }
+.terrain-zone-menu-empty p { margin: 0; }

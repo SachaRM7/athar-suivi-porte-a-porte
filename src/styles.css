@@ -596,3 +596,28 @@ html { touch-action: manipulation; }
 /* Fondu à droite tant qu'il reste des portes à voir ; marge haute pour la pastille de suppression. */
 .door-scroller[data-overflow="true"][data-at-end="false"] .door-grid { mask-image: linear-gradient(to right, #000 78%, transparent); }
 .building-cut--editing .door-grid { padding-top: 12px; }
+
+/* Poignée de la fiche bâtiment : sur mobile elle ferme la fiche (remplace le trait décoratif). */
+.building-sheet-grip { display: none; }
+@media (max-width: 760px) {
+  .building-sheet::before { content: none; }
+  .building-sheet-grip { align-items: center; background: none; border: 0; cursor: pointer; display: flex; flex: 0 0 auto; justify-content: center; min-height: var(--touch); padding: 0; width: 100%; }
+  .building-sheet-grip i { background: var(--hairline); border-radius: var(--r-pill); display: block; height: 4px; width: 38px; }
+  .building-sheet-grip:active i { background: var(--ink-faint); }
+}
+
+/* Bâtiment non décrit : illustration, puis deux choix en cartes. */
+.building-empty-state { gap: 12px; justify-items: center; padding: 28px 20px 32px; text-align: center; }
+.building-empty-illustration { fill: color-mix(in srgb, var(--brand) 5%, var(--paper)); height: auto; stroke: var(--brand); stroke-dasharray: 5 4; stroke-linejoin: round; stroke-width: 2; width: 120px; }
+.building-empty-illustration .building-empty-ground { stroke-dasharray: none; stroke: var(--hairline); }
+.building-empty-state h3 { font: 600 var(--t-19) var(--font-title); }
+.building-empty-state p { max-width: 32ch; }
+.building-empty-choices { display: grid; gap: 10px; margin-top: 8px; width: 100%; }
+.building-empty-choice { align-items: center; background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); cursor: pointer; display: grid; gap: 12px; grid-template-columns: 40px minmax(0, 1fr); min-height: 64px; padding: 10px 14px; text-align: left; width: 100%; }
+.building-empty-choice svg { background: var(--sunk); border-radius: var(--r-field); box-sizing: content-box; fill: none; height: 22px; padding: 9px; stroke: var(--brand); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 22px; }
+.building-empty-choice strong { display: block; font: 600 var(--t-15) var(--font-ui); }
+.building-empty-choice small { color: var(--ink-soft); display: block; font: var(--t-125)/1.35 var(--font-ui); margin-top: 2px; }
+.building-empty-choice--primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.building-empty-choice--primary small { color: var(--on-accent); opacity: .8; }
+.building-empty-choice--primary svg { background: color-mix(in srgb, var(--paper) 35%, transparent); stroke: var(--on-accent); }
+.building-empty-choice:disabled { cursor: wait; opacity: .6; }

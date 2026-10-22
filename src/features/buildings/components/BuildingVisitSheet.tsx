@@ -691,6 +691,8 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
     <div className="building-detail-layer">
       <button aria-label="Fermer le detail du batiment" tabIndex={-1} aria-hidden="true" className="building-detail-backdrop" onClick={onClose} type="button" />
       <aside aria-label="Detail du batiment" className={`building-sheet${paletteDoor ? ' building-sheet--door-detail' : ''}`} role="dialog" aria-modal="true" tabIndex={-1} ref={buildingPanel}>
+        {/* La poignée de la sheet ferme la fiche : le geste attendu sur mobile. « Retour » reste le chemin clavier. */}
+        <button aria-label="Fermer la fiche du bâtiment" className="building-sheet-grip" onClick={onClose} tabIndex={-1} type="button"><i aria-hidden="true" /></button>
         <section className="building-identity">
           <button className="building-zone-back" onClick={onClose} type="button">‹ Retour à la zone</button>
           {addressDraft?.buildingId === building.id ? <form className="building-address-form" onSubmit={(event) => { event.preventDefault(); void saveAddress(); }}>
@@ -707,7 +709,7 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
           </>}
           <div className="building-meta-row">
             {doors.length > 0 && <p className="building-structure-summary">{floors.length} niveau{floors.length > 1 ? 'x' : ''} · {total.doorCount} portes</p>}
-            {canEditStructure && <div className="building-header-actions"><button className="secondary-action" onClick={() => { setEditing((current) => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => openStructure('manage')} type="button">Structure</button>{canDeleteVisitedDoors && <button aria-label={doors.length > 0 ? 'Supprimer la structure du bâtiment' : 'Retirer le bâtiment'} className="structure-reset" disabled={structurePending} onClick={() => void resetStructure()} title={doors.length > 0 ? 'Supprimer la structure' : 'Retirer le bâtiment'} type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>}</div>}
+            {canEditStructure && <div className="building-header-actions">{doors.length > 0 && <><button className="secondary-action" onClick={() => { setEditing((current) => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => openStructure('manage')} type="button">Structure</button></>}{canDeleteVisitedDoors && <button aria-label={doors.length > 0 ? 'Supprimer la structure du bâtiment' : 'Retirer le bâtiment'} className="structure-reset" disabled={structurePending} onClick={() => void resetStructure()} title={doors.length > 0 ? 'Supprimer la structure' : 'Retirer le bâtiment'} type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>}</div>}
           </div>
           {confirmStructureReset && <div className="structure-reset-confirm" role="alert">
             <b>{doors.length > 0 ? 'Supprimer la structure et repartir vierge ?' : 'Retirer ce bâtiment du suivi ?'}</b>
@@ -726,7 +728,21 @@ export function BuildingVisitSheet({ authorId, building, canEditStructure, canDe
           </>}
         </section>
 
-        {structureLoadedBuildingId !== building.id ? <section className="building-empty-state" role="status"><h3>{loadError ? 'Bâtiment indisponible' : 'Chargement du bâtiment…'}</h3>{loadError && <button type="button" onClick={() => void refresh().catch(() => setLoadError(true))}>Réessayer</button>}</section> : doors.length === 0 ? <section className="building-empty-state" aria-label="Bâtiment non décrit"><span aria-hidden="true">⌂</span><h3>Bâtiment non décrit</h3><p>Aucun étage ni porte enregistré. Décris la structure une fois — tout le suivi viendra s'y accrocher.</p>{canEditStructure && <div><button className="primary-action" onClick={() => openStructure('manage')} type="button">Décrire le bâtiment</button><button className="text-button" disabled={structurePending} onClick={() => void runStructure(() => [{ floor: 0, label: '01', sortOrder: 0, newDoorId: `door-${crypto.randomUUID()}` }])} type="button">{structurePending ? 'Enregistrement…' : "C'est un pavillon — une seule porte"}</button></div>}</section> : <section className={`building-cut${editing ? ' building-cut--editing' : ''}`} aria-label="Coupe verticale du bâtiment">
+        {structureLoadedBuildingId !== building.id ? <section className="building-empty-state" role="status"><h3>{loadError ? 'Bâtiment indisponible' : 'Chargement du bâtiment…'}</h3>{loadError && <button type="button" onClick={() => void refresh().catch(() => setLoadError(true))}>Réessayer</button>}</section> : doors.length === 0 ? <section className="building-empty-state" aria-label="Bâtiment non décrit">
+          <svg aria-hidden="true" className="building-empty-illustration" viewBox="0 0 120 96"><path className="building-empty-ground" d="M6 90h108" /><path d="M24 90V30l36-22 36 22v60" /><path d="M38 58V45a7 7 0 0 1 14 0v13z" /><path d="M68 58V45a7 7 0 0 1 14 0v13z" /><path d="M52 90V76a8 8 0 0 1 16 0v14" /></svg>
+          <h3>Bâtiment non décrit</h3>
+          <p>Aucun étage ni porte enregistré. Décris la structure une fois — tout le suivi viendra s'y accrocher.</p>
+          {canEditStructure && <div className="building-empty-choices">
+            <button className="building-empty-choice building-empty-choice--primary" onClick={() => openStructure('manage')} type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 21V5l7-3 7 3v16" /><path d="M9 9h2M13 9h2M9 13h2M13 13h2M10 21v-4h4v4" /></svg>
+              <span><strong>Décrire le bâtiment</strong><small>Immeuble : étages et portes, avec aperçu</small></span>
+            </button>
+            <button aria-label="C'est un pavillon — une seule porte" className="building-empty-choice" disabled={structurePending} onClick={() => void runStructure(() => [{ floor: 0, label: '01', sortOrder: 0, newDoorId: `door-${crypto.randomUUID()}` }])} type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 11 12 4l9 7" /><path d="M5 10v11h14V10" /><path d="M10 21v-6h4v6" /></svg>
+              <span><strong>{structurePending ? 'Enregistrement…' : 'C’est un pavillon'}</strong><small>Une seule porte, créée tout de suite</small></span>
+            </button>
+          </div>}
+        </section> : <section className={`building-cut${editing ? ' building-cut--editing' : ''}`} aria-label="Coupe verticale du bâtiment">
           {editing && <button className="building-add-floor" onClick={() => openFloorCreation(Math.max(...floors.map((item) => item.floor)) + 1)} type="button">+ Ajouter un étage au-dessus</button>}
           {floors.slice().reverse().map((item, floorIndex) => {
             const levelDoors = doors.filter((door) => door.floor === item.floor).sort(compareDoorsForFloor);

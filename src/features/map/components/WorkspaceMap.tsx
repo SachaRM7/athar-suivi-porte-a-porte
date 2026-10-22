@@ -363,6 +363,10 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       const [nextZones, statuses] = await readTask(Promise.all([repositories.zones.list(), repositories.statuses.list()]));
       zones.current = nextZones;
       setZoneList(nextZones);
+      // Une liste vide peut venir du cache local après une lecture serveur coupée (réseau
+      // instable, cache purgé à la déconnexion) : on ne la retient pas, la prochaine lecture
+      // réinterroge le serveur.
+      if (nextZones.length === 0) metadata.current = null;
       setMetadataError(false);
       const requested = selectedZoneRef.current;
       const active = nextZones.some(zone => zone.id === requested) ? requested : nextZones[0]?.id ?? null;
@@ -443,6 +447,18 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     metadata.current = null;
     void ensureMetadata().then(() => refreshViewport()).catch(() => undefined);
   }, [reloadToken, ensureMetadata, refreshViewport]);
+
+  const reloadZones = useCallback(() => {
+    metadata.current = null;
+    void ensureMetadata().then(() => refreshViewport()).catch(() => undefined);
+  }, [ensureMetadata, refreshViewport]);
+
+  /** Le réseau revient : une liste de zones vide ou en échec est relue sans attendre un geste. */
+  useEffect(() => {
+    const retry = () => { if (zones.current.length === 0) reloadZones(); };
+    window.addEventListener('online', retry);
+    return () => window.removeEventListener('online', retry);
+  }, [reloadZones]);
 
   const statsZoneIds = zoneList.map(zone => zone.id).sort().join('|');
   useEffect(() => {
@@ -876,7 +892,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
           {zoneMenuOpen && (
             <div aria-label="Choisir une zone" className="terrain-zone-menu" role="menu">
               {zoneList.length === 0
-                ? <p className="terrain-zone-menu-empty">{canEditZones ? 'Aucune zone tracée pour l’instant. Passe en mode Édition pour en dessiner une.' : 'Aucune zone pour l’instant. Demande à ton coordinateur d’en tracer une.'}</p>
+                ? <div className="terrain-zone-menu-empty"><p>{canEditZones ? 'Aucune zone trouvée. Si tu en as déjà tracé, le réseau a peut-être coupé la lecture. Sinon, passe en mode Édition pour en dessiner une.' : 'Aucune zone trouvée. Si le réseau est faible, réessaie ; sinon demande à ton coordinateur d’en tracer une.'}</p><button onClick={reloadZones} type="button">Recharger les zones</button></div>
                 : zoneList.map((zone) => (
                   <button
                     aria-current={zone.id === selectedZoneId}
@@ -993,7 +1009,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
             {canCreateBuildings && selectedZone && mode === 'terrain' && <button className="building-list-add" disabled={placing} onClick={startBuildingPlacement} type="button">+ Ajouter un bâtiment absent de la carte</button>}
             {(terrainPage.partial || terrainPage.index > 0) && <nav className="terrain-pagination" aria-label="Pages des bâtiments"><button disabled={terrainPage.index === 0 || terrainPage.phase === 'loading'} onClick={terrainPage.previous} type="button">Précédente</button><span>Page {terrainPage.index + 1}</span><button disabled={!terrainPage.nextCursor || terrainPage.phase !== 'ready'} onClick={terrainPage.next} type="button">Suivante</button></nav>}
             <span className="terrain-visible-count" data-visible-buildings={visibleBuildingCount}>
-              {listReady ? `${zoneBuildingCount} bâtiment${zoneBuildingCount > 1 ? 's' : ''} suivi${zoneBuildingCount > 1 ? 's' : ''}${terrainPage.partial ? ' sur cette page' : ''}` : 'Chargement de la liste…'}{mapError && ' · carte indisponible'}
+              {listReady ? `${zoneBuildingCount} bâtiment${zoneBuildingCount > 1 ? 's' : ''} suivi${zoneBuildingCount > 1 ? 's' : ''}${terrainPage.partial ? ' sur cette page' : ''}` : loadedZoneId ? 'Chargement de la liste…' : ''}{mapError && ' · carte indisponible'}
             </span>
             {/* Une seule mention de fraîcheur : le détail de provenance relève du pilotage. */}
             <p className="terrain-visible-count">{progress.updatedAt ? `Progression comptée le ${zoneProgressDate(progress).replace(/^Relevé du /, '')}, hors saisies en attente sur ce téléphone.` : 'Progression pas encore comptée.'}</p>
