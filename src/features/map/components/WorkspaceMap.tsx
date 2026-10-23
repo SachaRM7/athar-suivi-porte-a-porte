@@ -55,6 +55,7 @@ import { matchesAddress, markingCandidates } from '../model/field-navigation';
 import { Dialog, TraceBar } from '../../../design/components';
 import { terrainSession } from '../model/terrain-session';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import '../config/maplibre-worker';
 import './terrain-shell.css';
 import { useTerrainPage } from '../model/use-terrain-page';
 import { loadBuildingDoors } from '../model/terrain-reads';

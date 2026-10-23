@@ -1,10 +1,10 @@
 $ErrorActionPreference = 'Stop'
 
-$version = 'v22.23.2'
+$version = 'v22.23.4'
 $archiveName = "node-$version-win-x64.zip"
-$expectedSha256 = '1177b4137ba5adaa56354ae40f1080c7450e8ae09cecb47da459d1c52ac99f97'
+$expectedSha256 = 'cbc74b5e0982c9dbb41525fd8fb5dcd32fbee237863f7829072f4639a1ce5f20'
 $toolsRoot = Join-Path $PSScriptRoot '..\tools'
-$installRoot = Join-Path $toolsRoot 'node-22.23.2'
+$installRoot = Join-Path $toolsRoot 'node-22.23.4'
 $archivePath = Join-Path $toolsRoot $archiveName
 $existingNode = Get-ChildItem -LiteralPath $installRoot -Recurse -Filter node.exe -ErrorAction SilentlyContinue |
   Select-Object -First 1 -ExpandProperty FullName

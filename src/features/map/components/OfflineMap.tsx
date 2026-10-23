@@ -5,6 +5,7 @@ import { withBasePath } from '../../../app/config/public-paths';
 import { createBasemapLayers, MAP_STYLE_CONFIG, stripBasemap, TOWNCENTER_MAP_PALETTE } from '../config/map-style';
 import { LocalPmtilesSource } from '../infrastructure/local-pmtiles-source';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import '../config/maplibre-worker';
 
 const protocol = new Protocol();
 const archive = new PMTiles(new LocalPmtilesSource(withBasePath('/fixtures/toulouse.pmtiles'), 'athar-toulouse-local'));
