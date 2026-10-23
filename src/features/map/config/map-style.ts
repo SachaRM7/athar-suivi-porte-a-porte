@@ -180,8 +180,13 @@ function towncenterFamily(sourceLayer: string): string {
 export function stripBasemap(
   map: {
     getStyle: () => { layers?: readonly { id: string; type: string }[] };
-    setPaintProperty: (id: string, property: string, value: unknown) => void;
-    setLayoutProperty: (id: string, property: string, value: unknown) => void;
+    setPaintProperty: (
+      id: string,
+      property: 'background-color' | 'fill-color' | 'fill-outline-color' | 'line-color'
+        | 'text-color' | 'text-halo-color' | 'text-halo-width' | 'text-halo-blur',
+      value: string | number,
+    ) => void;
+    setLayoutProperty: (id: string, property: 'visibility', value: 'none') => void;
   },
   palette: MapPalette = TOWNCENTER_MAP_PALETTE,
 ): void {
