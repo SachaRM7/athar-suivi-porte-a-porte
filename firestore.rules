@@ -72,22 +72,42 @@ service cloud.firestore {
     function validBuilding() {
       let data = request.resource.data;
       return data.keys().hasAll(['addressLabel', 'location', 'geohash', 'zoneId', 'createdBy', 'structureRevision']) &&
-        data.keys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'createdBy', 'structureRevision', 'updatedAt']) &&
+        data.keys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'createdBy', 'structureRevision', 'updatedAt', 'sections']) &&
         data.addressLabel is string && data.addressLabel.size() >= 1 && data.addressLabel.size() <= 160 &&
         data.location is latlng && data.geohash is string && data.geohash.size() >= 4 && data.geohash.size() <= 12 &&
         data.zoneId is string && data.createdBy is string &&
-        data.structureRevision is int && data.structureRevision >= 0 && optionalTimestamp(data, 'updatedAt');
+        data.structureRevision is int && data.structureRevision >= 0 &&
+        (data.get('sections', {}) is map && data.get('sections', {}).size() < 50) && optionalTimestamp(data, 'updatedAt');
+    }
+
+    // Les compartiments sont ajoutés explicitement. Le suivi historique reste implicite.
+    // Un ajout ne peut ni renommer, ni supprimer les compartiments existants.
+    function validSectionAddition() {
+      let previous = resource.data.get('sections', {});
+      let next = request.resource.data.get('sections', {});
+      let added = next.keys().removeAll(previous.keys());
+      return next == previous || (added.size() == 1 &&
+        next.diff(previous).changedKeys().size() == 0 && next.diff(previous).removedKeys().size() == 0 &&
+        added[0].matches('^[a-zA-Z0-9_-]{1,128}$') && added[0] != 'main' &&
+        next[added[0]] is string && next[added[0]].size() >= 1 && next[added[0]].size() <= 48 &&
+        next[added[0]] != 'Bâtiment A' && !previous.values().hasAny([next[added[0]]]));
+    }
+
+    function validDoorSection(workspaceId, data) {
+      return data.get('sectionId', 'main') == 'main' ||
+        getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)/buildings/$(data.buildingId)).data.get('sections', {}).keys().hasAny([data.sectionId]);
     }
 
     function validDoor() {
       let data = request.resource.data;
       return data.keys().hasAll(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'createdBy']) &&
-        data.keys().hasOnly(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'lastVisitAt', 'createdBy', 'updatedAt', 'foyer', 'aConfierAuxSoeurs']) &&
+        data.keys().hasOnly(['buildingId', 'zoneId', 'location', 'geohash', 'floor', 'label', 'sortOrder', 'active', 'currentStatusId', 'revision', 'lastVisitId', 'lastVisitAt', 'createdBy', 'updatedAt', 'foyer', 'aConfierAuxSoeurs', 'sectionId']) &&
         (!data.keys().hasAny(['foyer']) || data.foyer == null || data.foyer in ['femme', 'homme', 'couple', 'famille']) &&
         (!data.keys().hasAny(['aConfierAuxSoeurs']) || data.aConfierAuxSoeurs is bool) &&
         // Ancienneté : absente des portes écrites avant WP8, jamais posée sans passage.
         (data.get('lastVisitAt', null) == null || data.lastVisitAt is timestamp) &&
         (data.lastVisitId != null || data.get('lastVisitAt', null) == null) &&
+        data.get('sectionId', 'main') is string && data.get('sectionId', 'main').matches('^[a-zA-Z0-9_-]{1,128}$') &&
         data.buildingId is string && data.zoneId is string && data.location is latlng &&
         data.geohash is string && data.geohash.size() >= 4 && data.geohash.size() <= 12 &&
         data.floor is int && data.floor >= -5 && data.floor <= 200 &&
@@ -137,7 +157,7 @@ service cloud.firestore {
       allow read: if activeMember(workspaceId);
       allow create: if activeMember(workspaceId) && validBuilding() &&
         request.resource.data.createdBy == request.auth.uid &&
-        request.resource.data.structureRevision == 0 &&
+        request.resource.data.structureRevision == 0 && request.resource.data.get('sections', {}).size() == 0 &&
         exists(/databases/$(database)/documents/workspaces/$(workspaceId)/zones/$(request.resource.data.zoneId));
       allow update: if activeMember(workspaceId) && validBuilding() && (
         // Déplacer un bâtiment ou le changer de zone détache ses portes de leur position :
@@ -145,7 +165,7 @@ service cloud.firestore {
         (admin(workspaceId) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'updatedAt']) &&
           request.resource.data.structureRevision == resource.data.structureRevision) ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['structureRevision', 'updatedAt']) &&
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['structureRevision', 'updatedAt', 'sections']) && validSectionAddition() &&
           request.resource.data.structureRevision == resource.data.structureRevision + 1)
       );
       allow delete: if admin(workspaceId);
@@ -153,7 +173,7 @@ service cloud.firestore {
 
     match /workspaces/{workspaceId}/doors/{doorId} {
       allow read: if activeMember(workspaceId);
-      allow create: if activeMember(workspaceId) && validDoor() &&
+      allow create: if activeMember(workspaceId) && validDoor() && validDoorSection(workspaceId, request.resource.data) &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.active == true && request.resource.data.currentStatusId == 'unvisited' &&
         request.resource.data.revision == 0 && request.resource.data.lastVisitId == null &&

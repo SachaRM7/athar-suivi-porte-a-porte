@@ -5,12 +5,14 @@ import type { CadastralSuggestion } from '../../buildings/model/cadastral-struct
 
 export type SelectBuildingOptions = {
   persisted: boolean;
+  sectionId?: string;
   /** Attributs cadastraux portés par l'emprise, s'ils existent. Jamais appliqués d'office. */
   suggestion?: CadastralSuggestion | null;
 };
 
 export type OpenedBuilding = {
   building: Building | null;
+  sectionId?: string;
   /** Suggestion de structure du bâtiment ouvert, à confirmer par un humain. */
   suggestion: CadastralSuggestion | null;
   select(building: Building, options: SelectBuildingOptions): void;
@@ -32,6 +34,7 @@ export type OpenedBuilding = {
  * premier geste qui a besoin de lui — décrire la structure — conformément à `02-DATA-MODEL.md`.
  */
 export function useOpenedBuilding(repositories: WorkspaceRepositories): OpenedBuilding {
+  const [sectionId, setSectionId] = useState<string | undefined>();
   const [building, setBuilding] = useState<Building | null>(null);
   const [suggestion, setSuggestion] = useState<CadastralSuggestion | null>(null);
   const persisted = useRef(true);
@@ -43,6 +46,7 @@ export function useOpenedBuilding(repositories: WorkspaceRepositories): OpenedBu
     setPersistedState(options.persisted);
     opened.current = next;
     setBuilding(next);
+    setSectionId(options.sectionId);
     setSuggestion(options.suggestion ?? null);
   }, []);
 
@@ -51,6 +55,7 @@ export function useOpenedBuilding(repositories: WorkspaceRepositories): OpenedBu
     persisted.current = true;
     setPersistedState(true);
     setBuilding(null);
+    setSectionId(undefined);
     setSuggestion(null);
   }, []);
 
@@ -58,8 +63,10 @@ export function useOpenedBuilding(repositories: WorkspaceRepositories): OpenedBu
     const current = opened.current;
     if (!current || persisted.current) return;
     await repositories.buildings.create(current);
-    persisted.current = true;
-    setPersistedState(true);
+    if (opened.current?.id === current.id) {
+      persisted.current = true;
+      setPersistedState(true);
+    }
   }, [repositories]);
 
   const rename = useCallback(async (addressLabel: string) => {
@@ -75,5 +82,5 @@ export function useOpenedBuilding(repositories: WorkspaceRepositories): OpenedBu
     return next;
   }, [repositories]);
 
-  return { building, suggestion, persisted: persistedState, select, close, ensureExists, rename };
+  return { building, sectionId, suggestion, persisted: persistedState, select, close, ensureExists, rename };
 }

@@ -222,3 +222,50 @@ describe('building structure against emulator rules', () => {
     })).rejects.toBeInstanceOf(StructureRevisionConflictError);
   });
 });
+
+describe('compartiments persistés et règles de sécurité', () => {
+  it('ajoute un hall et ses portes sans migrer ni archiver le suivi existant', async () => {
+    await seed();
+    const db = testEnv.authenticatedContext('member-a').firestore();
+    const gateway = new FirestoreBuildingStructureGateway(db, 'main', () => 'member-a');
+    const originalRef = doc(db, `${workspace}/doors/door-0`);
+    const original = (await getDoc(originalRef)).data();
+    const added = await gateway.apply({ buildingId: 'building-a', expectedStructureRevision: 4, sectionId: 'hall-b', newSection: { id: 'hall-b', label: 'Hall B' }, targets: [], authorId: 'member-a', createDoorId: () => 'unused' });
+    expect(added.building.sections).toEqual({ 'hall-b': 'Hall B' });
+    expect((await getDoc(originalRef)).data()).toEqual(original);
+    const created = await gateway.apply({ buildingId: 'building-a', expectedStructureRevision: 5, sectionId: 'hall-b', targets: [{ floor: 0, label: '101', sortOrder: 0 }], authorId: 'member-a', createDoorId: () => 'door-hall-b' });
+    expect(created.created[0]).toMatchObject({ sectionId: 'hall-b', label: '101' });
+    expect((await getDoc(doc(db, `${workspace}/doors/door-hall-b`))).data()).toMatchObject({ sectionId: 'hall-b', active: true, revision: 0 });
+    expect((await getDoc(originalRef)).data()).toEqual(original);
+    // La relecture SDK doit retrouver le hall, même lors d'un second changement.
+    const extended = await gateway.apply({ buildingId: 'building-a', expectedStructureRevision: 6, sectionId: 'hall-c', newSection: { id: 'hall-c', label: 'Hall C' }, targets: [{ floor: 0, label: '101', sortOrder: 0 }], authorId: 'member-a', createDoorId: () => 'door-hall-c' });
+    expect(extended.building.sections).toEqual({ 'hall-b': 'Hall B', 'hall-c': 'Hall C' });
+    expect((await getDoc(doc(db, `${workspace}/doors/door-hall-b`))).data()?.active).toBe(true);
+    expect((await getDoc(originalRef)).data()).toEqual(original);
+  });
+
+  it('refuse une porte dans un hall absent et le déplacement d’une porte existante', async () => {
+    await seed();
+    const db = testEnv.authenticatedContext('admin-a').firestore();
+    const batch = writeBatch(db);
+    batch.update(doc(db, `${workspace}/buildings/building-a`), { structureRevision: 5 });
+    batch.set(doc(db, `${workspace}/doors/invalid-hall`), doorData(0, { sectionId: 'missing', revision: 0, lastVisitId: null, currentStatusId: 'unvisited' }));
+    await assertFails(batch.commit());
+    const moving = writeBatch(db);
+    moving.update(doc(db, `${workspace}/buildings/building-a`), { structureRevision: 5, sections: { 'hall-b': 'Hall B' } });
+    moving.update(doc(db, `${workspace}/doors/door-0`), { sectionId: 'hall-b' });
+    await assertFails(moving.commit());
+  });
+
+  it('refuse la suppression, le renommage ou l’ajout de plusieurs halls dans une écriture', async () => {
+    await seed();
+    const db = testEnv.authenticatedContext('admin-a').firestore();
+    const gateway = new FirestoreBuildingStructureGateway(db, 'main', () => 'admin-a');
+    await gateway.apply({ buildingId: 'building-a', expectedStructureRevision: 4, sectionId: 'hall-b', newSection: { id: 'hall-b', label: 'Hall B' }, targets: [], authorId: 'admin-a', createDoorId: () => 'unused' });
+    for (const sections of [{}, { 'hall-b': 'Renommé' }, { 'hall-b': 'Hall B', 'hall-c': 'Hall C', 'hall-d': 'Hall D' }]) {
+      const batch = writeBatch(db);
+      batch.update(doc(db, `${workspace}/buildings/building-a`), { structureRevision: 6, sections });
+      await assertFails(batch.commit());
+    }
+  });
+});

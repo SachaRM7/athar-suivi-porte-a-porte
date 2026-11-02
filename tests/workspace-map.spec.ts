@@ -399,7 +399,7 @@ test('updates the structure preview live and protects a visited door from one-cl
   await expect(page.getByRole('button', { name: '+ Ajouter un étage au-dessus' })).toBeVisible();
   await expect(page.getByRole('button', { name: '+ porte' })).toHaveCount(2);
   await page.getByRole('button', { name: 'Supprimer la porte 11' }).click();
-  await expect(page.getByText('Supprimer l’historique ?')).toBeVisible();
+  await expect(page.getByText('Retirer cette porte ? Son historique est conservé.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeHidden();
   await page.getByRole('button', { name: 'Annuler la suppression de la porte 11' }).click();
   await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeVisible();

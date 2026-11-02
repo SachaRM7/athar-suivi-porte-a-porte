@@ -621,3 +621,17 @@ html { touch-action: manipulation; }
 .building-empty-choice--primary small { color: var(--on-accent); opacity: .8; }
 .building-empty-choice--primary svg { background: color-mix(in srgb, var(--paper) 35%, transparent); stroke: var(--on-accent); }
 .building-empty-choice:disabled { cursor: wait; opacity: .6; }
+
+/* Plusieurs bâtiments / halls sur une emprise : mêmes pastilles et jetons que les filtres. */
+.building-sections { margin-block: 8px; min-width: 0; }
+.building-section-tabs { display: flex; gap: 6px; }
+.building-section-tabs button { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-pill); color: var(--ink-soft); flex: 1 1 0; font: var(--t-125) var(--font-ui); min-width: 0; padding: 8px; overflow-wrap: anywhere; }
+.building-section-tabs button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.building-section-add { font-size: var(--t-115); }
+.building-section-select, .section-form label { color: var(--ink-soft); display: grid; font: var(--t-125) var(--font-ui); gap: 6px; }
+.building-section-select select, .section-form input { background: var(--sunk); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); font: var(--t-15) var(--font-data); min-width: 0; padding: 10px; width: 100%; }
+.section-form { display: grid; gap: 14px; min-width: 0; }
+.door-section-context { color: var(--brand); font: var(--t-125) var(--font-data); margin: 0; }
+.building-empty-state { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.building-empty-state { align-content: start; grid-auto-rows: max-content; }
+.section-form .primary-action { border-radius: var(--r-field); }

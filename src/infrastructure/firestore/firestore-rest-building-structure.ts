@@ -8,6 +8,7 @@ import type { Building, Door, DoorFoyer } from '../../domain/workspace/models';
 import { firestoreRestApi, type FirestoreRestAuth } from './firestore-rest-auth';
 
 type RestValue = {
+  mapValue?: { fields?: Record<string, RestValue> };
   stringValue?: string;
   integerValue?: string;
   booleanValue?: boolean;
@@ -30,6 +31,9 @@ export type ApplyRestBuildingStructureInput = {
   workspaceId: string;
   buildingId: string;
   expectedStructureRevision: number;
+  /** Le plan ne modifie que ce compartiment (suivi historique par défaut). */
+  sectionId?: string;
+  newSection?: { id: string; label: string };
   targets: readonly DoorStructureTarget[];
   authorId: string;
   createDoorId(): string;
@@ -81,7 +85,8 @@ function decodeBuilding(document: RestDocument): Building {
     geohash: stringField(document, 'geohash'),
     zoneId: stringField(document, 'zoneId'),
     createdBy: stringField(document, 'createdBy'),
-    structureRevision: integerField(document, 'structureRevision')
+    structureRevision: integerField(document, 'structureRevision'),
+    ...(document.fields?.sections ? { sections: Object.fromEntries(Object.entries(document.fields.sections.mapValue?.fields ?? {}).map(([id, value]) => [id, value.stringValue ?? ''])) } : {})
   };
 }
 
@@ -93,6 +98,7 @@ function decodeDoor(document: RestDocument): Door {
   return {
     id: documentId(document),
     buildingId: stringField(document, 'buildingId'),
+    ...(document.fields?.sectionId ? { sectionId: stringField(document, 'sectionId') } : {}),
     zoneId: stringField(document, 'zoneId'),
     location: pointField(document, 'location'),
     geohash: stringField(document, 'geohash'),
@@ -130,6 +136,7 @@ function mutableDoorFields(fields: { floor: number; label: string; sortOrder: nu
 function createdDoorFields(door: Door): Record<string, RestValue> {
   return {
     buildingId: stringValue(door.buildingId),
+    ...(door.sectionId ? { sectionId: stringValue(door.sectionId) } : {}),
     zoneId: stringValue(door.zoneId),
     location: { geoPointValue: door.location },
     geohash: stringValue(door.geohash),
@@ -203,6 +210,8 @@ export async function applyBuildingStructureWithRest(
     building,
     doors,
     targets: input.targets,
+    sectionId: input.sectionId,
+    newSection: input.newSection,
     authorId: input.authorId,
     createDoorId: input.createDoorId
   });
@@ -213,8 +222,8 @@ export async function applyBuildingStructureWithRest(
   const doorName = (doorId: string) => `${databaseName}/documents/workspaces/${input.workspaceId}/doors/${doorId}`;
   const writes = [
     {
-      update: { name: buildingName, fields: { structureRevision: integerValue(diff.building.structureRevision) } },
-      updateMask: { fieldPaths: ['structureRevision'] },
+      update: { name: buildingName, fields: { structureRevision: integerValue(diff.building.structureRevision), ...(diff.building.sections ? { sections: { mapValue: { fields: Object.fromEntries(Object.entries(diff.building.sections).map(([id, label]) => [id, stringValue(label)])) } } } : {}) } },
+      updateMask: { fieldPaths: ['structureRevision', ...(diff.building.sections ? ['sections'] : [])] },
       updateTransforms: [{ fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME' }],
       ...(buildingDocument.updateTime ? { currentDocument: { updateTime: buildingDocument.updateTime } } : {})
     },

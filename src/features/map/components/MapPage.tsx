@@ -78,7 +78,7 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
       const building = door ? await repositories.buildings.get(door.buildingId) : null;
       if (!building) throw new Error('unavailable');
       setIssueMessage(null);
-      opened.select(building, { persisted: true });
+      opened.select(building, { persisted: true, sectionId: door?.sectionId });
     } catch {
       setIssueMessage(sync.failedDoorId
         ? 'Le bâtiment concerné est indisponible. Reconnecte-toi pour le retrouver. La dernière saisie n’a pas été enregistrée.'
@@ -89,7 +89,7 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
   // La structure vient de changer : la liste et le compteur de la carte doivent suivre,
   // sinon ils gardent « 4 portes » sur un bâtiment qu'on vient de vider.
   const changeBuilding = useCallback((building: Building) => {
-    opened.select(building, { persisted: true, suggestion: null });
+    opened.select(building, { persisted: true, suggestion: null, sectionId: opened.sectionId });
     setDataVersion((version) => version + 1);
   }, [opened]);
   // Une adresse écrite en base doit remonter dans la liste et la recherche de la zone.
@@ -130,6 +130,7 @@ function ActiveMapPage({ member }: { member: WorkspaceMember }): ReactElement {
       <BuildingVisitSheet
         authorId={member.id}
         building={opened.building}
+        initialSectionId={opened.sectionId}
         canDeleteVisitedDoors={member.role === 'admin'}
         canEditStructure
         ensureBuildingExists={opened.ensureExists}

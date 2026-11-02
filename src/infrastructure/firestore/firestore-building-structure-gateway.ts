@@ -46,6 +46,9 @@ export function assertStructureMutationBudget(diff: BuildingStructureDiff): void
 export type ApplyFirestoreBuildingStructureInput = {
   buildingId: string;
   expectedStructureRevision: number;
+  /** Le plan ne modifie que ce compartiment (suivi historique par défaut). */
+  sectionId?: string;
+  newSection?: { id: string; label: string };
   targets: readonly DoorStructureTarget[];
   authorId: string;
   createDoorId(): string;
@@ -78,6 +81,8 @@ export class FirestoreBuildingStructureGateway {
       building,
       doors: doorSnapshots.docs.map((entry) => fromFirestoreDoor(entry.id, entry.data())),
       targets: input.targets,
+      sectionId: input.sectionId,
+      newSection: input.newSection,
       authorId: input.authorId,
       createDoorId: input.createDoorId
     });
@@ -86,7 +91,7 @@ export class FirestoreBuildingStructureGateway {
     assertStructureMutationBudget(diff);
 
     const batch = writeBatch(this.db);
-    batch.update(buildingRef, { structureRevision: diff.building.structureRevision, updatedAt: serverTimestamp() });
+    batch.update(buildingRef, { structureRevision: diff.building.structureRevision, ...(diff.building.sections ? { sections: diff.building.sections } : {}), updatedAt: serverTimestamp() });
     for (const door of diff.created) {
       // Le marqueur porte son nom français en base, comme dans `workspace-codecs.ts` :
       // `validDoor()` refuse `sisters`, et une porte relue sous ce nom perdrait son anneau.

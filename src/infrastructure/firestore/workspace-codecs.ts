@@ -49,6 +49,7 @@ export function fromFirestoreDoor(id: string, data: DocumentData): Door {
   const door: Door = {
     id,
     buildingId: requiredString(data, 'buildingId'),
+    ...(data.sectionId === undefined ? {} : { sectionId: requiredString(data, 'sectionId') }),
     zoneId: requiredString(data, 'zoneId'),
     location: { latitude: data.location.latitude, longitude: data.location.longitude },
     geohash: requiredString(data, 'geohash'),
@@ -85,7 +86,8 @@ export function fromFirestoreBuilding(id: string, data: DocumentData): Building 
     geohash: requiredString(data, 'geohash'),
     zoneId: requiredString(data, 'zoneId'),
     createdBy: requiredString(data, 'createdBy'),
-    structureRevision: requiredNumber(data, 'structureRevision')
+    structureRevision: requiredNumber(data, 'structureRevision'),
+    ...(data.sections === undefined ? {} : { sections: data.sections })
   };
   assertBuilding(building);
   return building;

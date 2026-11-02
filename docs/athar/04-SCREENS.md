@@ -104,3 +104,17 @@ un frère par un formulaire à trois réglages pour une maison individuelle est 
 Tant qu'un bâtiment n'a pas de structure, **la barre de progression et le pied de panneau disparaissent**.
 Une jauge à zéro dit « tu n'as rien fait » ; la vraie situation est « il n'y a rien à faire tant que ce n'est
 pas décrit ». Deux messages très différents pour qui découvre l'outil.
+
+## Extension — bâtiments / halls facultatifs
+
+Une fiche simple ne montre aucun onglet ni nom « Bâtiment A ». Elle propose seulement
+« + Ajouter un bâtiment / hall ». L'annulation ne crée rien. Après ajout explicite, le
+sélecteur apparaît au-dessus des étages : pastilles jusqu'à trois compartiments, liste
+native au-delà, triée par nom (ordre naturel, adapté à quinze halls).
+
+Chaque compartiment montre uniquement ses propres portes et sa progression. Son nom
+reste visible dans la fiche porte, l'ajout individuel et le dialogue de structure. L'ajout
+individuel accepte un libellé libre tel que A01 et un étage ; la création groupée reste
+accessible. Les doublons sont refusés dans un même étage et compartiment, autorisés entre
+compartiments. Les actions groupées et les retraits de structure restent limités au
+compartiment sélectionné. Les passages historiques sont toujours conservés.

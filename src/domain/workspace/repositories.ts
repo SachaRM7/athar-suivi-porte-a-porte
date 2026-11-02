@@ -78,6 +78,9 @@ export type WorkspaceRepositories = {
   applyBuildingStructure(input: {
     buildingId: string;
     expectedStructureRevision: number;
+    /** Le plan ne modifie que ce compartiment (suivi historique par défaut). */
+    sectionId?: string;
+    newSection?: { id: string; label: string };
     targets: readonly DoorStructureTarget[];
     authorId: string;
     createDoorId(): string;

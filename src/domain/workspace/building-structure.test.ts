@@ -121,3 +121,60 @@ describe('building structure diff', () => {
     })).toThrow('A structure plan cannot assign the same existing door more than once.');
   });
 });
+
+describe('compartiments sur la même emprise', () => {
+  const sectionBuilding = { ...building, sections: { 'section-b': 'Bâtiment B', 'section-c': 'Hall C' } };
+  const original = { ...door(0), label: 'A01' };
+  const inB = { ...door(1), id: 'door-b', label: 'A01', sectionId: 'section-b' };
+  const inC = { ...door(2), id: 'door-c', label: 'A01', sectionId: 'section-c' };
+  const common = { building: sectionBuilding, doors: [original, inB, inC], authorId: 'admin-1', createDoorId: () => 'new-door' };
+
+  it('ne matérialise aucun compartiment pour le suivi historique', () => {
+    const diff = buildBuildingStructureDiff({ ...common, building, doors: [original], targets: [{ existingDoorId: original.id, floor: 0, label: 'A01', sortOrder: 0 }] });
+    expect(diff.building).toEqual(building);
+    expect(diff.building.sections).toBeUndefined();
+    expect(diff.created).toEqual([]);
+    expect(diff.updated).toEqual([]);
+  });
+
+  it('ajoute un compartiment vide sans toucher aux portes déjà suivies', () => {
+    const diff = buildBuildingStructureDiff({ ...common, building, doors: [original], sectionId: 'section-b', newSection: { id: 'section-b', label: ' Bâtiment B ' }, targets: [] });
+    expect(diff.building.sections).toEqual({ 'section-b': 'Bâtiment B' });
+    expect(diff.building.structureRevision).toBe(building.structureRevision + 1);
+    expect(diff.created).toEqual([]);
+    expect(diff.updated).toEqual([]);
+    expect(diff.archivedDoorIds).toEqual([]);
+  });
+
+  it('autorise A01 dans B et C avec des identifiants indépendants', () => {
+    const diff = buildBuildingStructureDiff({ ...common, doors: [original, inC], sectionId: 'section-b', targets: [{ floor: 0, label: 'A01', sortOrder: 0 }] });
+    expect(diff.created).toHaveLength(1);
+    expect(diff.created[0]).toMatchObject({ id: 'new-door', label: 'A01', sectionId: 'section-b', lastVisitId: null });
+    expect(diff.archivedDoorIds).toEqual([]);
+    expect(diff.updated).toEqual([]);
+  });
+
+  it('ne retire que les portes du compartiment demandé', () => {
+    expect(buildBuildingStructureDiff({ ...common, sectionId: 'section-b', targets: [] }).archivedDoorIds).toEqual(['door-b']);
+    expect(buildBuildingStructureDiff({ ...common, targets: [] }).archivedDoorIds).toEqual([original.id]);
+  });
+
+  it('refuse de réutiliser une porte historique appartenant à un autre compartiment', () => {
+    expect(() => buildBuildingStructureDiff({ ...common, sectionId: 'section-b', targets: [{ existingDoorId: original.id, floor: 0, label: 'A01', sortOrder: 0 }] })).toThrow('unknown existing door');
+  });
+
+  it('refuse les compartiments inconnus, les noms en double et les remplacements', () => {
+    expect(() => buildBuildingStructureDiff({ ...common, sectionId: 'missing', targets: [] })).toThrow('Unknown building section');
+    expect(() => buildBuildingStructureDiff({ ...common, sectionId: 'new', newSection: { id: 'new', label: ' bâtiment b ' }, targets: [] })).toThrow('existe déjà');
+    expect(() => buildBuildingStructureDiff({ ...common, sectionId: 'section-b', newSection: { id: 'section-b', label: 'Autre nom' }, targets: [] })).toThrow('existe déjà');
+    expect(() => buildBuildingStructureDiff({ ...common, sectionId: 'new', newSection: { id: 'new', label: 'Bâtiment A' }, targets: [] })).toThrow('existe déjà');
+  });
+});
+
+it('refuse un nouvel identifiant de porte déjà utilisé dans un autre compartiment', () => {
+  const original = door(0);
+  expect(() => buildBuildingStructureDiff({
+    building: { ...building, sections: { 'hall-b': 'Hall B' } }, doors: [original], sectionId: 'hall-b',
+    targets: [{ newDoorId: original.id, floor: 0, label: 'A01', sortOrder: 0 }], authorId: 'admin-1', createDoorId: () => original.id
+  })).toThrow('Generated door IDs must be unique');
+});

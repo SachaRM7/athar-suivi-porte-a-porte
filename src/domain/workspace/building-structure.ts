@@ -1,3 +1,4 @@
+import { DEFAULT_SECTION_ID, doorSectionId, normalizeSectionLabel, type BuildingSection } from './building-sections';
 import { assertBuilding, assertDoor, assertEntityId } from './invariants';
 import type { Building, Door, EntityId, UserId } from './models';
 
@@ -32,6 +33,8 @@ export type BuildingStructureDiff = {
 
 export type BuildStructureDiffInput = {
   building: Building;
+  sectionId?: string;
+  newSection?: BuildingSection;
   doors: readonly Door[];
   targets: readonly DoorStructureTarget[];
   authorId: UserId;
@@ -89,7 +92,17 @@ export function generateUniformDoorTargets(input: UniformDoorGeneration): DoorSt
 export function buildBuildingStructureDiff(input: BuildStructureDiffInput): BuildingStructureDiff {
   assertBuilding(input.building);
   assertEntityId(input.authorId, 'authorId');
-  const doors = input.doors.filter((door) => door.buildingId === input.building.id);
+  const sectionId = input.sectionId ?? DEFAULT_SECTION_ID;
+  let building = input.building;
+  if (input.newSection) {
+    const { id, label } = input.newSection;
+    if (id !== sectionId || id === DEFAULT_SECTION_ID || Object.hasOwn(building.sections ?? {}, id)) throw new Error('Ce bâtiment / hall existe déjà.');
+    building = { ...building, sections: { ...building.sections, [id]: normalizeSectionLabel(label) } };
+    assertBuilding(building);
+  }
+  if (sectionId !== DEFAULT_SECTION_ID && !Object.hasOwn(building.sections ?? {}, sectionId)) throw new Error('Unknown building section.');
+  // Un plan vide archive seulement les portes du compartiment choisi, jamais ses voisins.
+  const doors = input.doors.filter((door) => door.buildingId === building.id && doorSectionId(door) === sectionId);
   doors.forEach((door) => assertDoor(door, input.building));
   const targets = input.targets.map((target) => ({ ...target, label: target.label.trim() }));
   const targetKeys = new Set<string>();
@@ -100,6 +113,7 @@ export function buildBuildingStructureDiff(input: BuildStructureDiffInput): Buil
     targetKeys.add(key);
   }
 
+  const allDoorIds = new Set(input.doors.map(door => door.id));
   const byId = new Map(doors.map((door) => [door.id, door]));
   const byLegacyKey = new Map<string, Door[]>();
   for (const door of doors) {
@@ -129,10 +143,11 @@ export function buildBuildingStructureDiff(input: BuildStructureDiffInput): Buil
     if (!existing) {
       const id = target.newDoorId ?? input.createDoorId();
       assertEntityId(id, 'generatedDoorId');
-      if (byId.has(id) || created.some((door) => door.id === id)) throw new Error('Generated door IDs must be unique.');
+      if (allDoorIds.has(id) || created.some((door) => door.id === id)) throw new Error('Generated door IDs must be unique.');
       created.push({
         id,
         buildingId: input.building.id,
+        ...(sectionId === DEFAULT_SECTION_ID ? {} : { sectionId }),
         zoneId: input.building.zoneId,
         location: { ...input.building.location },
         geohash: input.building.geohash,
@@ -167,9 +182,9 @@ export function buildBuildingStructureDiff(input: BuildStructureDiffInput): Buil
   }
 
   const archivedDoorIds = doors.filter((door) => door.active && !matchedDoorIds.has(door.id)).map((door) => door.id);
-  const changed = created.length > 0 || updated.length > 0 || archivedDoorIds.length > 0;
+  const changed = created.length > 0 || updated.length > 0 || archivedDoorIds.length > 0 || input.newSection !== undefined;
   return {
-    building: changed ? { ...input.building, structureRevision: input.building.structureRevision + 1 } : input.building,
+    building: changed ? { ...building, structureRevision: building.structureRevision + 1 } : building,
     created,
     updated,
     archivedDoorIds,
