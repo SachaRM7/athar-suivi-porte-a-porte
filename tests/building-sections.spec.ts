@@ -83,3 +83,37 @@ test('quinze halls restent accessibles dans un sélecteur compact sur mobile', a
   expect(box!.height).toBeGreaterThanOrEqual(44);
   expect(box!.x + box!.width).toBeLessThanOrEqual(320);
 });
+
+test('numérote 28 à 39, contrôle les bornes et conserve le suivi à la réouverture', async ({ page }) => {
+  await openBuilding(page);
+  await addSection(page, 'Bâtiment B');
+  await page.getByRole('button', { name: 'Décrire le bâtiment' }).click();
+  const structure = page.getByRole('dialog', { name: 'Configurer le batiment', exact: true });
+  await structure.getByRole('button', { name: 'Augmenter — Étages au-dessus du rez-de-chaussée' }).click();
+  await structure.getByRole('button', { name: 'Diminuer — Portes par étage' }).click();
+  await structure.getByRole('button', { name: 'Numéros continus', exact: true }).click();
+  await structure.getByRole('textbox', { name: 'Plus grand numéro · dernier étage' }).fill('39');
+  await expect(structure.getByRole('textbox', { name: 'Plus petit numéro · RDC' })).toHaveValue('28');
+  await structure.getByRole('textbox', { name: 'Plus petit numéro · RDC' }).fill('');
+  await structure.getByRole('textbox', { name: 'Plus petit numéro · RDC' }).fill('28');
+  const preview = structure.getByRole('region', { name: 'Aperçu vivant' });
+  await expect(preview.locator('div')).toHaveText(['3ème373839', '2ème343536', '1er313233', 'RDC282930']);
+  await structure.getByRole('textbox', { name: 'Plus grand numéro · dernier étage' }).fill('40');
+  await expect(structure.getByRole('alert')).toContainText('13 portes');
+  await expect(structure.getByRole('button', { name: 'Vérifier la numérotation dans Bâtiment B' })).toBeDisabled();
+  await structure.getByRole('textbox', { name: 'Plus grand numéro · dernier étage' }).fill('39');
+  await structure.getByRole('button', { name: 'Créer 12 portes dans Bâtiment B' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.door-row')).toHaveCount(12);
+  await page.getByRole('button', { name: 'Porte 39, Pas encore fait', exact: true }).click();
+  await page.getByRole('button', { name: 'Contact établi', exact: true }).click();
+  await page.getByRole('button', { name: 'Bâtiment A', exact: true }).click();
+  await page.getByRole('button', { name: 'Bâtiment B', exact: true }).click();
+  await page.getByRole('button', { name: 'Configurer le batiment' }).click();
+  await expect(structure.getByRole('button', { name: 'Numéros continus', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(structure.getByRole('textbox', { name: 'Plus petit numéro · RDC' })).toHaveValue('28');
+  await expect(structure.getByRole('textbox', { name: 'Plus grand numéro · dernier étage' })).toHaveValue('39');
+  await expect(structure.getByRole('button', { name: 'Structure inchangée dans Bâtiment B' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Porte 39, Contact établi', exact: true })).toBeVisible();
+});

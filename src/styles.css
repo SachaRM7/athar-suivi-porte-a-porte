@@ -635,3 +635,8 @@ html { touch-action: manipulation; }
 .building-empty-state { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .building-empty-state { align-content: start; grid-auto-rows: max-content; }
 .section-form .primary-action { border-radius: var(--r-field); }
+
+.continuous-numbering-fields { display: grid; gap: 10px; }
+.continuous-numbering-fields label { color: var(--ink-soft); display: grid; font: var(--t-125) var(--font-ui); gap: 6px; }
+.continuous-numbering-fields input { background: var(--sunk); border: 1px solid var(--hairline); border-radius: var(--r-field); color: var(--ink); font: var(--t-15) var(--font-data); min-height: var(--touch); padding: 10px 12px; width: 100%; }
+.numbering-error { border-left: 2px solid var(--ink-soft); color: var(--ink); font: var(--t-125)/1.45 var(--font-ui); margin: 0; padding: 8px 12px; }

@@ -118,3 +118,19 @@ individuel accepte un libellé libre tel que A01 et un étage ; la création gro
 accessible. Les doublons sont refusés dans un même étage et compartiment, autorisés entre
 compartiments. Les actions groupées et les retraits de structure restent limités au
 compartiment sélectionné. Les passages historiques sont toujours conservés.
+
+## Numérotation continue de terrain
+
+Le mode « Numéros continus » remplace la suite figée de 1 à N. Pour une structure nouvelle,
+il est sélectionné par défaut ; les schémas par étage restent accessibles dans les mêmes
+pastilles. Deux champs suivent l'ordre de la coupe : plus grand numéro au dernier étage,
+puis plus petit numéro au RDC. Une borne non saisie se calcule depuis l'autre et la capacité
+(niveaux × portes par étage). Deux bornes saisies sont vérifiées sans correction silencieuse.
+Un écart bloque la création, explique les deux totaux et demande d'ajuster les paramètres.
+
+Exemple : 3 étages au-dessus du RDC, 3 portes par niveau, bornes 28 et 39 → RDC 28–30,
+1er 31–33, 2ème 34–36, 3ème 37–39. L'aperçu montre les numéros réels avant toute écriture.
+Les zéros initiaux sont conservés. Une suite déjà enregistrée est reconnue à la réouverture,
+et les portes de mêmes étage et numéro gardent leurs identifiants et leurs passages.
+Une numérotation discontinue ou alphanumérique reste configurable par ajout individuel
+ou ajustement manuel ; aucune suite n'est déduite d'un ensemble incomplet.

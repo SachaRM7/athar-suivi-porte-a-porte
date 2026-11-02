@@ -13,6 +13,7 @@ import { isTrustedDevice, setTrustedDevice } from '../../../infrastructure/offli
 import { CADASTRAL_SUGGESTION_NOTICE, type CadastralSuggestion } from '../model/cadastral-structure';
 import { buildingStaleness } from '../model/building-staleness';
 import { hasPlaceholderAddress, MAX_ADDRESS_LENGTH, normalizeAddressLabel } from '../model/building-address';
+import { continuousBounds, continuousNumberingPreview, inferContinuousBounds } from '../model/continuous-numbering';
 import { planStructureFromPreview, structurePlanLabel } from '../model/structure-plan';
 import { doorsForGroupedAbsence, requiresDoNotDisturbConfirmation } from '../../../domain/workspace/follow-up';
 import { Stepper } from '../../../design/components';
@@ -171,7 +172,9 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
   const [structureLoadedBuildingId, setStructureLoadedBuildingId] = useState<string | null>(null);
   const [manualPlan, setManualPlan] = useState('');
   const [showManual, setShowManual] = useState(false);
-  const [numbering, setNumbering] = useState<'floor' | 'hundreds' | 'serial'>('floor');
+  const [numberingChoice, setNumbering] = useState<'floor' | 'hundreds' | 'range' | null>(null);
+  const [smallestDraft, setSmallestDraft] = useState<string | null>(null);
+  const [largestDraft, setLargestDraft] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [confirmDeletion, setConfirmDeletion] = useState<string | null>(null);
   const [confirmFloorDeletion, setConfirmFloorDeletion] = useState<number | null>(null);
@@ -276,6 +279,8 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
     };
   }, [doors, structureDoors]);
   const hasDescribedStructure = describedStructure.present;
+  const existingBounds = useMemo(() => inferContinuousBounds(structureDoors), [structureDoors]);
+  const numbering = numberingChoice ?? (existingBounds || !hasDescribedStructure ? 'range' : 'floor');
   const applicableStructureSuggestion = structureLoadedBuildingId === openedBuildingId && !hasDescribedStructure && !multipleSections ? structureSuggestion : null;
   const initialFloorCount = hasDescribedStructure
     ? String(describedStructure.floorsAboveGround)
@@ -295,15 +300,20 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
   const statusesById = useMemo(() => byId(statuses), [statuses]);
   const floors = useMemo(() => floorProgress(doors), [doors]);
   const total = useMemo(() => overallProgress(doors), [doors]);
+  const rangeBounds = continuousBounds((Number(floorCount) + 1) * Number(doorsPerFloor), smallestDraft, largestDraft, existingBounds?.smallest ?? '1');
+  const { smallest: rangeSmallest, largest: rangeLargest } = rangeBounds;
+  const rangePreview = useMemo(() => continuousNumberingPreview(Number(floorCount) + 1, Number(doorsPerFloor), { smallest: rangeSmallest, largest: rangeLargest }), [floorCount, doorsPerFloor, rangeSmallest, rangeLargest]);
+  const numberingError = numbering === 'range' ? rangePreview.error : null;
+  const rangeFloors = rangePreview.floors;
   const structurePreview = useMemo(() => {
+    if (numbering === 'range') return rangeFloors;
     const levels = Math.max(1, Number(floorCount) + 1);
     const count = Math.max(1, Number(doorsPerFloor));
     return Array.from({ length: levels }, (_, floorIndex) => Array.from({ length: count }, (_, index) => {
-      if (numbering === 'serial') return String(floorIndex * count + index + 1);
       if (numbering === 'hundreds') return String((floorIndex + 1) * 100 + index + 1);
       return `${floorIndex}${index + 1}`.padStart(2, '0');
     }));
-  }, [floorCount, doorsPerFloor, numbering]);
+  }, [floorCount, doorsPerFloor, numbering, rangeFloors]);
   // Identifiants provisoires : ce plan sert à annoncer l'effet du bouton, pas à écrire.
   const structurePlan = useMemo(() => {
     let previewId = 0;
@@ -666,7 +676,7 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
   function openFloorCreation(floorNumber: number): void {
     const defaultCount = Math.max(1, Number(doorsPerFloor) || 1);
     const firstLabel = numbering === 'hundreds' ? (floorNumber + 1) * 100 + 1
-      : numbering === 'serial' ? doors.length + 1
+      : numbering === 'range' ? Number(rangeBounds.smallest) + floorNumber * defaultCount
         : floorNumber * 10 + 1;
     setFloor(floorNumber);
     setQuickDoorCount(String(defaultCount));
@@ -721,6 +731,7 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
   }
 
   async function applyStructurePlan(): Promise<void> {
+    if (numberingError) { reportStructure(numberingError); return; }
     const archivesVisitedDoors = structurePlan.archived.some((door) => door.lastVisitId);
     if (archivesVisitedDoors && !canDeleteVisitedDoors) {
       reportStructure('Ce réglage retirerait des portes déjà visitées : seul le coordinateur peut le faire. Pour ajouter des portes ou un étage, augmente les réglages ou utilise « Modifier ».');
@@ -927,14 +938,20 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
               {showsCadastralNotice && <p className="structure-suggestion">{CADASTRAL_SUGGESTION_NOTICE}</p>}
               <div className="structure-fields"><label><span>Étages au-dessus du rez-de-chaussée</span><Stepper label="Étages au-dessus du rez-de-chaussée" max={20} min={0} onChange={(value) => editStructureDraft({ floorCount: String(value) })} unit="étages" value={Math.max(0, Number(floorCount) || 0)} gloss={`RDC compris = ${Math.max(1, Number(floorCount) + 1)} niveaux`} /></label><label><span>Portes par étage</span><Stepper label="Portes par étage" max={50} min={1} onChange={(value) => editStructureDraft({ doorsPerFloor: String(value) })} value={Math.max(1, Number(doorsPerFloor) || 1)} gloss="modifiable étage par étage" /></label></div>
               <p className="structure-numbering-label">Numérotation</p>
-              <div className="numbering-options" aria-label="Numérotation"><button aria-pressed={numbering === 'floor'} onClick={() => chooseNumbering('floor')} type="button">01, 02 · 11, 12</button><button aria-pressed={numbering === 'hundreds'} onClick={() => chooseNumbering('hundreds')} type="button">101, 102 · 201</button><button aria-pressed={numbering === 'serial'} onClick={() => chooseNumbering('serial')} type="button">1 à {structurePreview.flat().length}, en suite</button></div>
-              <section className="structure-preview" aria-label="Aperçu vivant"><p className="eyebrow">Aperçu</p>{structurePreview.slice().reverse().map((labels, reverseIndex) => { const floorNumber = structurePreview.length - reverseIndex - 1; return <div key={floorNumber}><strong>{floorLabel(floorNumber)}</strong>{labels.map((label) => <span key={label}>{label}</span>)}</div>; })}<small>Rue · entrée principale</small></section>
+              <div className="numbering-options" aria-label="Numérotation"><button aria-pressed={numbering === 'range'} onClick={() => chooseNumbering('range')} type="button">Numéros continus</button><button aria-pressed={numbering === 'floor'} onClick={() => chooseNumbering('floor')} type="button">01, 02 · 11, 12</button><button aria-pressed={numbering === 'hundreds'} onClick={() => chooseNumbering('hundreds')} type="button">101, 102 · 201</button></div>
+              {numbering === 'range' && <div className="continuous-numbering-fields">
+                <label>Plus grand numéro · dernier étage<input aria-describedby="numbering-help" inputMode="numeric" maxLength={6} value={rangeBounds.largest} onChange={event => { setLargestDraft(event.target.value); setConfirmStructureArchive(false); }} /></label>
+                <label>Plus petit numéro · RDC<input aria-describedby="numbering-help" inputMode="numeric" maxLength={6} value={rangeBounds.smallest} onChange={event => { setSmallestDraft(event.target.value); setConfirmStructureArchive(false); }} /></label>
+                <p id="numbering-help" className="structure-sheet-lead">Saisis un numéro : l’autre se calcule. Si tu saisis les deux, on vérifie le total.</p>
+                {numberingError && <p className="numbering-error" role="alert">{numberingError}</p>}
+              </div>}
+              {!numberingError && <section className="structure-preview" aria-label="Aperçu vivant"><p className="eyebrow">Aperçu</p>{structurePreview.slice().reverse().map((labels, reverseIndex) => { const floorNumber = structurePreview.length - reverseIndex - 1; return <div key={floorNumber}><strong>{floorLabel(floorNumber)}</strong>{labels.map((label) => <span key={label}>{label}</span>)}</div>; })}<small>Rue · entrée principale</small></section>}
               {confirmStructureArchive && structurePlan.archived.length > 0 && <div className="structure-reset-confirm structure-archive-confirm" role="alert">
                 <b>Retirer {structurePlan.archived.length === 1 ? 'la porte' : `ces ${structurePlan.archived.length} portes`} : {structurePlan.archived.map((door) => `${floorLabel(door.floor)} ${door.label}`).join(', ')} ?</b>
                 <span>Elles disparaissent de la coupe. Leurs passages restent dans l’historique. Les {structurePlan.kept} autres portes gardent leur suivi.</span>
                 <span className="structure-reset-actions"><button disabled={structurePending} onClick={() => void applyStructurePlan()} type="button">Oui, retirer</button><button onClick={() => setConfirmStructureArchive(false)} type="button">Non</button></span>
               </div>}
-              <button className="primary-action" disabled={structurePending || (structurePlan.created === 0 && structurePlan.archived.length === 0)} onClick={() => void applyStructurePlan()} type="button">{structurePending ? 'Enregistrement…' : `${structurePlanLabel(structurePlan)}${activeSectionLabel ? ` dans ${activeSectionLabel}` : ''}`}</button>
+              <button className="primary-action" disabled={structurePending || numberingError !== null || (structurePlan.created === 0 && structurePlan.archived.length === 0)} onClick={() => void applyStructurePlan()} type="button">{structurePending ? 'Enregistrement…' : `${numberingError ? 'Vérifier la numérotation' : structurePlanLabel(structurePlan)}${activeSectionLabel ? ` dans ${activeSectionLabel}` : ''}`}</button>
               {canDeleteVisitedDoors && <button className="text-button" onClick={() => { if (!showManual) setManualPlan(structureDoors.filter((door) => door.active).map((door) => `${door.floor} | ${door.label} | ${door.id}`).join('\n')); setShowManual((current) => !current); }} type="button">Ajustement manuel</button>}
               {canDeleteVisitedDoors && showManual && <><label className="manual-plan-label">Plan manuel (etage | porte | ID ou new:ID)<textarea aria-label="Plan manuel de portes" onChange={(event) => setManualPlan(event.target.value)} rows={5} value={manualPlan} /></label><button className="secondary-action" onClick={() => void runStructure(() => parseManualTargets(manualPlan))} type="button">Appliquer le plan manuel</button></>}
               <details className="structure-advanced"><summary>Portes archivées</summary>
