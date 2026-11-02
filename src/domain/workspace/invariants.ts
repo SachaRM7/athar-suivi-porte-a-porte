@@ -1,3 +1,4 @@
+import { DEFAULT_SECTION_ID, MAX_BUILDING_SECTIONS, MAX_SECTION_LABEL_LENGTH, normalizeSectionLabel } from './building-sections';
 import type { BoundingBox, Building, Door, GeoPoint, Status, Visit, Zone } from './models';
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -47,6 +48,19 @@ export function assertBuilding(building: Building): void {
   assertEntityId(building.createdBy, 'building.createdBy');
   if (!building.addressLabel.trim() || building.addressLabel.length > 160) throw new Error('Building address must contain 1 to 160 characters.');
   if (!Number.isInteger(building.structureRevision) || building.structureRevision < 0) throw new Error('Building structure revision must be a non-negative integer.');
+  if (building.sections !== undefined) {
+    if (!building.sections || typeof building.sections !== 'object' || Array.isArray(building.sections)) throw new Error('Building sections must be a map.');
+    const sections = Object.entries(building.sections);
+    if (sections.length >= MAX_BUILDING_SECTIONS) throw new Error('Too many building sections.');
+    const labels = new Set(['bâtiment a']);
+    for (const [id, label] of sections) {
+      assertEntityId(id, 'section.id');
+      if (id === DEFAULT_SECTION_ID || typeof label !== 'string' || !label.trim() || label.length > MAX_SECTION_LABEL_LENGTH) throw new Error('Invalid building section.');
+      const normalized = normalizeSectionLabel(label).toLocaleLowerCase('fr-FR');
+      if (labels.has(normalized)) throw new Error('Ce bâtiment / hall existe déjà. Choisis un autre nom.');
+      labels.add(normalized);
+    }
+  }
   assertGeoPoint(building.location, 'building.location');
   if (!GEOHASH.test(building.geohash)) throw new Error('Building geohash is invalid.');
 }
@@ -54,6 +68,7 @@ export function assertBuilding(building: Building): void {
 export function assertDoor(door: Door, building?: Building): void {
   assertEntityId(door.id, 'door.id');
   assertEntityId(door.buildingId, 'door.buildingId');
+  if (door.sectionId !== undefined) assertEntityId(door.sectionId, 'door.sectionId');
   assertEntityId(door.zoneId, 'door.zoneId');
   assertEntityId(door.createdBy, 'door.createdBy');
   if (!Number.isInteger(door.floor) || door.floor < -5 || door.floor > 200) throw new Error('Door floor is outside the supported range.');

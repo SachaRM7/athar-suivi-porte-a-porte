@@ -165,6 +165,8 @@ export function createMemoryWorkspaceRepositories(snapshot: WorkspaceSnapshot): 
         building,
         doors: [...doors.values()],
         targets: input.targets,
+        sectionId: input.sectionId,
+        newSection: input.newSection,
         authorId: input.authorId,
         createDoorId: input.createDoorId
       });

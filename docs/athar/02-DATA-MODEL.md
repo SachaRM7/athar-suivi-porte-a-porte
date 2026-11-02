@@ -151,3 +151,28 @@ Une correction se fait en ajoutant un passage, pas en modifiant le précédent.
 Supprimer une porte qui a des passages efface le travail de frères. L'interface demande confirmation
 explicite dans ce cas (cf. `04-SCREENS.md`), et l'opération est réservée au coordinateur.
 Une porte sans passage se supprime sans friction.
+
+## Compartiments facultatifs sur une même emprise
+
+Le schéma workspace accepte `building.sections?: { [id]: nom }` et `door.sectionId?: id`.
+Ces champs restent **absents pour le cas courant à un seul bâtiment**. Ouvrir une fiche,
+créer une porte ou décrire un bâtiment unique ne crée aucun compartiment. Aucun script
+ne migre les données historiques et aucun identifiant de porte ou de passage ne change.
+
+L'action explicite « Ajouter un bâtiment / hall » ajoute seulement une entrée à `sections`
+et incrémente `structureRevision`. Le suivi existant reste implicite sous la clé locale
+`main` et apparaît alors comme « Bâtiment A ». Les portes existantes ne sont pas réécrites.
+Les compartiments supplémentaires peuvent rester vides et porter leurs noms de terrain.
+
+Les plans de structure sont limités à `sectionId` (`main` par défaut), y compris les
+archives et les résolutions de renommage. Deux portes A01 au même étage dans des
+compartiments différents gardent des identifiants et des historiques indépendants.
+Le changement de compartiment ferme les fiches et les brouillons du précédent.
+
+Les règles n'autorisent que l'ajout d'un compartiment par révision, jamais son remplacement
+ou sa suppression. Une porte ne peut pas être déplacée entre compartiments. La limite est
+50 compartiments, suivi d'origine compris. Le contour, l'adresse et les statistiques de
+zone continuent à représenter l'emprise complète et l'ensemble de ses portes.
+
+La livraison nécessite les nouvelles règles Firestore **avant** le frontend. Les données
+existantes restent compatibles ; aucune migration ni réécriture des passages n'est requise.

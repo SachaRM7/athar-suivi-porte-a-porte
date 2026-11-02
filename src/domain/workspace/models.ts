@@ -86,11 +86,15 @@ export type Building = {
   zoneId: EntityId;
   createdBy: UserId;
   structureRevision: number;
+  /** Compartiments ajoutés explicitement ; absent pour un bâtiment unique. */
+  sections?: Readonly<Record<string, string>>;
 };
 
 export type Door = {
   id: EntityId;
   buildingId: EntityId;
+  /** Absent : suivi d’origine, sans migration des portes historiques. */
+  sectionId?: EntityId;
   zoneId: EntityId;
   location: GeoPoint;
   geohash: string;

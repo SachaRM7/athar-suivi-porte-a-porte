@@ -71,3 +71,23 @@ describe('Firestore REST initial building structure', () => {
     )).rejects.toMatchObject({ code: 'permission-denied' });
   });
 });
+
+it('persiste le compartiment et le rattachement de la porte dans le même commit REST', async () => {
+  let commitBody: { writes: Array<{ update: { fields: Record<string, unknown> }; updateMask?: { fieldPaths: string[] } }> } | undefined;
+  vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith('/buildings/building-detected')) return Response.json(buildingDocument);
+    if (url.endsWith(':runQuery')) return Response.json([{}]);
+    commitBody = JSON.parse(String(init?.body));
+    return Response.json({ writeResults: [] });
+  }));
+  const diff = await applyBuildingStructureWithRest({ projectId: 'athar-test', getIdToken: async () => 'member-token' }, {
+    workspaceId: 'main', buildingId: 'building-detected', expectedStructureRevision: 0,
+    sectionId: 'hall-b', newSection: { id: 'hall-b', label: 'Hall B' },
+    targets: [{ floor: 0, label: 'A01', sortOrder: 0 }], authorId: 'member-a', createDoorId: () => 'door-b'
+  });
+  expect(diff.created[0]).toMatchObject({ sectionId: 'hall-b', label: 'A01' });
+  expect(commitBody!.writes[0].update.fields.sections).toEqual({ mapValue: { fields: { 'hall-b': { stringValue: 'Hall B' } } } });
+  expect(commitBody!.writes[0].updateMask?.fieldPaths).toContain('sections');
+  expect(commitBody!.writes[1].update.fields.sectionId).toEqual({ stringValue: 'hall-b' });
+});
