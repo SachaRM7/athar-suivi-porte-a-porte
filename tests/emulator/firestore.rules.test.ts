@@ -19,7 +19,9 @@ import {
 } from 'firebase/firestore';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-const projectId = 'athar-local';
+// Isoler les règles des triggers Functions sur athar-local : ils peuvent encore
+// écrire lors de clearFirestore() et provoquer un verrou de transaction au nettoyage.
+const projectId = 'athar-security-rules';
 const workspaceId = 'main';
 const workspace = `workspaces/${workspaceId}`;
 const rules = readFileSync(join(process.cwd(), 'firestore.rules'), 'utf8');
