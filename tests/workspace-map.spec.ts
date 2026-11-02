@@ -197,6 +197,12 @@ test('hides individual footprints below zoom 16', async ({ browser }) => {
 
   await clickOnMap(page, FOOTPRINTS.todo);
   await expect(page.getByRole('dialog', { name: 'Detail du batiment' })).toBeHidden();
+  // L'alerte récupérable doit laisser les commandes accessibles, même si le
+  // navigateur perd ensuite le contexte WebGL. Aucun clic forcé ne masque un recouvrement.
+  await page.locator('.maplibregl-canvas').dispatchEvent('webglcontextlost');
+  await expect(page.getByLabel('État de la carte')).toBeVisible();
+  await page.locator('.maplibregl-ctrl-zoom-out').click({ trial: true });
+  await page.getByRole('button', { name: 'Réessayer la carte', exact: true }).click({ trial: true });
   await page.close();
 });
 
