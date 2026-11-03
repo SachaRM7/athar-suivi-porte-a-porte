@@ -19,22 +19,32 @@ test('nested sheets trap focus, restore it and close one level at a time', async
   await page.keyboard.press('Escape'); await expect(sheet).toHaveCount(0); await expect(building).toBeFocused();
 });
 
-test('position is requested explicitly and watcher released after a fix', async ({ page }) => {
+test('position is followed on request, moves the map there and releases the GPS when stopped', async ({ page }) => {
   await page.addInitScript(() => {
     const stats = { watches: 0, clears: 0, highAccuracy: false };
     Object.assign(window, { gpsTest: stats });
     Object.defineProperty(navigator, 'geolocation', { value: {
       watchPosition(success: PositionCallback, _failure: PositionErrorCallback, options: PositionOptions) {
         stats.watches++; stats.highAccuracy = options.enableHighAccuracy ?? false;
-        setTimeout(() => success({ coords: { latitude: 43.606, longitude: 1.4454, accuracy: 30 } } as GeolocationPosition), 20); return 1;
+        // Position loin du cadrage initial : la carte doit s'y rendre.
+        setTimeout(() => success({ coords: { latitude: 43.6105, longitude: 1.4525, accuracy: 12 } } as GeolocationPosition), 20); return 1;
       }, clearWatch() { stats.clears++; }
     } });
   });
   await page.goto('/technical-map'); await expect(page.locator('.building-row').first()).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { gpsTest: { watches: number } }).gpsTest.watches)).toBe(0);
   await page.getByRole('button', { name: 'Ma position', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { gpsTest: object }).gpsTest)).toEqual({ watches: 1, clears: 1, highAccuracy: false });
-  await expect(page.getByRole('button', { name: 'Ma position', exact: true })).toBeEnabled();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { gpsTest: object }).gpsTest)).toEqual({ watches: 1, clears: 0, highAccuracy: true });
+  const stop = page.getByRole('button', { name: 'Arrêter le suivi de ma position' });
+  await expect(stop).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => {
+    const viewport = JSON.parse((await page.getByLabel('Carte MapLibre des zones').getAttribute('data-viewport')) ?? '{}') as { north: number; south: number; east: number; west: number };
+    return viewport.north > 43.6105 && viewport.south < 43.6105 && viewport.east > 1.4525 && viewport.west < 1.4525;
+  }, { timeout: 10_000 }).toBe(true);
+  await expect(page.locator('.terrain-status')).toContainText('précision d’environ 12 m');
+  await stop.click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { gpsTest: { clears: number } }).gpsTest.clears)).toBe(1);
+  await expect(page.getByRole('button', { name: 'Ma position', exact: true })).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('320px and enlarged text keep the door actions reachable', async ({ page }) => {

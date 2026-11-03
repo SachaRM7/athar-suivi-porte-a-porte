@@ -1064,3 +1064,7 @@
 
 .terrain-zone-menu-empty button { margin-top: 10px; min-height: var(--touch); padding: 8px 12px; border: 1px solid var(--hairline); border-radius: var(--r-field); background: var(--paper); color: var(--brand); cursor: pointer; font: 500 var(--t-125)/1.2 var(--font-ui); }
 .terrain-zone-menu-empty p { margin: 0; }
+
+/* Suivi de position actif : le bouton prend la couleur du point GPS (safran, cf. design system). */
+.terrain-fab-position[aria-pressed='true'] { color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent), var(--shadow-lg); }
+.terrain-fab-position[data-following='detached'] { color: var(--brand); }

@@ -4,7 +4,7 @@ import { TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode, type GeoJSONStore
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
 import { geohashForLocation } from 'geofire-common';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react';
-import type { FeatureCollection, Point, Polygon } from 'geojson';
+import type { FeatureCollection, Polygon } from 'geojson';
 import { withBasePath } from '../../../app/config/public-paths';
 import type { Building, GeoPoint, Status, Zone, ZoneGeometry, ZoneStats } from '../../../domain/workspace/models';
 import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
@@ -60,7 +60,7 @@ import './terrain-shell.css';
 import { useTerrainPage } from '../model/use-terrain-page';
 import { loadBuildingDoors } from '../model/terrain-reads';
 import { readTask, mapLimited } from '../../../shared/async/read-task';
-import { locateOnce } from '../model/locate-once';
+import { followPosition, positionFeatures, type PositionFix } from '../model/follow-position';
 
 const protocol = new Protocol();
 addProtocol('pmtiles', protocol.tile);
@@ -238,8 +238,11 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const [mapVersion, setMapVersion] = useState(0);
   const [metadataError, setMetadataError] = useState(false);
   const [viewportPartial, setViewportPartial] = useState(false);
-  const [locating, setLocating] = useState(false);
+  /** `off`, suivi avec la caméra qui accompagne, ou suivi après que l'utilisateur a déplacé la carte. */
+  const [following, setFollowing] = useState<'off' | 'centered' | 'detached'>('off');
   const locationRequest = useRef<AbortController | null>(null);
+  const cameraFollows = useRef(false);
+  const lastFix = useRef<PositionFix | null>(null);
   const metadata = useRef<Promise<{ nextZones: readonly Zone[]; statuses: readonly Status[] }> | null>(null);
   const paintedIds = useRef(new Set<string>());
   const [confirmZoneDeletion, setConfirmZoneDeletion] = useState(false);
@@ -649,6 +652,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     };
     if (instance.isStyleLoaded()) initializeAfterStyleLoad();
     else instance.once('style.load', initializeAfterStyleLoad);
+    // Un glissement de la carte par l'utilisateur détache la caméra du suivi de position.
+    instance.on('dragstart', () => {
+      if (!cameraFollows.current) return;
+      cameraFollows.current = false;
+      setFollowing((current) => current === 'centered' ? 'detached' : current);
+    });
     instance.on('moveend', () => {
       viewportRequest.current?.abort();
       clearTimeout(moveTimer);
@@ -661,27 +670,62 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     };
   }, [authorId, footprintArchives, onBuildingSelect, openFootprint, paintFootprints, refreshViewport, mapVersion]);
 
-  const locate = async () => {
-    if (!navigator.geolocation) { setMessage('Ce navigateur ne propose pas la localisation. Continue avec la carte.'); return; }
+  const stopFollowing = useCallback(() => {
     locationRequest.current?.abort();
-    const controller = new AbortController(); locationRequest.current = controller;
-    setLocating(true); setMessage('Recherche de ta position…');
-    try {
-      const position = await locateOnce(navigator.geolocation, controller.signal);
-      if (controller.signal.aborted) return;
-      const data: FeatureCollection<Point> = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [position.longitude, position.latitude] } }] };
-      (map.current?.getSource(POSITION_SOURCE) as GeoJSONSource | undefined)?.setData(data);
-      map.current?.easeTo({ center: [position.longitude, position.latitude], zoom: Math.max(map.current.getZoom(), FOOTPRINT_MIN_ZOOM + .4), duration: motionDuration(450) });
-      setMessage(`Position relevée · précision d’environ ${Math.ceil(position.accuracy)} m. Le suivi GPS est arrêté.`);
-    } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Position indisponible. Réessaie.'); }
-    finally { if (locationRequest.current === controller) setLocating(false); }
-  };
-  useEffect(() => {
-    const current = locationRequest;
-    const pause = () => { if (document.visibilityState === 'hidden') { current.current?.abort(); setLocating(false); } };
-    document.addEventListener('visibilitychange', pause);
-    return () => { document.removeEventListener('visibilitychange', pause); current.current?.abort(); };
+    locationRequest.current = null;
+    cameraFollows.current = false;
+    lastFix.current = null;
+    setFollowing('off');
+    (map.current?.getSource(POSITION_SOURCE) as GeoJSONSource | undefined)?.setData(EMPTY_FEATURES);
   }, []);
+
+  const centerOn = (fix: PositionFix, first: boolean) => {
+    const instance = map.current;
+    if (!instance) return;
+    instance.easeTo({
+      center: [fix.longitude, fix.latitude],
+      zoom: first ? Math.max(instance.getZoom(), FOOTPRINT_MIN_ZOOM + 1.2) : instance.getZoom(),
+      duration: motionDuration(first ? 450 : 300)
+    });
+  };
+
+  /**
+   * « Ma position » suit la position tant qu'on ne l'arrête pas : le point avance avec soi dans la
+   * rue. Un déplacement manuel de la carte détache la caméra (le point continue de bouger) ;
+   * l'appui suivant recentre, puis un dernier appui arrête le GPS.
+   */
+  const toggleFollowing = () => {
+    if (following === 'detached' && lastFix.current) {
+      cameraFollows.current = true;
+      setFollowing('centered');
+      centerOn(lastFix.current, false);
+      return;
+    }
+    if (following !== 'off') { stopFollowing(); setMessage('Suivi de position arrêté.'); return; }
+    if (!navigator.geolocation) { setMessage('Ce navigateur ne propose pas la localisation. Continue avec la carte.'); return; }
+    const controller = new AbortController();
+    locationRequest.current = controller;
+    cameraFollows.current = true;
+    setFollowing('centered');
+    setMessage('Recherche de ta position…');
+    followPosition(navigator.geolocation, controller.signal, (fix) => {
+      const first = lastFix.current === null;
+      lastFix.current = fix;
+      (map.current?.getSource(POSITION_SOURCE) as GeoJSONSource | undefined)?.setData(positionFeatures(fix));
+      if (cameraFollows.current) centerOn(fix, first);
+      if (first) setMessage(`Position suivie · précision d’environ ${Math.ceil(fix.accuracy)} m. Touche le bouton pour arrêter.`);
+    }, (error, fatal) => {
+      if (fatal) stopFollowing();
+      setMessage(error.message);
+    });
+  };
+
+  // Le GPS ne tourne jamais en arrière-plan ni après la fermeture de la carte (batterie).
+  useEffect(() => {
+    const pause = () => { if (document.visibilityState === 'hidden' && locationRequest.current) stopFollowing(); };
+    document.addEventListener('visibilitychange', pause);
+    return () => { document.removeEventListener('visibilitychange', pause); locationRequest.current?.abort(); };
+  }, [stopFollowing]);
 
   /** Le changement de zone active redéfinit ce qui est « dans la zone ». */
   useEffect(() => {
@@ -1063,7 +1107,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       )}
 
       <div className="terrain-fabs">
-        <button aria-label={locating ? 'Recherche de position en cours' : 'Ma position'} disabled={locating} className="terrain-fab terrain-fab-ghost" onClick={() => void locate()} type="button">
+        <button aria-label={following === 'off' ? 'Ma position' : following === 'detached' ? 'Recentrer sur ma position' : 'Arrêter le suivi de ma position'} aria-pressed={following !== 'off'} className="terrain-fab terrain-fab-ghost terrain-fab-position" data-following={following} onClick={toggleFollowing} type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5" /><circle cx="12" cy="12" r="8" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3" /></svg>
         </button>
         <button aria-disabled={!selectedZone || !listReady} className="terrain-fab terrain-fab-primary" disabled={!onBuildingSelect} onClick={() => {

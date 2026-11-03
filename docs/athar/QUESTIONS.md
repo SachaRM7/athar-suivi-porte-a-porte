@@ -211,7 +211,9 @@ validation de contraste et d'usage en conditions nocturnes.
   budget de 10 000 documents ; recherche/tri/filtres explicitement limités à la page.
   La recherche globale avec index dédié reste une évolution distincte, pas un chargement
   silencieux de toute la zone. Ce périmètre remplace l'hypothèse de recherche du lot C.
-- HYPOTHÈSE : une position ponctuelle sans haute précision forcée suffit pour « Ma position ».
+- ~~HYPOTHÈSE : une position ponctuelle sans haute précision forcée suffit pour « Ma position ».~~
+  Révisée le 2026-11-03 sur retour terrain : suivi à la demande, haute précision, cercle de précision
+  (cf. `09-PERFORMANCE-ACCESSIBILITE.md`). Toujours aucun enregistrement de position.
 - Les tailles typographiques utilisent des rem équivalents aux px nominaux pour suivre
   l'agrandissement du texte. Aucun nouveau jeton visuel.
 - Les tests mobiles automatisés utilisent Chromium et WebKit. La recette sur appareils

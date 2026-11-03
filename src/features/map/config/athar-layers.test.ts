@@ -19,6 +19,8 @@ describe('createAtharLayers', () => {
       ATHAR_LAYERS.localLine,
       ATHAR_LAYERS.sisters,
       ATHAR_LAYERS.zoneProgress,
+      ATHAR_LAYERS.positionAccuracy,
+      ATHAR_LAYERS.positionAccuracyLine,
       ATHAR_LAYERS.positionHalo,
       ATHAR_LAYERS.positionPoint
     ]);

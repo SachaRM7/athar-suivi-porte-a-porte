@@ -54,6 +54,8 @@ export const ATHAR_LAYERS = {
   local: 'athar-batiments-poses',
   localLine: 'athar-batiments-poses-contour',
   sisters: 'athar-batiments-soeurs',
+  positionAccuracy: 'athar-position-precision',
+  positionAccuracyLine: 'athar-position-precision-contour',
   positionHalo: 'athar-position-halo',
   positionPoint: 'athar-position-point'
 } as const;
@@ -142,13 +144,26 @@ export function createAtharLayers(sources: AtharLayerSources): LayerSpecificatio
       layout: { 'text-field': ['get', 'progressLabel'], 'text-font': ['Noto Sans Medium'], 'text-size': 12.5, 'text-allow-overlap': true, 'text-ignore-placement': true },
       paint: { 'text-color': TOKENS.inkSoft, 'text-halo-color': TOKENS.paper, 'text-halo-width': 1.8 }
     },
-    // 7 — position GPS : le safran ne sert qu'ici et sur l'action primaire.
+    // 7 — position GPS : le safran ne sert qu'ici et sur l'action primaire. Le cercle a le rayon
+    // réel de la précision annoncée : plus il est petit, plus la rue indiquée est sûre.
+    {
+      id: ATHAR_LAYERS.positionAccuracy, type: 'fill', source: sources.position,
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: { 'fill-color': TOKENS.accent, 'fill-opacity': 0.12 }
+    },
+    {
+      id: ATHAR_LAYERS.positionAccuracyLine, type: 'line', source: sources.position,
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: { 'line-color': TOKENS.accent, 'line-opacity': 0.55, 'line-width': 1.2 }
+    },
     {
       id: ATHAR_LAYERS.positionHalo, type: 'circle', source: sources.position,
-      paint: { 'circle-radius': 20, 'circle-color': TOKENS.accent, 'circle-opacity': 0.2 }
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: { 'circle-radius': 16, 'circle-color': TOKENS.accent, 'circle-opacity': 0.22 }
     },
     {
       id: ATHAR_LAYERS.positionPoint, type: 'circle', source: sources.position,
+      filter: ['==', ['geometry-type'], 'Point'],
       paint: { 'circle-radius': 9, 'circle-color': TOKENS.accent, 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3.5 }
     }
   ];

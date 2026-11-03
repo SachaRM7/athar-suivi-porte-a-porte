@@ -58,10 +58,12 @@ rendu GPU, le moteur du navigateur et le cache Firestore ont leur propre consomm
 
 ## Localisation et accessibilité
 
-« Ma position » demande une seule position, sans haute précision forcée, et accepte un
-relevé datant de moins de 30 secondes. Le suivi est libéré après succès, refus, erreur,
-12 secondes sans réponse, passage en arrière-plan ou fermeture de la carte. Aucune demande
-GPS à l'ouverture. La précision est annoncée ; les suggestions restent centrées sur la carte.
+« Ma position » suit la position à la demande (révision du 2026-11-03, demande terrain : une
+position unique et approximative ne disait pas dans quelle rue on marche). Haute précision ; le
+point safran avance avec soi et un cercle montre la précision réelle. Glisser la carte détache la
+caméra, l'appui suivant recentre, le dernier arrête le GPS. Le suivi s'arrête aussi en arrière-plan
+et à la fermeture de la carte. Aucune demande GPS à l'ouverture ; rien n'est enregistré ni envoyé.
+Les suggestions de « Marquer une porte » restent centrées sur la carte.
 
 Les dialogues partagent une pile de focus : Tab reste dans la fiche active, Échap ferme
 seulement la fiche supérieure, le focus retourne au déclencheur et le reste est `inert`.
