@@ -176,3 +176,12 @@ zone continuent à représenter l'emprise complète et l'ensemble de ses portes.
 
 La livraison nécessite les nouvelles règles Firestore **avant** le frontend. Les données
 existantes restent compatibles ; aucune migration ni réécriture des passages n'est requise.
+
+### Compatibilité avec le marqueur existant `archived`
+
+Certains documents de bâtiment portent déjà un booléen `archived`, absent du modèle
+client. Sa présence faisait refuser toute modification par la liste stricte des champs
+de `validBuilding()`, notamment l'ajout d'un hall. Les règles acceptent ce booléen existant
+et le conservent tel quel. Un client, même administrateur, ne peut ni l'ajouter, ni le
+modifier, ni le supprimer ; la création de nouveaux bâtiments reste sans ce champ.
+Cela n'introduit pas de fonction d'archivage et ne modifie ni portes ni passages.
