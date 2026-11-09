@@ -13,7 +13,7 @@ type Props = {
 /** Aucun onglet ni numéro pour le cas courant : le découpage est toujours explicite. */
 export function BuildingSections({ sections, activeId, canAdd, disabled, onSelect, onAdd }: Props): ReactElement | null {
   if (sections.length === 1 && !canAdd) return null;
-  return <div className={`building-sections${sections.length > 1 ? ' building-sections--multiple' : ''}`}>
+  return <div className={`building-sections${sections.length > 1 ? ' building-sections--multiple' : ' building-sections--single'}`}>
     {sections.length > 1 && (sections.length <= 3
       ? <div className="building-section-tabs" role="group" aria-label="Bâtiments / halls à cette adresse">
         {sections.map(section => <button key={section.id} type="button" aria-pressed={section.id === activeId}

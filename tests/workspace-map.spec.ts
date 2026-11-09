@@ -419,6 +419,8 @@ test('lets the coordinator empty a building structure in two deliberate gestures
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
 
   const reset = page.getByRole('button', { name: 'Supprimer la structure du bâtiment' });
+  await expect(reset).toHaveCount(0);
+  await page.getByRole('button', { name: 'Modifier', exact: true }).click();
   await expect(reset).toBeVisible();
 
   // Premier appui : rien n'est écrit, la coupe reste intacte tant que l'avertissement n'est pas confirmé.
@@ -555,10 +557,12 @@ test('colours each listed building by its status, as on the map, and says it in 
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openFieldMap(page);
   const languedoc = page.getByRole('button', { name: /18 rue du Languedoc/ });
-  await expect(languedoc).toContainText('Contact établi · 2/4 portes visitées');
+  await expect(languedoc).toContainText('En cours · 2/4 portes visitées');
+  await expect(languedoc).toHaveAccessibleName(/Contact établi/);
   await expect(languedoc.locator('.terrain-building-pin--open')).toHaveCount(1);
   const filatiers = page.getByRole('button', { name: /7 rue des Filatiers/ });
-  await expect(filatiers).toContainText('Absent · 1/2 portes visitées');
+  await expect(filatiers).toContainText('En cours · 1/2 portes visitées');
+  await expect(filatiers).toHaveAccessibleName(/Absent/);
   await expect(filatiers.locator('.terrain-building-pin--away')).toHaveCount(1);
   await expect(page.getByText('Couverture de la zone · 3/6 portes visitées')).toBeVisible();
   await page.close();

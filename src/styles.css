@@ -642,11 +642,24 @@ html { touch-action: manipulation; }
 .building-sections--multiple .building-section-select { gap: 0; }
 .building-sections--multiple .building-section-add { background: var(--sunk); border: 1px solid var(--hairline); border-radius: var(--r-field); flex: 0 0 var(--touch); font: var(--t-19) var(--font-ui); height: var(--touch); padding: 0; text-decoration: none; width: var(--touch); }
 .building-floor-heading > span:last-child { white-space: normal; }
+.building-header-actions .building-sections--single { margin: 0; }
+.building-sections--single .building-section-add-label { clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+.building-sections--single .building-section-add { background: var(--sunk); border: 1px solid var(--hairline); border-radius: var(--r-field); font: var(--t-19) var(--font-ui); height: var(--touch); padding: 0; text-decoration: none; width: var(--touch); }
+.building-header-actions .building-tool { align-items: center; background: var(--sunk); border: 1px solid var(--hairline); border-radius: var(--r-field); display: inline-flex; justify-content: center; padding: 0; width: var(--touch); }
+.building-header-actions .building-tool--active { background: var(--brand); color: var(--paper); padding: 0 12px; width: auto; }
+.building-tool svg { fill: none; height: 20px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 20px; }
+.building-progress-caption { align-items: baseline; color: var(--ink-soft); display: flex; flex-wrap: wrap; font: var(--t-115) var(--font-ui); gap: 6px 12px; justify-content: space-between; margin-top: 4px; }
+.building-progress-caption > span { color: var(--brand); font-weight: 500; }
+.building-progress-caption .building-sync-state { margin: 0; }
+.building-floor-heading .floor-absence-action { background: var(--sunk); border: 1px solid var(--hairline); border-radius: var(--r-field); padding: 0 9px; text-decoration: none; }
+.building-sheet > .workspace-map-message--empty { border: 0; height: 0; margin: 0; overflow: hidden; padding: 0; }
+.door-detail-sheet { align-content: start; grid-auto-rows: max-content; }
 @media (max-width: 760px) {
   .building-sheet, .building-sheet--door-detail { height: calc(100dvh - max(12px, env(safe-area-inset-top))); max-height: none; padding-bottom: env(safe-area-inset-bottom); }
   .building-sheet::before { content: none; }
   .door-detail-sheet { max-height: none; padding-bottom: max(26px, env(safe-area-inset-bottom)); }
   .building-sheet > .workspace-map-message { padding: 8px 16px; }
+  .building-sheet > .workspace-map-message--empty { padding: 0; }
 }
 
 .continuous-numbering-fields { display: grid; gap: 10px; }

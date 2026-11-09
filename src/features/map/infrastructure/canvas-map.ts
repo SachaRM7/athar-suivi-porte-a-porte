@@ -10,7 +10,7 @@ import type { Building, Zone } from '../../../domain/workspace/models';
 import { readTask, mapLimited } from '../../../shared/async/read-task';
 import { firstAvailableArchive } from '../model/footprint-archive';
 import { canvasTiles } from '../model/canvas-tiles';
-import { centerOfRing, footprintState, isInsideZone, squareAround, type FootprintContext } from '../model/footprints';
+import { buildingProgressFeatures, centerOfRing, footprintState, isInsideZone, squareAround, type FootprintContext } from '../model/footprints';
 import type { PositionFix } from '../model/follow-position';
 import { FOOTPRINT_MIN_ZOOM } from '../config/athar-layers';
 import { ATHAR_LIGHT_MAP_PALETTE as palette } from '../config/map-style';
@@ -198,11 +198,12 @@ export class CanvasMap {
       if (!ring?.length) continue;
       const id = (feature.properties?.rnb_id ?? feature.properties?.id) as string;
       const state = footprintState(id, centerOfRing(ring.map(([lng, lat]) => [lng, lat])), context);
-      const color = !state.inZone ? palette.map.buildings : state.known ? state.color : palette.text2;
+      const prepared = state.tracked && state.visitedCount === 0;
+      const color = !state.inZone ? palette.map.buildings : prepared ? palette.accentMark : state.known ? state.color : palette.text2;
       const shape = L.geoJSON(feature, { interactive: state.inZone, bubblingMouseEvents: false,
-        style: { color, weight: state.inZone ? 1.3 : 0, fillColor: state.inZone && !state.known ? palette.surface1 : color,
+        style: { color, weight: !state.inZone ? 0 : state.tracked ? prepared ? 2 : 2.5 : 1.3, fillColor: state.inZone && !state.known ? palette.surface1 : prepared ? state.color : color,
           fillOpacity: state.inZone && (!state.known || state.tracked) ? 0.55 : 1,
-          dashArray: state.inZone && !state.known ? '3 3' : undefined }
+          dashArray: state.inZone && !state.known ? '3 3' : prepared ? '6 4' : undefined }
       }).addTo(this.buildingLayer);
       if (state.inZone && state.sisters) {
         L.geoJSON(feature, { interactive: false, style: { color: '#C25B7C', weight: 4, fill: false, opacity: 0.8 } }).addTo(this.buildingLayer);
@@ -217,6 +218,8 @@ export class CanvasMap {
         const element = layer.getElement();
         if (!element) return;
         element.setAttribute('data-rnb-id', id);
+        element.setAttribute('data-visited-count', String(state.visitedCount));
+        element.setAttribute('data-door-count', String(state.doorCount));
         element.setAttribute('role', 'button');
         element.setAttribute('tabindex', '0');
         element.setAttribute('aria-label', context.buildings.get(id)?.addressLabel ?? footprintBuildingLabel(id));
@@ -227,6 +230,15 @@ export class CanvasMap {
           open(longitude, latitude);
         });
       });
+    }
+    for (const feature of buildingProgressFeatures(context).features) {
+      const label = document.createElement('span');
+      label.textContent = feature.properties!.label as string;
+      label.title = feature.properties!.description as string;
+      label.dataset.buildingProgress = feature.properties!.id as string;
+      const [longitude, latitude] = feature.geometry.coordinates;
+      L.tooltip({ permanent: true, direction: 'center', className: 'building-map-progress', interactive: false, opacity: 1 })
+        .setLatLng([latitude, longitude]).setContent(label).addTo(this.buildingLayer);
     }
     this.container.dataset.footprints = String(tiled.size);
   }

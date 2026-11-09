@@ -39,6 +39,7 @@ const KNOWN: ExpressionSpecification = ['boolean', ['feature-state', 'known'], f
 const UNKNOWN: ExpressionSpecification = ['all', IN_ZONE, ['!', KNOWN]];
 const TODO: ExpressionSpecification = ['all', IN_ZONE, KNOWN, ['!', TRACKED]];
 const SUIVI: ExpressionSpecification = ['all', IN_ZONE, TRACKED];
+const VISITED: ExpressionSpecification = ['>', ['number', ['feature-state', 'visitedCount'], 0], 0];
 
 export const ATHAR_LAYERS = {
   zoneFill: 'athar-zone-fill',
@@ -51,8 +52,11 @@ export const ATHAR_LAYERS = {
   todoLine: 'athar-batiments-todo-contour',
   tracked: 'athar-batiments-suivis',
   trackedLine: 'athar-batiments-suivis-contour',
+  preparedLine: 'athar-batiments-prepares-contour',
   local: 'athar-batiments-poses',
   localLine: 'athar-batiments-poses-contour',
+  localPreparedLine: 'athar-batiments-poses-prepares',
+  buildingProgress: 'athar-batiments-progression',
   sisters: 'athar-batiments-soeurs',
   positionAccuracy: 'athar-position-precision',
   positionAccuracyLine: 'athar-position-precision-contour',
@@ -69,6 +73,7 @@ export type AtharLayerSources = {
   footprints: string | null;
   footprintSourceLayer?: string;
   localBuildings: string;
+  buildingProgress: string;
   position: string;
 };
 
@@ -118,7 +123,11 @@ export function createAtharLayers(sources: AtharLayerSources): LayerSpecificatio
     }),
     ...footprint(ATHAR_LAYERS.trackedLine, {
       type: 'line',
-      paint: { 'line-color': STATUS_COLOR, 'line-width': 1.3, 'line-opacity': visibleWhen(SUIVI) }
+      paint: { 'line-color': STATUS_COLOR, 'line-width': 2.5, 'line-opacity': visibleWhen(['all', SUIVI, VISITED]) }
+    }),
+    ...footprint(ATHAR_LAYERS.preparedLine, {
+      type: 'line',
+      paint: { 'line-color': TOKENS.brand, 'line-width': 2, 'line-dasharray': [3, 2], 'line-opacity': visibleWhen(['all', SUIVI, ['!', VISITED]]) }
     }),
     // Bâtiments posés à la main : absents du RNB, donc absents du tuileset.
     {
@@ -127,13 +136,22 @@ export function createAtharLayers(sources: AtharLayerSources): LayerSpecificatio
     },
     {
       id: ATHAR_LAYERS.localLine, type: 'line', source: sources.localBuildings, minzoom: FOOTPRINT_MIN_ZOOM,
-      paint: { 'line-color': ['to-color', ['get', 'color']], 'line-width': 1.3 }
+      paint: { 'line-color': ['to-color', ['get', 'color']], 'line-width': 2.5, 'line-opacity': ['case', ['>', ['get', 'visitedCount'], 0], 1, 0] }
+    },
+    {
+      id: ATHAR_LAYERS.localPreparedLine, type: 'line', source: sources.localBuildings, minzoom: FOOTPRINT_MIN_ZOOM,
+      paint: { 'line-color': TOKENS.brand, 'line-width': 2, 'line-dasharray': [3, 2], 'line-opacity': ['case', ['==', ['get', 'visitedCount'], 0], 1, 0] }
     },
     // 6 — marqueur « à confier aux sœurs » : anneau rose décalé, jamais un aplat.
     ...footprint(ATHAR_LAYERS.sisters, {
       type: 'line',
       paint: { 'line-color': TOKENS.sisters, 'line-width': 1.6, 'line-offset': 2.5, 'line-opacity': visibleWhen(SISTERS) }
     }),
+    {
+      id: ATHAR_LAYERS.buildingProgress, type: 'symbol', source: sources.buildingProgress, minzoom: FOOTPRINT_MIN_ZOOM,
+      layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Medium'], 'text-size': 12.5, 'text-padding': 5 },
+      paint: { 'text-color': TOKENS.brand, 'text-halo-color': TOKENS.paper, 'text-halo-width': 2.5 }
+    },
     /*
      * Progression agrégée : seule lecture de la zone en dessous du zoom des emprises.
      * Elle passe au-dessus des libellés du fond, sinon les noms de rue la recouvrent.

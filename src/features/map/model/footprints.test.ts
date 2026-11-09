@@ -5,6 +5,7 @@ import {
   dominantStatusId,
   doorsByBuilding,
   footprintState,
+  buildingProgressFeatures,
   isInsideZone,
   squareAround,
   zoneProgressLabel,
@@ -68,7 +69,7 @@ describe('footprintState', () => {
   });
   it('leaves a footprint without a Firestore document untracked and grey', () => {
     const state = footprintState('PG31CARMES002', [1.447, 43.6065], context());
-    expect(state).toEqual({ inZone: true, known: true, tracked: false, color: '#CDD3CD', sisters: false });
+    expect(state).toEqual({ inZone: true, known: true, tracked: false, color: '#CDD3CD', sisters: false, doorCount: 0, visitedCount: 0 });
   });
 
   it('colours a tracked footprint with its dominant status', () => {
@@ -76,7 +77,7 @@ describe('footprintState', () => {
       buildings: new Map([['building-dalbad', building('building-dalbad')]]),
       doorsByBuilding: new Map([['building-dalbad', [door({ id: 'd1', buildingId: 'building-dalbad', currentStatusId: 'retry' })]]])
     }));
-    expect(state).toEqual({ inZone: true, known: true, tracked: true, color: '#C87A0A', sisters: false });
+    expect(state).toEqual({ inZone: true, known: true, tracked: true, color: '#C87A0A', sisters: false, doorCount: 1, visitedCount: 1 });
   });
 
   it('keeps a described building without any passage grey', () => {
@@ -122,6 +123,38 @@ describe('geometry helpers', () => {
     const ring = squareAround(1.4468, 43.6064, 14);
     expect(ring).toHaveLength(5);
     expect((ring[2]![1] - ring[0]![1]) * 111_320).toBeCloseTo(14, 3);
+  });
+});
+
+describe('avancement visible des bâtiments', () => {
+  it('distingue préparation et passages en comptant tous les halls, sans les portes archivées', () => {
+    const id = 'building-dalbad';
+    const prepared = context({ buildings: new Map([[id, building(id)]]), doorsByBuilding: new Map([[id, [
+      door({ id: 'a', buildingId: id, currentStatusId: 'unvisited', lastVisitId: null }),
+      door({ id: 'b', buildingId: id, sectionId: 'hall-b', currentStatusId: 'unvisited', lastVisitId: null })
+    ]]]) });
+    expect(footprintState(id, [1.4454, 43.6058], prepared)).toMatchObject({ tracked: true, doorCount: 2, visitedCount: 0 });
+    expect(buildingProgressFeatures(prepared).features[0].properties).toMatchObject({ label: '0/2', prepared: true });
+    const started = { ...prepared, doorsByBuilding: new Map([[id, [
+      ...prepared.doorsByBuilding.get(id)!.slice(0, 1),
+      door({ id: 'b', buildingId: id, sectionId: 'hall-b', currentStatusId: 'retry' }),
+      door({ id: 'archived', buildingId: id, currentStatusId: 'contacted', active: false })
+    ]]]) };
+    expect(footprintState(id, [1.4454, 43.6058], started)).toMatchObject({ doorCount: 2, visitedCount: 1, color: '#C87A0A' });
+    expect(buildingProgressFeatures(started).features[0].properties).toMatchObject({ label: '1/2', prepared: false, description: `${id} · En cours · 1/2 portes visitées` });
+  });
+
+  it('ne confond pas un premier passage partout avec la fin des revisites', () => {
+    const id = 'building-dalbad';
+    const visited = context({ buildings: new Map([[id, building(id)]]), doorsByBuilding: new Map([[id, [door({ id: 'a', buildingId: id, currentStatusId: 'retry' })]]]) });
+    expect(buildingProgressFeatures(visited).features[0].properties).toMatchObject({ label: '1/1', description: `${id} · Toutes visitées · 1/1 portes visitées` });
+  });
+
+  it('n’invente aucun compteur pour une emprise inconnue ou hors de la zone active', () => {
+    expect(buildingProgressFeatures(context({ complete: false })).features).toHaveLength(0);
+    const id = 'outside';
+    const outside = { ...building(id), location: { latitude: 45, longitude: 2 } };
+    expect(buildingProgressFeatures(context({ buildings: new Map([[id, outside]]) })).features).toHaveLength(0);
   });
 });
 

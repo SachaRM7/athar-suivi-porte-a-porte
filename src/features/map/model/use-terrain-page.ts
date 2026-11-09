@@ -4,8 +4,8 @@ import type { WorkspaceReadRepositories } from '../../../domain/workspace/reposi
 import { readTask } from '../../../shared/async/read-task';
 import { loadTerrainPage } from './terrain-reads';
 
-type PageState = { zoneId: string | null; phase: 'loading' | 'ready' | 'error'; buildings: readonly Building[]; doors: readonly Door[]; index: number; nextCursor: string | null; documentsRead: number };
-const EMPTY: PageState = { zoneId: null, phase: 'loading', buildings: [], doors: [], index: 0, nextCursor: null, documentsRead: 0 };
+type PageState = { zoneId: string | null; phase: 'loading' | 'ready' | 'error'; refreshing: boolean; buildings: readonly Building[]; doors: readonly Door[]; index: number; nextCursor: string | null; documentsRead: number };
+const EMPTY: PageState = { zoneId: null, phase: 'loading', refreshing: false, buildings: [], doors: [], index: 0, nextCursor: null, documentsRead: 0 };
 
 export function useTerrainPage(repositories: WorkspaceReadRepositories, zoneId: string | null, reloadToken: number) {
   const [state, setState] = useState<PageState>(EMPTY);
@@ -17,14 +17,18 @@ export function useTerrainPage(repositories: WorkspaceReadRepositories, zoneId: 
     request.current = controller;
     if (navigation.current.zoneId !== id) navigation.current = { zoneId: id, index: 0, cursors: [null] };
     navigation.current.index = index;
-    setState({ ...EMPTY, zoneId: id, index, phase: id ? 'loading' : 'ready' });
+    // Au retour d'une fiche, garder les boutons montés pour restaurer le focus.
+    // Un changement de zone ou de page repart en revanche d'un état de chargement.
+    setState(current => id && current.zoneId === id && current.index === index && current.phase === 'ready'
+      ? { ...current, refreshing: true }
+      : { ...EMPTY, zoneId: id, index, phase: id ? 'loading' : 'ready' });
     if (!id) return;
     try {
       const result = await readTask(loadTerrainPage(repositories, id, { cursor: navigation.current.cursors[index], signal: controller.signal }), controller.signal, 30_000);
       if (request.current !== controller || controller.signal.aborted) return;
       navigation.current.cursors = navigation.current.cursors.slice(0, index + 1);
       if (result.nextCursor) navigation.current.cursors.push(result.nextCursor);
-      setState({ ...result, zoneId: id, index, phase: 'ready' });
+      setState({ ...result, zoneId: id, index, phase: 'ready', refreshing: false });
     } catch {
       if (request.current !== controller || controller.signal.aborted) return;
       controller.abort();

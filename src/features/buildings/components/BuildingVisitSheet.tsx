@@ -19,6 +19,7 @@ import { doorsForGroupedAbsence, requiresDoNotDisturbConfirmation } from '../../
 import { Stepper } from '../../../design/components';
 import { DoorScroller, FloorStairs } from './DoorScroller';
 import { BuildingSections } from './BuildingSections';
+import { buildingProgressLabel } from '../model/building-progress';
 import { buildingSections, DEFAULT_SECTION_ID, doorSectionId, MAX_BUILDING_SECTIONS, normalizeSectionLabel } from '../../../domain/workspace/building-sections';
 import { firestoreWriteErrorMessage } from '../../../infrastructure/firebase/firestore-errors';
 import { localWriteErrorMessage } from '../../visits/model/field-sync-status';
@@ -151,7 +152,7 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
   const [historyLimit, setHistoryLimit] = useState(25);
   const [note, setNote] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
-  const [message, setMessage] = useState('Choisis une porte pour enregistrer un passage.');
+  const [message, setMessage] = useState('');
   const [trustedDevice, setTrustedDeviceState] = useState(isTrustedDevice);
   const [structureMode, setStructureMode] = useState<'quick-floor' | 'manage' | 'single-door' | 'new-section' | null>(null);
   const [sectionName, setSectionName] = useState('');
@@ -201,10 +202,10 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
   const [loadError, setLoadError] = useState(false);
   const [historyState, setHistoryState] = useState<'loading' | 'ready' | 'error'>('ready');
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ preserveContent = false }: { preserveContent?: boolean } = {}) => {
     if (!building) return;
     const request = ++loadRequest.current;
-    setStructureLoadedBuildingId(null);
+    if (!preserveContent) setStructureLoadedBuildingId(null);
     setLoadError(false);
     setConfirmStructureReset(false);
     const [nextDoors, allStructureDoors, nextStatuses, entries] = await readTask(Promise.all([
@@ -214,7 +215,11 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
       // Une file locale IndexedDB indisponible ne doit jamais masquer la structure
       // qui vient du serveur. Le compteur repasse temporairement à zéro.
       outbox.all().catch(() => [])
-    ]), undefined, 30_000);
+    ]), undefined, 30_000).catch(error => {
+      // Conserver le contenu pendant une relecture ne doit pas masquer son échec.
+      if (request === loadRequest.current) setStructureLoadedBuildingId(null);
+      throw error;
+    });
     if (request !== loadRequest.current) return;
     const sorted = nextDoors.filter(door => doorSectionId(door) === sectionId).sort((left, right) => left.floor - right.floor || compareDoorsForFloor(left, right));
     setDoors(sorted);
@@ -373,7 +378,7 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
         setSelectedDoorId(door.id);
         setOpenPaletteDoorId(null);
         await sync?.refresh();
-        await refresh().catch(() => setLoadError(true));
+        await refresh({ preserveContent: true }).catch(() => setLoadError(true));
         void sync?.synchronize();
       }
     } finally {
@@ -476,7 +481,7 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
         statusId: awayStatus.id,
         note: ''
       });
-      await refresh().catch(() => setLoadError(true));
+      await refresh({ preserveContent: true }).catch(() => setLoadError(true));
       await sync?.refresh();
       void sync?.synchronize();
       setMessage(`${results.length} porte${results.length > 1 ? 's' : ''} de l’étage marquée${results.length > 1 ? 's' : ''} « Absent » sur l’appareil.`);
@@ -775,6 +780,10 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
     setAmbiguities((current) => current.filter((candidate) => candidate !== ambiguity));
   }
 
+  const sectionControl = <BuildingSections sections={sections} activeId={sectionId} disabled={structurePending || saving}
+    canAdd={canEditStructure && structureLoadedBuildingId === building.id && sections.length < MAX_BUILDING_SECTIONS}
+    onSelect={onSelectSection} onAdd={() => { setSectionName(sections.length < 26 ? `Bâtiment ${String.fromCharCode(65 + sections.length)}` : ''); openStructure('new-section'); }} />;
+
   return (
     <div className="building-detail-layer">
       <button aria-label="Fermer le detail du batiment" tabIndex={-1} aria-hidden="true" className="building-detail-backdrop" onClick={onClose} type="button" />
@@ -797,12 +806,19 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
                 : 'Adresse à compléter par un coordinateur.'}</p>
               : canRenameBuilding && onRenameBuilding && <button className="text-button building-address-edit" onClick={() => { setAddressDraft({ buildingId: building.id, value: building.addressLabel }); setAddressMessage(''); }} type="button">Modifier l’adresse</button>}
           </>}
-          <BuildingSections sections={sections} activeId={sectionId} disabled={structurePending || saving}
-            canAdd={canEditStructure && structureLoadedBuildingId === building.id && sections.length < MAX_BUILDING_SECTIONS}
-            onSelect={onSelectSection} onAdd={() => { setSectionName(sections.length < 26 ? `Bâtiment ${String.fromCharCode(65 + sections.length)}` : ''); openStructure('new-section'); }} />
+          {multipleSections && sectionControl}
           <div className="building-meta-row">
             {doors.length > 0 && <p className="building-structure-summary">{floors.length} niveau{floors.length > 1 ? 'x' : ''} · {total.doorCount} portes</p>}
-            {canEditStructure && <div className="building-header-actions">{doors.length > 0 && <><button className="secondary-action" onClick={() => { setEditing((current) => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">{editing ? 'Terminer' : 'Modifier'}</button><button aria-label="Configurer le batiment" className="secondary-action" onClick={() => openStructure('manage')} type="button">Structure</button></>}{canDeleteVisitedDoors && (!multipleSections || doors.length > 0) && <button aria-label={doors.length > 0 ? 'Supprimer la structure du bâtiment' : 'Retirer le bâtiment'} className="structure-reset" disabled={structurePending} onClick={() => void resetStructure()} title={doors.length > 0 ? 'Supprimer la structure' : 'Retirer le bâtiment'} type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>}</div>}
+            {canEditStructure && <div className="building-header-actions">
+              {!multipleSections && sectionControl}
+              {doors.length > 0 && <>
+                <button aria-label={editing ? 'Terminer' : 'Modifier'} title={editing ? 'Terminer les modifications' : 'Modifier les portes'} className={`secondary-action building-tool${editing ? ' building-tool--active' : ''}`} aria-pressed={editing} onClick={() => { setEditing(current => !current); setConfirmDeletion(null); setConfirmFloorDeletion(null); }} type="button">
+                  {editing ? 'Terminer' : <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14v6Z" /></svg>}
+                </button>
+                <button aria-label="Configurer le batiment" title="Configurer les étages et les portes" className="secondary-action building-tool" onClick={() => openStructure('manage')} type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 21V3h14v18M3 21h18M9 7h1m4 0h1M9 11h1m4 0h1M9 15h1m4 0h1M10 21v-3h4v3" /></svg></button>
+              </>}
+              {canDeleteVisitedDoors && (!multipleSections || doors.length > 0) && (editing || doors.length === 0) && <button aria-label={doors.length > 0 ? 'Supprimer la structure du bâtiment' : 'Retirer le bâtiment'} className="structure-reset" disabled={structurePending} onClick={() => void resetStructure()} title={doors.length > 0 ? 'Supprimer la structure' : 'Retirer le bâtiment'} type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>}
+            </div>}
           </div>
           {confirmStructureReset && <div className="structure-reset-confirm" role="alert">
             <b>{doors.length > 0 ? 'Supprimer la structure et repartir vierge ?' : 'Retirer ce bâtiment du suivi ?'}</b>
@@ -813,10 +829,10 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
           </div>}
           {doors.length > 0 && <>
           <div className="building-progress-row">
-            <span aria-hidden="true" className="building-progress-track"><i style={{ width: `${total.ratio * 100}%` }} /></span>
-            <span className="building-progress-count">{total.treatedCount} / {total.doorCount}</span>
+            <span role="progressbar" aria-label="Portes visitées" aria-valuemin={0} aria-valuemax={total.doorCount} aria-valuenow={total.treatedCount} className="building-progress-track"><i style={{ width: `${total.ratio * 100}%` }} /></span>
+            <span className="building-progress-count">{total.treatedCount}/{total.doorCount} visitées</span>
           </div>
-          <p aria-live="polite" className="building-sync-state" data-phase={sync?.status.phase}>{syncLabel}</p>
+          <div className="building-progress-caption"><span>{buildingProgressLabel(total.doorCount, total.treatedCount)}</span><p aria-live="polite" className="building-sync-state" data-phase={sync?.status.phase}>{syncLabel}</p></div>
           {syncDetail && sync?.status.phase !== 'synced' && <p className="building-sync-detail">{syncDetail}</p>}
           </>}
         </section>
@@ -844,12 +860,12 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
               <div className="building-floor-label"><span>{floorLabel(item.floor)}</span><FloorStairs mirrored={floorIndex % 2 === 1} /></div>
               <div className="building-floor-content">
                 <header className="building-floor-heading">
-                  <span>{item.doorCount} porte{item.doorCount > 1 ? 's' : ''}</span>
+                  <span>{editing ? `${item.doorCount} portes` : `${item.treatedCount}/${item.doorCount} visitées`}</span>
                   {editing ? <span className="building-floor-edit-actions">
                     <button onClick={() => openSingleDoor(item.floor)} type="button">+ porte</button>
                     {confirmFloorDeletion === item.floor ? <span className="floor-delete-confirm"><b>Retirer les portes de cet étage ? Leur historique est conservé.</b><button aria-label={`Confirmer la suppression du ${floorLabel(item.floor)}`} onClick={() => void removeFloor(item.floor)} type="button">Oui</button><button aria-label={`Annuler la suppression du ${floorLabel(item.floor)}`} onClick={() => setConfirmFloorDeletion(null)} type="button">Non</button></span> : <button className="floor-delete" onClick={() => void removeFloor(item.floor)} type="button">supprimer l’étage</button>}
-                  </span> : <span>{item.treatedCount}/{item.doorCount} visitée{item.treatedCount > 1 ? 's' : ''} · {item.firstVisitCount > 0
-                    ? <button aria-expanded={confirmFloorAbsence === item.floor} disabled={saving} onClick={() => setConfirmFloorAbsence((current) => current === item.floor ? null : item.floor)} type="button">Marquer {item.firstVisitCount} porte{item.firstVisitCount > 1 ? 's' : ''} absente{item.firstVisitCount > 1 ? 's' : ''}</button>
+                  </span> : <span>{item.firstVisitCount > 0
+                    ? <button aria-label={`Marquer ${item.firstVisitCount} porte${item.firstVisitCount > 1 ? 's' : ''} absente${item.firstVisitCount > 1 ? 's' : ''}`} className="floor-absence-action" aria-expanded={confirmFloorAbsence === item.floor} disabled={saving} onClick={() => setConfirmFloorAbsence((current) => current === item.floor ? null : item.floor)} type="button">Marquer {item.firstVisitCount} absente{item.firstVisitCount > 1 ? 's' : ''}</button>
                     : isFloorComplete(item) ? <strong className="building-floor-complete">terminé</strong>
                       : <span className="building-floor-revisit">{item.toRevisitCount} à revoir</span>}</span>}
                 </header>
@@ -883,7 +899,7 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
         {sync && selectedEntry?.state === 'rejected' && <p className="sync-rejection" role="status">Passage refusé par le serveur : {REJECTION_MESSAGES[selectedEntry.rejection ?? ''] ?? 'raison inconnue'}. Il reste sur l’appareil, rien n’est effacé.</p>}
         {sync && <div className="sync-controls"><button className="secondary-action" disabled={!sync.online || sync.syncing} onClick={() => void sync.synchronize()} type="button">Synchroniser</button><label className="trusted-device-control"><input checked={trustedDevice} onChange={(event) => { const trusted = event.target.checked; setTrustedDeviceState(trusted); setTrustedDevice(trusted); window.location.reload(); }} type="checkbox" />Appareil de confiance</label></div>}
         </div>
-        <p className="workspace-map-message" role="status">{message}</p>
+        <p className={`workspace-map-message${message ? '' : ' workspace-map-message--empty'}`} role="status">{message}</p>
 
         {paletteDoor && <div className="door-status-layer">
           <button aria-label="Fermer le choix de statut" className="door-status-backdrop" onClick={() => setOpenPaletteDoorId(null)} type="button" />
