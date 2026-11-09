@@ -305,7 +305,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
    */
   const flyToBuilding = (building: Building): void => {
     const instance = map.current;
-    if (!instance) return;
+    if (!instance?.getSource(ZONE_SOURCE) || mapError) return;
     instance.easeTo({
       center: [building.location.longitude, building.location.latitude],
       zoom: Math.max(instance.getZoom(), FOOTPRINT_MIN_ZOOM + 0.4),
@@ -513,6 +513,19 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
 
   useEffect(() => {
     if (!element.current || map.current) return;
+    const showMapError = () => {
+      setMapError(true);
+      setMessage('Carte indisponible. Réessaie ou utilise la liste des bâtiments.');
+    };
+    // MapLibre peut renvoyer une instance incomplète si le contexte WebGL2 est refusé.
+    try {
+      const context = document.createElement('canvas').getContext('webgl2');
+      if (!context) { queueMicrotask(showMapError); return; }
+      context.getExtension('WEBGL_lose_context')?.loseContext();
+    } catch {
+      queueMicrotask(showMapError);
+      return;
+    }
     // Un nouvel essai doit aussi oublier les promesses PMTiles rejetées.
     const archive = new PMTiles(new LocalPmtilesSource(withBasePath('/fixtures/toulouse.pmtiles'), 'athar-toulouse-local'), new SharedPromiseCache(64));
     protocol.add(archive);
@@ -525,13 +538,13 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       attributionControl: { compact: true },
       style: localMapStyle, maxTileCacheSize: 64, maxTileCacheZoomLevels: 2
     });
-    } catch { queueMicrotask(() => setMapError(true)); return; }
+    } catch { queueMicrotask(showMapError); return; }
     map.current = instance;
     element.current.dataset.basemap = 'local-pmtiles';
     let disposed = false;
     let moveTimer: ReturnType<typeof setTimeout> | undefined;
     const initRequest = new AbortController();
-    const mapFailed = () => { if (!disposed) { setMapError(true); setMessage('Carte indisponible. Réessaie ou utilise la liste des bâtiments.'); } };
+    const mapFailed = () => { if (!disposed) showMapError(); };
     instance.on('error', mapFailed);
     instance.getCanvas().addEventListener('webglcontextlost', mapFailed);
     const initializeWorkspaceLayers = async () => {
@@ -875,8 +888,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const openListedBuilding = (building: Building) => {
     lastBuilding.current = building.id;
     setMarkingOpen(false);
-    flyToBuilding(building);
     onBuildingSelect?.(building, { persisted: true, suggestion: footprintSuggestions.current.get(building.id) ?? null });
+    flyToBuilding(building);
   };
   const startMarking = () => {
     const centre = map.current?.getCenter();
