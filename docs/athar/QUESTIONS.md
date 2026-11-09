@@ -3,6 +3,14 @@
 Questions rencontrées en cours d'implémentation. Une entrée par question, la plus récente en haut.
 Une question résolue est déplacée dans « Tranchées » avec la décision.
 
+## 2026-11-09 — suivi du focus après un passage
+
+Le rafraîchissement existant après l'enregistrement d'un passage démonte temporairement
+les rangées de portes. Le bouton d'origine disparaît alors avant la restauration du focus,
+qui peut retomber sur le corps de page ; le défilement peut aussi revenir en haut.
+La fermeture sans saisie restaure correctement le focus. À traiter dans un suivi du lot D,
+séparé du correctif de hauteur et de défilement de la fiche mobile.
+
 ---
 
 ### 2026-10-21 — Audit UX (P1) · Trois recommandations de l'audit heurtent une décision écrite

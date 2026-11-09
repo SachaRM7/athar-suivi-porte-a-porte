@@ -8,6 +8,7 @@ import { BuildingVisitSheet } from '../../buildings/components/BuildingVisitShee
 import { demoWorkspace } from '../../../infrastructure/demo/demo-workspace';
 import { createMemoryWorkspaceRepositories } from '../../../infrastructure/memory/workspace-repositories';
 import { useOpenedBuilding } from '../model/use-opened-building';
+import { buildingLayoutFixture, layoutSync } from '../../lab/building-layout-fixture';
 
 const WorkspaceMap = lazy(async () => ({ default: (await readTask(import('./WorkspaceMap'), undefined, 30_000)).WorkspaceMap }));
 
@@ -19,7 +20,8 @@ const DEMO_ARCHIVES = ['/fixtures/batiments-carmes.pmtiles'] as const;
 
 export function MapPreview(): ReactElement {
   const [dataVersion, setDataVersion] = useState(0);
-  const repositories = useMemo(() => createMemoryWorkspaceRepositories(demoWorkspace), []);
+  const layoutFixture = new URLSearchParams(window.location.search).get('fixture') === 'building-layout';
+  const repositories = useMemo(() => createMemoryWorkspaceRepositories(layoutFixture ? buildingLayoutFixture() : demoWorkspace), [layoutFixture]);
   const outbox = useMemo(() => new MemoryOutbox(), []);
   const markers = useMemo(() => new MemoryDoorMarkerOutbox(), []);
   const opened = useOpenedBuilding(repositories);
@@ -59,6 +61,7 @@ export function MapPreview(): ReactElement {
         onClose={opened.close}
         outbox={outbox}
         repositories={repositories}
+        sync={layoutFixture ? layoutSync : undefined}
         structureSuggestion={opened.suggestion}
       />
     </>

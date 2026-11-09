@@ -779,10 +779,12 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
     <div className="building-detail-layer">
       <button aria-label="Fermer le detail du batiment" tabIndex={-1} aria-hidden="true" className="building-detail-backdrop" onClick={onClose} type="button" />
       <aside aria-label="Detail du batiment" className={`building-sheet${paletteDoor ? ' building-sheet--door-detail' : ''}`} role="dialog" aria-modal="true" tabIndex={-1} ref={buildingPanel}>
-        {/* La poignée de la sheet ferme la fiche : le geste attendu sur mobile. « Retour » reste le chemin clavier. */}
-        <button aria-label="Fermer la fiche du bâtiment" className="building-sheet-grip" onClick={onClose} tabIndex={-1} type="button"><i aria-hidden="true" /></button>
-        <section className="building-identity">
+        <nav className="building-sheet-navigation" aria-label="Navigation du bâtiment">
           <button className="building-zone-back" onClick={onClose} type="button">‹ Retour à la zone</button>
+          <button aria-label="Fermer la fiche du bâtiment" className="building-sheet-close" onClick={onClose} type="button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+        </nav>
+        <div className="building-sheet-scroll">
+        <section className="building-identity">
           {addressDraft?.buildingId === building.id ? <form className="building-address-form" onSubmit={(event) => { event.preventDefault(); void saveAddress(); }}>
             <label>Adresse du bâtiment<input autoFocus maxLength={MAX_ADDRESS_LENGTH} onChange={(event) => setAddressDraft({ buildingId: building.id, value: event.target.value })} placeholder="12 rue des Filatiers" value={addressDraft.value} /></label>
             <span className="building-address-actions"><button className="primary-action" disabled={addressPending} type="submit">{addressPending ? 'Enregistrement…' : 'Enregistrer l’adresse'}</button><button className="text-button" disabled={addressPending} onClick={() => { setAddressDraft(null); setAddressMessage(''); }} type="button">Annuler</button></span>
@@ -791,7 +793,7 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
             <h2>{building.addressLabel}</h2>
             {hasPlaceholderAddress(building)
               ? <p className="building-address-missing">{canRenameBuilding && onRenameBuilding
-                ? <>Adresse à saisir : c’est elle qui permet de retrouver ce bâtiment dans la liste. <button className="text-button" onClick={() => { setAddressDraft({ buildingId: building.id, value: '' }); setAddressMessage(''); }} type="button">Saisir l’adresse</button></>
+                ? <>{doors.length === 0 && <>Adresse à saisir : c’est elle qui permet de retrouver ce bâtiment dans la liste. </>}<button className="text-button" onClick={() => { setAddressDraft({ buildingId: building.id, value: '' }); setAddressMessage(''); }} type="button">Saisir l’adresse</button></>
                 : 'Adresse à compléter par un coordinateur.'}</p>
               : canRenameBuilding && onRenameBuilding && <button className="text-button building-address-edit" onClick={() => { setAddressDraft({ buildingId: building.id, value: building.addressLabel }); setAddressMessage(''); }} type="button">Modifier l’adresse</button>}
           </>}
@@ -815,7 +817,7 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
             <span className="building-progress-count">{total.treatedCount} / {total.doorCount}</span>
           </div>
           <p aria-live="polite" className="building-sync-state" data-phase={sync?.status.phase}>{syncLabel}</p>
-          {syncDetail && <p className="building-sync-detail">{syncDetail}</p>}
+          {syncDetail && sync?.status.phase !== 'synced' && <p className="building-sync-detail">{syncDetail}</p>}
           </>}
         </section>
 
@@ -880,6 +882,7 @@ function BuildingSectionVisitSheet({ sectionId, onSelectSection, authorId, build
         {sync && selectedEntry?.state === 'conflict' && selectedEntry.conflict && <section className="sync-resolution" aria-label="Resolution du conflit"><p className="eyebrow">Conflit à résoudre</p><p>Un autre frère a marqué cette porte entre-temps : elle est maintenant « {statusesById.get(selectedEntry.conflict.currentStatusId)?.label ?? 'statut inconnu'} » sur le serveur. Ton passage est conservé sur l’appareil.</p><div className="sync-resolution-actions"><button className="primary-action" disabled={sync.syncing} onClick={() => void sync.reapplyConflict(selectedEntry.commandId)} type="button">Réappliquer mon passage</button><button className="secondary-action" disabled={sync.syncing} onClick={() => void sync.abandonConflict(selectedEntry.commandId)} type="button">Garder la version du serveur</button></div></section>}
         {sync && selectedEntry?.state === 'rejected' && <p className="sync-rejection" role="status">Passage refusé par le serveur : {REJECTION_MESSAGES[selectedEntry.rejection ?? ''] ?? 'raison inconnue'}. Il reste sur l’appareil, rien n’est effacé.</p>}
         {sync && <div className="sync-controls"><button className="secondary-action" disabled={!sync.online || sync.syncing} onClick={() => void sync.synchronize()} type="button">Synchroniser</button><label className="trusted-device-control"><input checked={trustedDevice} onChange={(event) => { const trusted = event.target.checked; setTrustedDeviceState(trusted); setTrustedDevice(trusted); window.location.reload(); }} type="checkbox" />Appareil de confiance</label></div>}
+        </div>
         <p className="workspace-map-message" role="status">{message}</p>
 
         {paletteDoor && <div className="door-status-layer">
