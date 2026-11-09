@@ -48,6 +48,7 @@ test('an unrecorded RNB footprint opens its empty sheet and creates nothing', as
   await page.setViewportSize({ width: 1280, height: 900 });
   await disableWebGL(page);
   await openCanvas(page);
+  await expect(page.locator('.canvas-zone-label')).toBeHidden();
   const footprint = page.locator('[data-rnb-id="PG31CARMES002"]').first();
   // Choose the actual SVG footprint; no pixel guessing or hidden forced click.
   await footprint.click();
@@ -57,6 +58,7 @@ test('an unrecorded RNB footprint opens its empty sheet and creates nothing', as
   await expect(page.locator('.building-row')).toHaveCount(2);
   await page.getByRole('button', { name: 'Zoom arrière' }).click();
   await expect(page.locator('[data-rnb-id]')).toHaveCount(0);
+  await expect(page.locator('.canvas-zone-label')).toBeVisible();
 });
 
 test('losing WebGL keeps the viewport and the building sheet while switching to Canvas', async ({ page }) => {

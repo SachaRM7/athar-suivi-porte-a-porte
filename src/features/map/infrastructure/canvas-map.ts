@@ -69,6 +69,7 @@ export class CanvasMap {
     this.instance.on('moveend', () => {
       this.footprintRequest?.abort();
       clearTimeout(this.moveTimer);
+      this.updateZoneLabels();
       options.onMove();
       this.moveTimer = setTimeout(() => { void this.loadFootprints(); }, 180);
     });
@@ -238,8 +239,16 @@ export class CanvasMap {
       }).addTo(this.zoneLayer);
       // DOM text avoids interpreting zone names as HTML.
       const label = document.createElement('span'); label.textContent = labels.get(zone.id) ?? zone.name;
-      shape.bindTooltip(label, { permanent: true, direction: 'center', className: 'canvas-zone-label' });
+      shape.bindTooltip(label, { direction: 'center', className: 'canvas-zone-label' });
     }
+    this.updateZoneLabels();
+  }
+
+  private updateZoneLabels(): void {
+    this.zoneLayer.eachLayer(layer => {
+      if (this.getZoom() < FOOTPRINT_MIN_ZOOM) layer.openTooltip();
+      else layer.closeTooltip();
+    });
   }
 
   setPosition(fix: PositionFix | null): void {
