@@ -251,11 +251,13 @@ test('keeps the map full-frame and moves the mobile controls with the bottom she
 
   await page.getByRole('button', { name: '18 rue du Languedoc, Toulouse' }).click();
   const buildingSheet = await page.getByRole('dialog', { name: 'Detail du batiment' }).boundingBox();
-  expect(buildingSheet).toMatchObject({ x: 0, y: 224, width: 390, height: 620 });
+  // La fiche ouverte réserve la hauteur disponible aux portes ; la liste reste à 620 px.
+  expect(buildingSheet).toMatchObject({ x: 0, y: 12, width: 390, height: 832 });
   expect(await page.getByLabel('Carte MapLibre des zones').boundingBox()).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
   await expect(page.locator('.building-floor-label')).toHaveText(['1er', 'RDC']);
+  await expect(page.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeInViewport({ ratio: 1 });
   await page.getByRole('button', { name: 'Porte 11, Contact établi' }).click();
-  expect(await page.getByRole('dialog', { name: 'Detail du batiment' }).boundingBox()).toMatchObject({ x: 0, y: 224, width: 390, height: 620 });
+  expect(await page.getByRole('dialog', { name: 'Detail du batiment' }).boundingBox()).toMatchObject({ x: 0, y: 12, width: 390, height: 832 });
   await page.close();
 });
 
