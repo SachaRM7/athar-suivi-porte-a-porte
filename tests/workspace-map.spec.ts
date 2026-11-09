@@ -148,6 +148,31 @@ test('opens the building cut in the desktop floating panel', async ({ browser })
   await page.close();
 });
 
+test('opens tracked buildings from the picker and the list without WebGL2', async ({ page }) => {
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = new Proxy(getContext, {
+      apply(target, canvas, args) {
+        return args[0] === 'webgl2' ? null : Reflect.apply(target, canvas, args);
+      }
+    });
+  });
+  await page.goto('/technical-map');
+
+  const name = '18 rue du Languedoc, Toulouse';
+  const building = page.getByRole('dialog', { name: 'Detail du batiment' });
+  await expect(page.getByText('Carte indisponible. La liste reste utilisable.')).toBeVisible();
+  await expect(page.getByText('Chargement de la carte…', { exact: true })).toBeHidden();
+  await page.getByRole('button', { name: 'Marquer une porte' }).click();
+  await page.getByRole('dialog', { name: 'Choisir un bâtiment pour marquer une porte' })
+    .getByRole('button', { name }).click();
+  await expect(building.getByRole('button', { name: 'Porte 11, Contact établi' })).toBeVisible();
+  await building.getByRole('button', { name: 'Retour à la zone' }).click();
+
+  await page.getByRole('button', { name }).click();
+  await expect(building.getByRole('heading', { name })).toBeVisible();
+});
+
 test('opens a detected building that has no Firestore document on its empty state', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openFieldMap(page);
