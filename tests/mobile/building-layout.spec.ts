@@ -45,13 +45,18 @@ for (const viewport of [{ width: 390, height: 664 }, { width: 320, height: 568 }
     await lastDoor.click();
     await page.getByRole('dialog', { name: 'Fiche de la porte 04', exact: true }).getByRole('button', { name: 'Absent', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Fiche de la porte 04', exact: true })).toHaveCount(0);
-    await expect(sheet.getByRole('button', { name: 'Porte 04, Absent', exact: true })).toBeVisible();
+    await expect(sheet.getByRole('button', { name: 'Porte 04, Absent', exact: true })).toBeFocused();
+    await expect(sheet.getByRole('button', { name: 'Porte 04, Absent', exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(firstDoor).not.toBeInViewport();
 
     const synchronize = sheet.getByRole('button', { name: 'Synchroniser', exact: true });
     await synchronize.scrollIntoViewIfNeeded();
     await expect(synchronize).toBeInViewport({ ratio: 1 });
     await synchronize.click();
-    await expect(sheet.getByLabel('Appareil de confiance')).toBeInViewport({ ratio: 1 });
+    // Sur 320 px les commandes se répartissent sur deux lignes ; chacune doit rester accessible.
+    const trustedDevice = sheet.getByLabel('Appareil de confiance');
+    await trustedDevice.scrollIntoViewIfNeeded();
+    await expect(trustedDevice).toBeInViewport({ ratio: 1 });
     await expect(sheet.locator('.door-row')).toHaveCount(16);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await sheet.getByRole('button', { name: 'Fermer la fiche du bâtiment', exact: true }).click();

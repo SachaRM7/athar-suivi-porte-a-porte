@@ -589,6 +589,8 @@
 .terrain-building-pin--linked { background: var(--st-linked); }
 .terrain-building-pin--dnd { background: var(--st-dnd); }
 .terrain-building-pin--locked { background: var(--st-locked); }
+.terrain-building-pin--prepared { background: transparent; border: 2px dashed var(--brand); }
+.terrain-legend-progress { color: var(--ink-soft); font: var(--t-10) var(--font-ui); }
 
 .terrain-panel-foot {
   display: grid;

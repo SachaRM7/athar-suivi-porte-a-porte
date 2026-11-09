@@ -30,6 +30,10 @@ Carte plein écran, sheet en bas.
   entre deux blocs fixes. Les premières portes sont visibles dès l'ouverture à taille de texte normale.
 - Contenu `peek` : « Sortie du jour », barre de trace, filtres, liste, puis un bouton pointillé
   « Ajouter un bâtiment » en fin de liste.
+- La liste distingue « Préparé », « En cours » et « Toutes visitées », avec le nombre de portes
+  visitées et un repère de statut. Un bâtiment préparé sans passage porte un contour pointillé.
+  Après fermeture d'une fiche, la liste s'actualise sans démonter les boutons : le focus revient
+  au bâtiment consulté. L'actualisation en cours est annoncée.
 
 ## 3. Vue bâtiment — coupe verticale
 
@@ -39,13 +43,20 @@ empilé, pas à plat.
 - Étages du haut vers le bas, RDC en dernier, puis une **bande hachurée** et la mention « Rue · entrée principale ».
 - Étiquettes : `RDC`, `1er`, `2ème`, `3ème`… (jamais `R+1`).
 - Un filet vertical traverse la colonne d'étiquettes — c'est le trait de coupe.
-- Chaque étage : étiquette, en-tête (`N portes` · `faites/total`), grille de cases de porte
+- Chaque étage : étiquette, en-tête (`faites/total visitées`, `N portes` en modification), grille de cases de porte
   (`repeat(auto-fill, minmax(52px,1fr))`, gouttière 7px), plus une case « + » en fin de rangée.
-- Un étage incomplet propose **« tout marquer absent »**. C'est le cas le plus fréquent du porte-à-porte et
-  le vrai point de friction : trois portes sur cinq ne répondent pas, les saisir une par une décourage.
-  Un étage complet affiche « terminé ».
-- En-tête de la vue : retour vers la zone, adresse en mono, sous-ligne, boutons « Modifier » et « Structure »,
-  barre de progression et compteur `11 / 18`.
+- L'action groupée **« Marquer N absentes »** concerne seulement les portes jamais visitées ;
+  son nom accessible précise « N portes absentes » et la confirmation énumère les portes.
+  Un étage avec des portes à revisiter affiche « N à revoir » ; « terminé » reste réservé
+  aux étages dont le cycle de suivi est terminé.
+- En-tête de la vue : retour vers la zone, adresse en mono, sélecteur de hall si nécessaire,
+  bouton « + » pour ajouter un hall et boutons à icône pour modifier les portes ou configurer
+  la structure. Les noms accessibles et infobulles explicitent chaque action ; cibles de 44px minimum.
+  La suppression de la structure apparaît en mode modification, avec confirmation.
+- Barre de progression, compteur `11/18 visitées`, étape de suivi et état de synchronisation.
+  La consigne générique ne réserve plus un pied de fiche vide ; confirmations et erreurs restent visibles.
+- Après saisie d'un passage, la rangée reste montée : le focus et le défilement reviennent à
+  la porte choisie, même au RDC. La fiche porte aligne ses blocs en haut, sans les étirer sur la hauteur.
 
 Le gain à préserver : on voit d'un coup d'œil que le 2ème est presque bouclé et que personne n'est monté au 3ème.
 

@@ -125,10 +125,20 @@ Ordre d'empilement, du bas vers le haut :
 2. `zone-fill` / `zone-line` — polygone de la zone active, remplissage `--brand` à 4 %, contour pointillé.
 3. `batiments-hors-zone` — emprises hors polygone, fill `--foot-out`, sans contour, **non cliquables**.
 4. `batiments-todo` — dans la zone, sans document Firestore : fill `--foot-todo`, contour `--foot-todo-line` 1.3px.
-5. `batiments-suivis` — dans la zone, avec document : fill couleur de statut à 55 %, contour plein 1.3px.
+5. `batiments-suivis` — dans la zone, avec document : fill couleur de statut à 55 %.
+   Sans passage, le bâtiment préparé garde un fond gris et un contour `--brand` pointillé 2px.
+   Dès le premier passage, le contour devient plein, dans la couleur du statut dominant, 2.5px.
    La correspondance se fait par `feature-state` alimenté depuis Firestore (clé = ID-RNB).
 6. `batiments-soeurs` — contour rose `--st-sisters` 1.6px, décalé de 2.5px, sur les bâtiments marqués.
-7. `position` — halo safran 20px à 20 % + point 9px bordé de blanc 3.5px.
+7. `batiments-progression` — compteur `visitées/total` sur les bâtiments chargés, tous halls confondus,
+   à partir du zoom 16 ; « Préparé » si aucune porte active n'est encore décrite. Les noms de rue
+   restent sous ces compteurs. Une emprise sans document n'a pas de compteur. Une lecture inconnue
+   conserve son apparence de chargement incomplet, sans être assimilée à un bâtiment jamais touché.
+8. `position` — halo safran 20px à 20 % + point 9px bordé de blanc 3.5px.
+
+Le moteur Canvas reprend ces contours et compteurs. Ils proviennent des portes actives déjà chargées,
+sans requête supplémentaire. « Toutes visitées » ne signifie pas « suivi terminé » : des portes
+« Absent » ou « Accès bloqué » peuvent encore demander un passage.
 
 ## Interaction
 

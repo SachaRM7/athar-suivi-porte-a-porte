@@ -9,7 +9,7 @@ import { withBasePath } from '../../../app/config/public-paths';
 import type { Building, GeoPoint, Status, Zone, ZoneGeometry, ZoneStats } from '../../../domain/workspace/models';
 import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
 import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
-import { isWorkspaceStatusId, WORKSPACE_VISUAL_STATUS } from '../../../domain/workspace/status-ids';
+import { hasRecordedVisit, isWorkspaceStatusId, WORKSPACE_VISUAL_STATUS } from '../../../domain/workspace/status-ids';
 import { STATUS_LABEL, type DoorStatus } from '../../../design/status';
 import type { WorkspaceRepositories } from '../../../domain/workspace/repositories';
 import { assertZone } from '../../../domain/workspace/invariants';
@@ -31,6 +31,7 @@ import {
   centerOfRing,
   doorsByBuilding as groupDoorsByBuilding,
   dominantStatusId,
+  buildingProgressFeatures,
   footprintState,
   isInsideZone,
   squareAround,
@@ -52,6 +53,7 @@ import type { SelectBuildingOptions } from '../model/use-opened-building';
 import { supportsWebGL2 } from '../model/webgl-support';
 import type { CanvasMap, MapCamera, MapFootprint } from '../infrastructure/canvas-map';
 import { LocalPmtilesSource } from '../infrastructure/local-pmtiles-source';
+import { buildingProgressLabel } from '../../buildings/model/building-progress';
 import { firstAvailableArchive } from '../model/footprint-archive';
 import { matchesAddress, markingCandidates } from '../model/field-navigation';
 import { Dialog, TraceBar } from '../../../design/components';
@@ -80,6 +82,7 @@ const FOOTPRINT_SOURCE = 'athar-batiments';
 const FOOTPRINT_SOURCE_LAYER = 'batiments';
 const ZONE_SOURCE = 'athar-zones';
 const LOCAL_BUILDING_SOURCE = 'athar-batiments-poses';
+const BUILDING_PROGRESS_SOURCE = 'athar-building-progress';
 const POSITION_SOURCE = 'athar-position';
 /** Jeton `--foot-todo` : un bâtiment décrit mais sans passage reste gris. */
 const UNTOUCHED_COLOR = '#CDD3CD';
@@ -166,6 +169,7 @@ function localBuildingFeatures(buildings: readonly Building[], context: Footprin
         properties: {
           id: building.id,
           label: building.addressLabel,
+          visitedCount: (context.doorsByBuilding.get(building.id) ?? []).filter(hasRecordedVisit).length,
           color: (statusId ? context.statuses.get(statusId)?.color : undefined) ?? UNTOUCHED_COLOR
         },
         geometry: { type: 'Polygon' as const, coordinates: [squareAround(building.location.longitude, building.location.latitude)] }
@@ -369,6 +373,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     for (const [id, building] of pendingLocalBuildings.current) localCandidates.set(id, building);
     const untiled = [...localCandidates.values()].filter((building) => !tiled.has(building.id));
     (instance.getSource(LOCAL_BUILDING_SOURCE) as GeoJSONSource | undefined)?.setData(localBuildingFeatures(untiled, context));
+    (instance.getSource(BUILDING_PROGRESS_SOURCE) as GeoJSONSource | undefined)?.setData(buildingProgressFeatures(context));
     element.current?.setAttribute('data-footprints', String(tiled.size));
   }, []);
 
@@ -672,6 +677,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
 
       instance.addSource(ZONE_SOURCE, { type: 'geojson', data: zoneFeatures([], new Map()) });
       instance.addSource(LOCAL_BUILDING_SOURCE, { type: 'geojson', data: EMPTY_FEATURES });
+      instance.addSource(BUILDING_PROGRESS_SOURCE, { type: 'geojson', data: EMPTY_FEATURES });
       instance.addSource(POSITION_SOURCE, { type: 'geojson', data: EMPTY_FEATURES });
 
       const footprintArchiveUrl = await firstAvailableArchive(footprintArchives.map((path) => withBasePath(path as `/${string}`)), undefined, initRequest.signal);
@@ -696,10 +702,11 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         footprints: footprintArchiveUrl ? FOOTPRINT_SOURCE : null,
         footprintSourceLayer: FOOTPRINT_SOURCE_LAYER,
         localBuildings: LOCAL_BUILDING_SOURCE,
+        buildingProgress: BUILDING_PROGRESS_SOURCE,
         position: POSITION_SOURCE
       }).forEach((layer) => instance.addLayer(layer));
-      // Les libellés du fond passent au-dessus des emprises, mais sous la progression de zone.
-      moveBasemapLabelsAboveOverlay(instance, ATHAR_LAYERS.zoneProgress);
+      // Les noms de rue restent au-dessus des emprises, sous les compteurs de suivi.
+      moveBasemapLabelsAboveOverlay(instance, ATHAR_LAYERS.buildingProgress);
       if (!footprintArchiveUrl) {
         setMessage('Emprises indisponibles. Les bâtiments déjà suivis restent accessibles dans la liste.');
       }
@@ -1133,15 +1140,15 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
             </div>
             {!listReady ? <p className="building-list-empty" role="status">{terrainPage.phase === 'error' ? <>Liste indisponible. Vérifie le réseau ou la préparation hors ligne. <button type="button" onClick={terrainPage.retry}>Réessayer</button></> : !loadedZoneId && !metadataError ? 'Choisis une zone pour voir ses bâtiments.' : 'Chargement des bâtiments…'}</p> : listedBuildings.length === 0
               ? <p className="building-list-empty">{normalizedSearch ? <>Aucune adresse correspondante parmi les bâtiments chargés. <button type="button" onClick={() => { setSearchQuery(''); setListFilter('all'); }}>Effacer la recherche et les filtres</button></> : listFilter === 'stale' ? 'Aucun bâtiment ne correspond à ce filtre de revisite.' : listFilter === 'todo' ? 'Aucun bâtiment suivi ne correspond au filtre « Pas encore fait ».' : terrainPage.partial ? 'Aucun résultat sur cette page. Consulte la suivante ou change les filtres.' : 'Aucun bâtiment décrit dans cette zone. Touche une emprise pour commencer.'}</p>
-              : <ul className="building-list-rows">
+              : <ul className="building-list-rows" aria-busy={terrainPage.refreshing}>
                 {listedBuildings.map((entry) => {
                   const visual = buildingVisualStatus(listDoorGroups.get(entry.building.id) ?? []);
                   return <li key={entry.building.id}>
-                    <button className="building-row" onClick={() => openListedBuilding(entry.building)} type="button">
-                      <span aria-hidden="true" className={`terrain-building-pin terrain-building-pin--${visual}`} />
+                    <button className="building-row" data-progress={entry.treatedCount === 0 ? 'prepared' : entry.treatedCount < entry.doorCount ? 'started' : 'visited'} onClick={() => openListedBuilding(entry.building)} type="button">
+                      <span aria-hidden="true" className={`terrain-building-pin terrain-building-pin--${visual}${entry.treatedCount === 0 ? ' terrain-building-pin--prepared' : ''}`} />
                       <span className="terrain-building-copy">
                         <span className="building-row-address">{entry.building.addressLabel}</span>
-                        <span className="building-row-progress">{entry.doorCount === 0 ? 'Structure à décrire' : `${STATUS_LABEL[visual]} · ${entry.treatedCount}/${entry.doorCount} portes visitées`}</span>
+                        <span className="building-row-progress">{entry.doorCount === 0 ? 'Structure à décrire' : <>{buildingProgressLabel(entry.doorCount, entry.treatedCount)} · {entry.treatedCount}/{entry.doorCount} <span className="terrain-sr-only">portes </span>visitées<span className="terrain-sr-only"> · {STATUS_LABEL[visual]}</span></>}</span>
                       </span>
                       <span className={entry.followUp.suggestedForRevisit ? 'building-row-age alert' : 'building-row-age'}>{buildingAgeLabel(entry)}</span>
                     </button>
@@ -1150,8 +1157,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
               </ul>}
             {canCreateBuildings && selectedZone && mode === 'terrain' && <button className="building-list-add" disabled={placing} onClick={startBuildingPlacement} type="button">+ Ajouter un bâtiment absent de la carte</button>}
             {(terrainPage.partial || terrainPage.index > 0) && <nav className="terrain-pagination" aria-label="Pages des bâtiments"><button disabled={terrainPage.index === 0 || terrainPage.phase === 'loading'} onClick={terrainPage.previous} type="button">Précédente</button><span>Page {terrainPage.index + 1}</span><button disabled={!terrainPage.nextCursor || terrainPage.phase !== 'ready'} onClick={terrainPage.next} type="button">Suivante</button></nav>}
-            <span className="terrain-visible-count" data-visible-buildings={visibleBuildingCount}>
-              {listReady ? `${zoneBuildingCount} bâtiment${zoneBuildingCount > 1 ? 's' : ''} suivi${zoneBuildingCount > 1 ? 's' : ''}${terrainPage.partial ? ' sur cette page' : ''}` : loadedZoneId ? 'Chargement de la liste…' : ''}{mapError && ' · carte indisponible'}
+            <span className="terrain-visible-count" data-visible-buildings={visibleBuildingCount} role="status">
+              {terrainPage.refreshing ? 'Actualisation des bâtiments…' : listReady ? `${zoneBuildingCount} bâtiment${zoneBuildingCount > 1 ? 's' : ''} suivi${zoneBuildingCount > 1 ? 's' : ''}${terrainPage.partial ? ' sur cette page' : ''}` : loadedZoneId ? 'Chargement de la liste…' : ''}{mapError && ' · carte indisponible'}
             </span>
             {/* Une seule mention de fraîcheur : le détail de provenance relève du pilotage. */}
             <p className="terrain-visible-count">{progress.updatedAt ? `Progression comptée le ${zoneProgressDate(progress).replace(/^Relevé du /, '')}, hors saisies en attente sur ce téléphone.` : 'Progression pas encore comptée.'}</p>
@@ -1177,6 +1184,8 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         <span><i className="terrain-building-pin terrain-building-pin--dnd" />Ne pas déranger</span>
         <span><i className="terrain-building-pin terrain-building-pin--locked" />Accès bloqué</span>
         <span><i className="terrain-building-pin terrain-building-pin--todo" />Pas encore fait</span>
+        <span><i className="terrain-building-pin terrain-building-pin--prepared" />Préparé · aucun passage</span>
+        <span className="terrain-legend-progress">Les compteurs indiquent les portes visitées.</span>
         <span className="terrain-legend-sisters"><i />À confier aux sœurs</span>
       </aside>
 

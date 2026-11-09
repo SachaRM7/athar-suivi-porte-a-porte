@@ -6,3 +6,5 @@
 .terrain-map-stage .leaflet-control-attribution { font-size: var(--t-10); background: var(--paper); }
 .terrain-map-stage .canvas-zone-label { max-width: min(70vw, 320px); white-space: normal; color: var(--brand); background: var(--paper); border-color: var(--hairline); font-family: var(--font-data); box-shadow: var(--shadow); }
 .terrain-map-stage path[role="button"]:focus-visible { outline: 3px solid var(--brand); }
+.terrain-map-stage .building-map-progress { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-field); box-shadow: var(--shadow); color: var(--brand); font: 500 var(--t-115) var(--font-data); padding: 2px 5px; pointer-events: none; }
+.terrain-map-stage .building-map-progress::before { display: none; }

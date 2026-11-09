@@ -3,16 +3,6 @@
 Questions rencontrées en cours d'implémentation. Une entrée par question, la plus récente en haut.
 Une question résolue est déplacée dans « Tranchées » avec la décision.
 
-## 2026-11-09 — suivi du focus après un passage
-
-Le rafraîchissement existant après l'enregistrement d'un passage démonte temporairement
-les rangées de portes. Le bouton d'origine disparaît alors avant la restauration du focus,
-qui peut retomber sur le corps de page ; le défilement peut aussi revenir en haut.
-La fermeture sans saisie restaure correctement le focus. À traiter dans un suivi du lot D,
-séparé du correctif de hauteur et de défilement de la fiche mobile.
-
----
-
 ### 2026-10-21 — Audit UX (P1) · Trois recommandations de l'audit heurtent une décision écrite
 
 L'audit (`AUDIT-UX.md`) proposait trois changements qui contredisent des règles déjà actées. Ils
@@ -90,6 +80,15 @@ changer à sa forme. Question : l'ajouter à cette mutation, ou attendre un lot 
 ---
 
 ## Tranchées
+
+### 2026-11-09 — suivi du focus après un passage
+
+Le rafraîchissement démontait temporairement les rangées : après saisie au RDC,
+le focus retombait sur le corps de page et le défilement remontait. Les rafraîchissements
+après passage conservent désormais les portes montées. Le retour à la liste conserve aussi
+les boutons pendant l'actualisation de la même page. Les changements de zone/page et les
+erreurs gardent leurs états explicites. Vérification par les parcours mobiles de retour
+après saisie et de fermeture des fiches imbriquées.
 
 ### 2026-08-08 — WP2 · Encodage Firestore des polygones
 

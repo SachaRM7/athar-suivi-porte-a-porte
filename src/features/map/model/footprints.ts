@@ -4,6 +4,8 @@ import type { Building, Door, Status, Zone, ZoneStats } from '../../../domain/wo
 import { hasRecordedVisit } from '../../../domain/workspace/status-ids';
 import { zoneDoorProgress } from '../../../domain/workspace/zone-progress';
 import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-progress-label';
+import type { FeatureCollection, Point } from 'geojson';
+import { buildingProgressLabel } from '../../buildings/model/building-progress';
 
 /**
  * Modèle de la couche cartographique du lot WP7.
@@ -53,6 +55,8 @@ export type FootprintState = {
   known: boolean;
   color: string;
   sisters: boolean;
+  doorCount: number;
+  visitedCount: number;
 };
 
 export type FootprintContext = {
@@ -68,16 +72,34 @@ export type FootprintContext = {
 
 export function footprintState(rnbId: string, center: readonly [number, number], context: FootprintContext): FootprintState {
   const building = context.buildings.get(rnbId);
-  const doors = context.doorsByBuilding.get(rnbId) ?? [];
+  const doors = (context.doorsByBuilding.get(rnbId) ?? []).filter(door => door.active);
   const statusId = building ? dominantStatusId(doors) : null;
   return {
     inZone: isInsideZone(context.zone, center),
     tracked: building !== undefined,
     known: building !== undefined || context.complete !== false,
     color: (statusId ? context.statuses.get(statusId)?.color : undefined) ?? context.untouchedColor,
+    doorCount: building ? doors.length : 0,
+    visitedCount: building ? doors.filter(hasRecordedVisit).length : 0,
     // `02-DATA-MODEL.md` : le bâtiment porte le marqueur dès qu'une seule de ses portes
     // le porte. Seul l'anneau rose sort sur la carte, jamais la composition du foyer.
     sisters: building !== undefined && doors.some((door) => door.sisters)
+  };
+}
+
+/** Une seule étiquette par bâtiment chargé, tous halls confondus, sans lecture supplémentaire. */
+export function buildingProgressFeatures(context: FootprintContext): FeatureCollection<Point> {
+  return {
+    type: 'FeatureCollection',
+    features: [...context.buildings.values()].flatMap(building => {
+      const center: [number, number] = [building.location.longitude, building.location.latitude];
+      const state = footprintState(building.id, center, context);
+      if (!state.inZone) return [];
+      const label = state.doorCount ? `${state.visitedCount}/${state.doorCount}` : 'Préparé';
+      return [{ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: center },
+        properties: { id: building.id, label, prepared: state.visitedCount === 0,
+          description: `${building.addressLabel} · ${buildingProgressLabel(state.doorCount, state.visitedCount)} · ${state.visitedCount}/${state.doorCount} portes visitées` } }];
+    })
   };
 }
 

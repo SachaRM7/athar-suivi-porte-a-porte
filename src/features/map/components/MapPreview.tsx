@@ -58,7 +58,7 @@ export function MapPreview(): ReactElement {
         canRenameBuilding
         onRenameBuilding={renameBuilding}
         onBuildingDelete={() => setDataVersion((version) => version + 1)}
-        onClose={opened.close}
+        onClose={() => { opened.close(); setDataVersion(version => version + 1); }}
         outbox={outbox}
         repositories={repositories}
         sync={layoutFixture ? layoutSync : undefined}

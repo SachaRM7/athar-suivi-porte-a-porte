@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ATHAR_LAYERS, CLICKABLE_FOOTPRINT_LAYERS, createAtharLayers, FOOTPRINT_MIN_ZOOM } from './athar-layers';
 
-const sources = { zones: 'z', footprints: 'f', footprintSourceLayer: 'batiments', localBuildings: 'l', position: 'p' };
+const sources = { zones: 'z', footprints: 'f', footprintSourceLayer: 'batiments', localBuildings: 'l', buildingProgress: 'b', position: 'p' };
 
 describe('createAtharLayers', () => {
   it('stacks the layers in the order prescribed by 03-CARTO.md', () => {
@@ -15,9 +15,12 @@ describe('createAtharLayers', () => {
       ATHAR_LAYERS.todoLine,
       ATHAR_LAYERS.tracked,
       ATHAR_LAYERS.trackedLine,
+      ATHAR_LAYERS.preparedLine,
       ATHAR_LAYERS.local,
       ATHAR_LAYERS.localLine,
+      ATHAR_LAYERS.localPreparedLine,
       ATHAR_LAYERS.sisters,
+      ATHAR_LAYERS.buildingProgress,
       ATHAR_LAYERS.zoneProgress,
       ATHAR_LAYERS.positionAccuracy,
       ATHAR_LAYERS.positionAccuracyLine,
