@@ -23,8 +23,11 @@ Carte plein écran, sheet en bas.
 
 - **Barre haute** : chip de zone extensible · recherche · menu.
 - **FAB** : recentrer, positionné juste au-dessus de la sheet, remonte avec elle.
-- **Sheet**, trois hauteurs : `peek` (306) · `building` (620) · `detail` (392).
-  La poignée bascule entre `peek` et `full` ; elle est inerte quand une sous-vue est ouverte.
+- **Sheet** : `peek` (306), puis fiches bâtiment et porte sur la hauteur disponible,
+  en tenant compte des zones sûres du téléphone. La poignée de la liste bascule entre `peek` et `full`.
+  La fiche bâtiment garde un retour et une croix accessibles en haut. Son en-tête, les étages
+  et les commandes de synchronisation défilent ensemble : les portes ne sont jamais comprimées
+  entre deux blocs fixes. Les premières portes sont visibles dès l'ouverture à taille de texte normale.
 - Contenu `peek` : « Sortie du jour », barre de trace, filtres, liste, puis un bouton pointillé
   « Ajouter un bâtiment » en fin de liste.
 

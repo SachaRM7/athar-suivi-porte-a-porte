@@ -93,7 +93,7 @@ C'est le seul endroit où l'interface se permet de l'audace. Tout le reste reste
 
 **FAB** — primaire en `--accent` avec texte `#20180A`, secondaire en `--paper` circulaire 46px.
 
-**Bottom sheet** — rayon 22px en haut, poignée 38×4px, trois hauteurs : `peek` 306px, `detail` 392px, `building`/`full` 620px. Transition `.3s cubic-bezier(.2,.8,.2,1)`.
+**Bottom sheet** — rayon 22px en haut, poignée 38×4px pour la liste, `peek` 306px et `full` 620px. Sur mobile, les fiches bâtiment et porte occupent la hauteur disponible (zones sûres comprises) et leur contenu défile. La fiche bâtiment utilise un retour et une croix sur une même ligne. Transition `.3s cubic-bezier(.2,.8,.2,1)`.
 
 **Dialogue** — centré sur desktop (max 400px, rayon 16px), en sheet sur mobile (rayon 20px en haut). Fond `rgba(10,14,16,.42)` + `backdrop-filter: blur(2px)`.
 
