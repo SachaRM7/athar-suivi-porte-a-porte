@@ -179,6 +179,9 @@ describe('Firestore security rules', () => {
     await assertSucceeds(setDoc(doc(db, `${workspace}/statuses/linked`), {
       label: "Attaché à l'effort", color: '#2456A6', order: 3, active: true
     }));
+    await assertSucceeds(setDoc(doc(db, `${workspace}/statuses/heard-no-answer`), {
+      label: 'Présence mais sans réponse', color: '#147D92', order: 6, active: true
+    }));
     await assertFails(setDoc(doc(db, `${workspace}/statuses/custom-member`), statusData({ label: 'Libre' })));
   });
 

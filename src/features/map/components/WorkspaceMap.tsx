@@ -133,6 +133,7 @@ function buildingVisualStatus(doors: readonly import('../../../domain/workspace/
 const COVERAGE_SEGMENTS: readonly { id: string; status: DoorStatus }[] = [
   { id: 'linked', status: 'linked' },
   { id: 'contacted', status: 'open' },
+  { id: 'heard-no-answer', status: 'heard' },
   { id: 'retry', status: 'away' },
   { id: 'locked', status: 'locked' },
   { id: 'do-not-return', status: 'dnd' }
@@ -1173,6 +1174,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         <span className="ds-microlabel">Statut des bâtiments</span>
         <span><i className="terrain-building-pin terrain-building-pin--open" />Contact établi</span>
         <span><i className="terrain-building-pin terrain-building-pin--away" />Absent</span>
+        <span><i className="terrain-building-pin terrain-building-pin--heard" />{STATUS_LABEL.heard}</span>
         <span><i className="terrain-building-pin terrain-building-pin--linked" />Attaché à l’effort</span>
         <span><i className="terrain-building-pin terrain-building-pin--dnd" />Ne pas déranger</span>
         <span><i className="terrain-building-pin terrain-building-pin--locked" />Accès bloqué</span>

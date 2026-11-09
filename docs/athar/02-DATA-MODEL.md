@@ -91,7 +91,7 @@ Trois notions distinctes, dérivées du statut courant sans champ stocké
 - « Pas vu > 3 mois » et le tri par ancienneté ne regardent que les portes encore dans le cycle :
   un immeuble dont toutes les portes sont exclues n'est jamais proposé ; un immeuble mixte reste
   proposé par ses portes éligibles. Le statut dominant n'intervient pas.
-- « Absent » et « Accès bloqué » ne deviennent jamais définitifs, et « Ne pas déranger » n'est
+- « Absent », « Présence mais sans réponse » et « Accès bloqué » restent dans le cycle de revisite. « Ne pas déranger » n'est
   jamais converti en « Absent ».
 - « Tout marquer absent » n'écrit que sur les portes jamais visitées ; une porte exclue n'est
   jamais touchée par une action groupée (refus aussi au niveau du modèle).

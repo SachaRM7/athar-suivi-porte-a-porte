@@ -1,6 +1,6 @@
 /* Lot B: pure, deterministic projection. Never includes notes, profiles or markers. */
 const { createHash } = require('node:crypto');
-const STATUS_IDS = ['unvisited', 'contacted', 'retry', 'linked', 'do-not-return', 'locked'];
+const STATUS_IDS = ['unvisited', 'contacted', 'retry', 'linked', 'do-not-return', 'locked', 'heard-no-answer'];
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const date = (value) => value?.toDate ? value.toDate().toISOString() : typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 const geometryHash = (zone) => hash(zone.geometry?.vertices ?? zone.geometry?.coordinates ?? null);
@@ -59,7 +59,8 @@ function computeWorkspaceStats({ zones, buildings, doors, visits, catalogues = [
     const doorIds = new Set(doors.map(d => d.id));
     if (visits.some(v => !doorIds.has(v.doorId))) issue('orphan-visit');
     if (buildings.some(b => !zoneIds.has(b.zoneId)) || doors.some(d => !zoneIds.has(d.zoneId))) issue('orphan-zone');
-    const countsByStatus = Object.fromEntries(STATUS_IDS.map(id => [id, 0]));
+    // Les anciens clients acceptent le relevé tant que le nouveau résultat n'a pas été utilisé.
+    const countsByStatus = Object.fromEntries(STATUS_IDS.filter(id => id !== 'heard-no-answer').map(id => [id, 0]));
     const scopedBuildings = buildings.filter(b => b.zoneId === zone.id);
     const described = new Set(); const visited = new Set();
     let doorCount = 0; let visitedDoorCount = 0;
@@ -73,7 +74,7 @@ function computeWorkspaceStats({ zones, buildings, doors, visits, catalogues = [
       const problem = doorProblem(door, visitMap, visitsByDoor);
       if (problem) { issue(problem); continue; }
       described.add(building.id);
-      countsByStatus[door.currentStatusId]++;
+      countsByStatus[door.currentStatusId] = (countsByStatus[door.currentStatusId] ?? 0) + 1;
       if (door.lastVisitId) { visited.add(building.id); visitedDoorCount++; }
     }
     const catalogue = catalogues.find(c => c.id === zone.id);

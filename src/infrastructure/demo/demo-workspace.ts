@@ -32,7 +32,8 @@ export const demoWorkspace: WorkspaceSnapshot = {
     { id: 'retry', label: 'Absent', color: '#C87A0A', order: 2, active: true },
     { id: 'linked', label: "Attaché à l'effort", color: '#2456A6', order: 3, active: true },
     { id: 'do-not-return', label: 'Ne pas déranger', color: '#A93B2E', order: 4, active: true },
-    { id: 'locked', label: 'Accès bloqué', color: '#6B5AA8', order: 5, active: true }
+    { id: 'locked', label: 'Accès bloqué', color: '#6B5AA8', order: 5, active: true },
+    { id: 'heard-no-answer', label: 'Présence mais sans réponse', color: '#147D92', order: 6, active: true }
   ],
   zones: [{
     id: 'carmes', name: 'Carmes', color: '#16835F', coverageState: 'active', assigneeLabel: 'Terrain 31',

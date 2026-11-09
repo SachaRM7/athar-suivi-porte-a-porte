@@ -1,14 +1,5 @@
 import { statusColorVar, type DoorStatus } from '../../../design/status';
 
-const ST: Readonly<Record<DoorStatus, string>> = {
-  todo: statusColorVar('todo'),
-  open: statusColorVar('open'),
-  away: statusColorVar('away'),
-  linked: statusColorVar('linked'),
-  dnd: statusColorVar('dnd'),
-  locked: statusColorVar('locked')
-};
-
 /* Fond cartographique factice de la maquette d'authentification. */
 let sd = 23;
 const rnd = () => (sd = (sd * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
@@ -23,7 +14,7 @@ export function mapSVG(): string {
     if (rnd() < .24) continue;
     const w = 26 + rnd() * 12, h = 22 + rnd() * 10, x = c * 100 + 14 + a * 40 + rnd() * 4, y = r * 90 + 12 + b * 38 + rnd() * 4;
     const st = pool[Math.floor(rnd() * pool.length)] ?? 'todo';
-    const col = st === 'todo' ? 'var(--foot-todo)' : ST[st];
+    const col = st === 'todo' ? 'var(--foot-todo)' : statusColorVar(st);
     foots += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${col}" fill-opacity="${st === 'todo' ? .85 : .55}" stroke="${col}" stroke-width="1.2"/>`;
   }
   return `<svg aria-hidden="true" focusable="false" viewBox="0 0 1240 800" preserveAspectRatio="xMidYMid slice">

@@ -5,10 +5,10 @@
  * ne pas les traduire, ne pas les abréger.
  *
  * « À confier aux sœurs » n'est pas ici : c'est un marqueur booléen séparé,
- * cumulable avec n'importe quel statut, et jamais un septième statut.
+ * cumulable avec n'importe quel statut.
  */
 
-export const DOOR_STATUSES = ['todo', 'open', 'away', 'linked', 'dnd', 'locked'] as const;
+export const DOOR_STATUSES = ['todo', 'open', 'away', 'linked', 'dnd', 'locked', 'heard'] as const;
 
 export type DoorStatus = (typeof DOOR_STATUSES)[number];
 
@@ -19,6 +19,7 @@ export const STATUS_LABEL: Readonly<Record<DoorStatus, string>> = {
   linked: "Attaché à l'effort",
   dnd: 'Ne pas déranger',
   locked: 'Accès bloqué',
+  heard: 'Présence mais sans réponse',
 };
 
 /** Variable CSS portant la couleur du statut. La couleur ne sert jamais à autre chose. */
@@ -28,7 +29,7 @@ export function statusColorVar(status: DoorStatus): string {
 
 /**
  * Hauteur du trait dans la barre de trace, en pixels.
- * 01-DESIGN-SYSTEM.md : linked 26 · open 21 · again/n-a 17 · away 13 · locked 11 · dnd 10.
+ * 01-DESIGN-SYSTEM.md : linked 26 · open 21 · heard/n-a 17 · away 13 · locked 11 · dnd 10.
  *
  * `todo` ne peut pas apparaître dans une trace — une porte pas encore faite n'a pas
  * été marquée pendant la sortie — et retombe donc sur la valeur « n-a » de 17.
@@ -38,6 +39,7 @@ export const TRACE_FALLBACK_HEIGHT = 17;
 const TRACE_HEIGHT: Readonly<Partial<Record<DoorStatus, number>>> = {
   linked: 26,
   open: 21,
+  heard: 17,
   away: 13,
   locked: 11,
   dnd: 10,

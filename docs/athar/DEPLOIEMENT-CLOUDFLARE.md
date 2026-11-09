@@ -60,5 +60,9 @@ La configuration Web Firebase est publique : inutile de chiffrer ces valeurs.
 
 ## Limites
 
+Le workflow Firebase initialise le résultat « Présence mais sans réponse » dans le workspace
+existant lorsqu’il publie le backend. Sur Cloudflare, le résultat
+devient sélectionnable dès que cette entrée Firestore est disponible.
+
 Le déploiement Cloudflare ne passe pas par les gardes du workflow GitHub (`build:deploy`,
 contrat backend, recette émulateurs). Ne déployer que depuis `main` après un contrôle vert.

@@ -81,9 +81,9 @@ Libellés affichés à l'utilisateur. Ne pas les reformuler, ne pas les traduire
 | `linked` | Attaché à l'effort | Sort la porte du cycle de suivi (lien établi) |
 | `dnd` | Ne pas déranger | La personne a demandé à ne plus être sollicitée — sort aussi la porte du cycle de suivi |
 | `locked` | Accès bloqué | Interphone, digicode, portail |
+| `heard` | Présence mais sans réponse | Bruit perçu derrière la porte, aucune réponse au passage |
 
 « À confier aux sœurs » est un **marqueur booléen séparé**, cumulable avec n'importe quel statut.
-Ce n'est pas un septième statut et il ne doit jamais être présenté comme tel.
 
 Étages : `RDC`, `1er`, `2ème`, `3ème`… jamais `R+1`.
 

@@ -87,7 +87,8 @@ const RESULT_CHOICES: readonly { statusId: string; label: string; className: str
   { statusId: 'retry', label: 'Absent', className: 'away-result' },
   { statusId: 'linked', label: "Attaché à l'effort", className: 'linked-result', hint: 'sort du suivi' },
   { statusId: 'do-not-return', label: 'Ne pas déranger', className: 'dnd-result', hint: 'sort du suivi' },
-  { statusId: 'locked', label: 'Accès bloqué (interphone / code)', className: 'locked-result' }
+  { statusId: 'locked', label: 'Accès bloqué (interphone / code)', className: 'locked-result' },
+  { statusId: 'heard-no-answer', label: 'Présence mais sans réponse', className: 'heard-result', hint: 'présence incertaine' }
 ];
 
 /** « Contact établi · dernier passage il y a 3 j », ou « Jamais visitée ». */

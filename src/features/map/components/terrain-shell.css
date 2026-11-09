@@ -589,6 +589,7 @@
 .terrain-building-pin--linked { background: var(--st-linked); }
 .terrain-building-pin--dnd { background: var(--st-dnd); }
 .terrain-building-pin--locked { background: var(--st-locked); }
+.terrain-building-pin--heard { background: var(--st-heard); }
 
 .terrain-panel-foot {
   display: grid;

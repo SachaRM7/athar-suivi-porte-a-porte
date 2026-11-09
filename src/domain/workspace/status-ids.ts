@@ -1,5 +1,5 @@
 /** Identifiants persistés dans workspaces ; les clés visuelles todo/open/away/dnd ne le sont pas. */
-export const WORKSPACE_STATUS_IDS = ['unvisited', 'contacted', 'retry', 'linked', 'do-not-return', 'locked'] as const;
+export const WORKSPACE_STATUS_IDS = ['unvisited', 'contacted', 'retry', 'linked', 'do-not-return', 'locked', 'heard-no-answer'] as const;
 export type WorkspaceStatusId = (typeof WORKSPACE_STATUS_IDS)[number];
 
 export function isWorkspaceStatusId(value: string): value is WorkspaceStatusId {
@@ -12,5 +12,5 @@ export function hasRecordedVisit(door: { active: boolean; lastVisitId: string | 
 }
 
 export const WORKSPACE_VISUAL_STATUS = {
-  unvisited: 'todo', contacted: 'open', retry: 'away', linked: 'linked', 'do-not-return': 'dnd', locked: 'locked'
+  unvisited: 'todo', contacted: 'open', retry: 'away', linked: 'linked', 'do-not-return': 'dnd', locked: 'locked', 'heard-no-answer': 'heard'
 } as const;

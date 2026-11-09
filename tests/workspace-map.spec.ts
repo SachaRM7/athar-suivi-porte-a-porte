@@ -148,6 +148,19 @@ test('opens the building cut in the desktop floating panel', async ({ browser })
   await page.close();
 });
 
+test('records audible noise without an answer and keeps the door to revisit', async ({ page }) => {
+  await page.goto('/technical-map');
+  await page.getByRole('button', { name: /18 rue du Languedoc, Toulouse/ }).click();
+  await page.getByRole('button', { name: 'Porte 12, Pas encore fait' }).click();
+  await page.getByRole('button', { name: 'Présence mais sans réponse', exact: true }).click();
+  const door = page.getByRole('button', { name: 'Porte 12, Présence mais sans réponse' });
+  await expect(door).toBeVisible();
+  await expect(page.locator('.building-floor').first().getByText('1 à revoir', { exact: true })).toBeVisible();
+  await door.click();
+  const history = page.getByRole('dialog', { name: 'Fiche de la porte 12' }).getByRole('list');
+  await expect(history).toContainText('Présence mais sans réponse');
+});
+
 test('opens a detected building that has no Firestore document on its empty state', async ({ browser }) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openFieldMap(page);
