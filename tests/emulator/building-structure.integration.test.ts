@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, GeoPoint, getDoc, setDoc, Timestamp, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, deleteField, doc, GeoPoint, getDoc, getDocs, setDoc, Timestamp, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { generateUniformDoorTargets } from '../../src/domain/workspace/building-structure';
 import { FirestoreBuildingGateway } from '../../src/infrastructure/firestore/firestore-building-gateway';
@@ -30,7 +30,7 @@ function doorData(index: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function seed() {
+async function seed(buildingFields: Record<string, unknown> = {}, doorCount = 10) {
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await setDoc(doc(db, `${workspace}/members/admin-a`), { role: 'admin', active: true, createdAt: Timestamp.now() });
@@ -40,10 +40,11 @@ async function seed() {
     await setDoc(doc(db, `${workspace}/statuses/retry`), { label: 'Repasser', color: '#D8A200', order: 2, active: true });
     await setDoc(doc(db, `${workspace}/zones/zone-a`), { name: 'Zone A' });
     await setDoc(doc(db, `${workspace}/buildings/building-a`), {
-      addressLabel: '18 rue de test', location: new GeoPoint(43.61, 1.44), geohash: 'spc00', zoneId: 'zone-a', createdBy: 'admin-a', structureRevision: 4
+      addressLabel: '18 rue de test', location: new GeoPoint(43.61, 1.44), geohash: 'spc00', zoneId: 'zone-a', createdBy: 'admin-a', structureRevision: 4,
+      ...buildingFields
     });
     const batch = writeBatch(db);
-    for (let index = 0; index < 10; index += 1) batch.set(doc(db, `${workspace}/doors/door-${index}`), doorData(index));
+    for (let index = 0; index < doorCount; index += 1) batch.set(doc(db, `${workspace}/doors/door-${index}`), doorData(index));
     await batch.commit();
   });
 }
@@ -224,6 +225,81 @@ describe('building structure against emulator rules', () => {
 });
 
 describe('compartiments persistés et règles de sécurité', () => {
+  it.each([false, true])('ajoute D0 en conservant archived=%s, les seize portes et leurs passages', async (archived) => {
+    await seed({ archived }, 16);
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const batch = writeBatch(context.firestore());
+      for (let index = 0; index < 16; index++) {
+        batch.set(doc(context.firestore(), `${workspace}/visits/visit-${index}`), {
+          doorId: `door-${index}`, statusId: index % 2 === 0 ? 'contacted' : 'retry', note: '', authorId: 'admin-a',
+          occurredAt: Timestamp.fromMillis(1_000), syncedAt: Timestamp.fromMillis(2_000), doorRevision: index + 1
+        });
+      }
+      await batch.commit();
+    });
+    const db = testEnv.authenticatedContext('member-a').firestore();
+    const buildingRef = doc(db, `${workspace}/buildings/building-a`);
+    const originalBuilding = (await getDoc(buildingRef)).data();
+    const originalDoors = (await getDocs(collection(db, `${workspace}/doors`))).docs.map(snapshot => snapshot.data());
+    const originalVisits = (await getDocs(collection(db, `${workspace}/visits`))).docs.map(snapshot => snapshot.data());
+    const gateway = new FirestoreBuildingStructureGateway(db, 'main', () => 'member-a');
+    const added = await gateway.apply({
+      buildingId: 'building-a', expectedStructureRevision: 4, sectionId: 'section-d0', newSection: { id: 'section-d0', label: 'D0' },
+      targets: [], authorId: 'member-a', createDoorId: () => 'unused'
+    });
+    expect(added).toMatchObject({ created: [], updated: [], archivedDoorIds: [] });
+    expect((await getDoc(buildingRef)).data()).toEqual({
+      ...originalBuilding, structureRevision: 5, sections: { 'section-d0': 'D0' }, updatedAt: expect.any(Timestamp)
+    });
+    expect((await getDocs(collection(db, `${workspace}/doors`))).docs.map(snapshot => snapshot.data())).toEqual(originalDoors);
+    expect((await getDocs(collection(db, `${workspace}/visits`))).docs.map(snapshot => snapshot.data())).toEqual(originalVisits);
+
+    await gateway.apply({
+      buildingId: 'building-a', expectedStructureRevision: 5, sectionId: 'section-d0',
+      targets: [{ floor: 0, label: '01', sortOrder: 0 }], authorId: 'member-a', createDoorId: () => 'door-d0-01'
+    });
+    expect((await getDoc(buildingRef)).data()).toMatchObject({ archived, structureRevision: 6 });
+    expect((await getDoc(doc(db, `${workspace}/doors/door-d0-01`))).data()).toMatchObject({ sectionId: 'section-d0', label: '01' });
+    for (let index = 0; index < 16; index++) {
+      expect((await getDoc(doc(db, `${workspace}/doors/door-${index}`))).data()).toEqual(doorData(index));
+    }
+    expect((await getDocs(collection(db, `${workspace}/visits`))).docs.map(snapshot => snapshot.data())).toEqual(originalVisits);
+  });
+
+  it.each(['member-a', 'admin-a'])('interdit à %s de modifier ou retirer le marqueur archived existant', async (uid) => {
+    await seed({ archived: false });
+    const db = testEnv.authenticatedContext(uid).firestore();
+    const ref = doc(db, `${workspace}/buildings/building-a`);
+    const original = (await getDoc(ref)).data();
+    for (const archived of [true, deleteField(), 'false']) {
+      await assertFails(updateDoc(ref, { archived, structureRevision: 5, sections: { 'section-d0': 'D0' }, updatedAt: serverTimestamp() }));
+    }
+    expect((await getDoc(ref)).data()).toEqual(original);
+  });
+
+  it.each(['member-a', 'admin-a'])('interdit à %s d’introduire archived dans un document absent de ce champ', async (uid) => {
+    await seed();
+    const db = testEnv.authenticatedContext(uid).firestore();
+    const ref = doc(db, `${workspace}/buildings/building-a`);
+    const original = (await getDoc(ref)).data()!;
+    for (const archived of [false, true]) {
+      await assertFails(updateDoc(ref, { archived, structureRevision: 5, sections: { 'section-d0': 'D0' }, updatedAt: serverTimestamp() }));
+      await assertFails(setDoc(doc(db, `${workspace}/buildings/new-building`), { ...original, archived, createdBy: uid, structureRevision: 0 }));
+    }
+    expect((await getDoc(ref)).data()).toEqual(original);
+  });
+
+  it.each([{ archived: 'false' }, { unexpectedField: true }])('refuse toujours les champs non conformes : %j', async (fields) => {
+    await seed(fields);
+    const db = testEnv.authenticatedContext('member-a').firestore();
+    const gateway = new FirestoreBuildingStructureGateway(db, 'main', () => 'member-a');
+    await assertFails(gateway.apply({
+      buildingId: 'building-a', expectedStructureRevision: 4, sectionId: 'section-d0', newSection: { id: 'section-d0', label: 'D0' },
+      targets: [], authorId: 'member-a', createDoorId: () => 'unused'
+    }));
+    expect((await getDoc(doc(db, `${workspace}/buildings/building-a`))).data()).toMatchObject({ ...fields, structureRevision: 4 });
+  });
+
   it('ajoute un hall et ses portes sans migrer ni archiver le suivi existant', async () => {
     await seed();
     const db = testEnv.authenticatedContext('member-a').firestore();

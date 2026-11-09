@@ -72,11 +72,14 @@ service cloud.firestore {
     function validBuilding() {
       let data = request.resource.data;
       return data.keys().hasAll(['addressLabel', 'location', 'geohash', 'zoneId', 'createdBy', 'structureRevision']) &&
-        data.keys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'createdBy', 'structureRevision', 'updatedAt', 'sections']) &&
+        data.keys().hasOnly(['addressLabel', 'location', 'geohash', 'zoneId', 'createdBy', 'structureRevision', 'updatedAt', 'sections', 'archived']) &&
         data.addressLabel is string && data.addressLabel.size() >= 1 && data.addressLabel.size() <= 160 &&
         data.location is latlng && data.geohash is string && data.geohash.size() >= 4 && data.geohash.size() <= 12 &&
         data.zoneId is string && data.createdBy is string &&
         data.structureRevision is int && data.structureRevision >= 0 &&
+        // Compatibilité : certains bâtiments portent déjà ce marqueur. Les listes de
+        // champs modifiables ci-dessous imposent de le conserver, sans pouvoir l'ajouter.
+        (!data.keys().hasAny(['archived']) || data.archived is bool) &&
         (data.get('sections', {}) is map && data.get('sections', {}).size() < 50) && optionalTimestamp(data, 'updatedAt');
     }
 
@@ -156,6 +159,7 @@ service cloud.firestore {
     match /workspaces/{workspaceId}/buildings/{buildingId} {
       allow read: if activeMember(workspaceId);
       allow create: if activeMember(workspaceId) && validBuilding() &&
+        !request.resource.data.keys().hasAny(['archived']) &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.structureRevision == 0 && request.resource.data.get('sections', {}).size() == 0 &&
         exists(/databases/$(database)/documents/workspaces/$(workspaceId)/zones/$(request.resource.data.zoneId));
