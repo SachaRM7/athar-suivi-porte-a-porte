@@ -1,4 +1,4 @@
-import { Map as MapLibreMap, NavigationControl, addProtocol, type GeoJSONFeature, type GeoJSONSource, type Map as MapInstance } from 'maplibre-gl';
+import { Map as MapLibreMap, NavigationControl, addProtocol, type GeoJSONSource, type Map as MapInstance } from 'maplibre-gl';
 import { PMTiles, Protocol, SharedPromiseCache } from 'pmtiles';
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode, type GeoJSONStoreFeatures } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
@@ -49,6 +49,8 @@ import { cadastralSuggestion, type CadastralSuggestion } from '../../buildings/m
 import { AccountMenu } from './AccountMenu';
 import { footprintBuildingLabel, MANUAL_BUILDING_LABEL } from '../../buildings/model/building-address';
 import type { SelectBuildingOptions } from '../model/use-opened-building';
+import { supportsWebGL2 } from '../model/webgl-support';
+import type { CanvasMap, MapCamera, MapFootprint } from '../infrastructure/canvas-map';
 import { LocalPmtilesSource } from '../infrastructure/local-pmtiles-source';
 import { firstAvailableArchive } from '../model/footprint-archive';
 import { matchesAddress, markingCandidates } from '../model/field-navigation';
@@ -172,7 +174,7 @@ function localBuildingFeatures(buildings: readonly Building[], context: Footprin
   };
 }
 
-function outerRing(feature: GeoJSONFeature): readonly [number, number][] | null {
+function outerRing(feature: MapFootprint): readonly [number, number][] | null {
   const geometry = feature.geometry;
   const ring = geometry.type === 'Polygon' ? geometry.coordinates[0]
     : geometry.type === 'MultiPolygon' ? geometry.coordinates[0]?.[0]
@@ -192,6 +194,9 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const element = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const map = useRef<MapInstance | null>(null);
+  const canvasMap = useRef<CanvasMap | null>(null);
+  const savedCamera = useRef<MapCamera>({ center: [1.4468, 43.6064], zoom: 16.1 });
+  const [renderer, setRenderer] = useState<'webgl' | 'canvas'>('webgl');
   const draw = useRef<TerraDraw | null>(null);
   const viewportRequest = useRef<AbortController | null>(null);
   const placingBuilding = useRef(false);
@@ -244,6 +249,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const cameraFollows = useRef(false);
   const lastFix = useRef<PositionFix | null>(null);
   const metadata = useRef<Promise<{ nextZones: readonly Zone[]; statuses: readonly Status[] }> | null>(null);
+  const zoneLabels = useRef<ReadonlyMap<string, string>>(new Map());
   const paintedIds = useRef(new Set<string>());
   const [confirmZoneDeletion, setConfirmZoneDeletion] = useState(false);
 
@@ -304,7 +310,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
    * donc la carte sur lui, à un zoom où les emprises sont dessinées.
    */
   const flyToBuilding = (building: Building): void => {
-    const instance = map.current;
+    const instance = map.current ?? canvasMap.current;
     if (!instance) return;
     instance.easeTo({
       center: [building.location.longitude, building.location.latitude],
@@ -316,7 +322,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const flyToZone = (zone: Zone): void => {
     setZoneMenuOpen(false);
     selectZone(zone.id);
-    map.current?.fitBounds(
+    (map.current ?? canvasMap.current)?.fitBounds(
       [[zone.bbox.west, zone.bbox.south], [zone.bbox.east, zone.bbox.north]],
       { padding: 64, duration: motionDuration(700) }
     );
@@ -327,6 +333,10 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
    * aucune écriture n'est déclenchée ici, ni au survol, ni à l'appui.
    */
   const paintFootprints = useCallback(() => {
+    if (canvasMap.current) {
+      canvasMap.current.setContext(footprintContext.current, [...pendingLocalBuildings.current.values()]);
+      return;
+    }
     const instance = map.current;
     if (!instance) return;
     const context = footprintContext.current;
@@ -390,7 +400,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   }, [repositories]);
 
   const refreshViewport = useCallback(async () => {
-    const instance = map.current;
+    const instance = map.current ?? canvasMap.current;
     if (!instance) return;
     viewportRequest.current?.abort();
     const controller = new AbortController();
@@ -472,16 +482,18 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     return () => { stop.forEach(unsubscribe => unsubscribe?.()); };
   }, [repositories, statsZoneIds]);
   useEffect(() => {
+    zoneLabels.current = new Map(zoneList.map(zone => [zone.id, zoneProgressLabel(zone, zoneStats.get(zone.id) ?? null)]));
+    canvasMap.current?.setZones(zoneList, zoneLabels.current);
     (map.current?.getSource(ZONE_SOURCE) as GeoJSONSource | undefined)?.setData(zoneFeatures(zones.current,
       new Map(zones.current.map(zone => [zone.id, zoneProgressLabel(zone, zoneStats.get(zone.id) ?? null)]))));
-  }, [zoneStats]);
+  }, [zoneStats, zoneList]);
 
   /**
    * Un appui sur une emprise ouvre la vue bâtiment, jamais un formulaire de création :
    * l'emprise existe déjà. Sans document Firestore, la fiche s'ouvre sur l'état vide et
    * le bâtiment n'est matérialisé qu'au moment où quelqu'un décrit sa structure.
    */
-  const openFootprint = useCallback(async (feature: GeoJSONFeature) => {
+  const openFootprint = useCallback(async (feature: MapFootprint) => {
     const identifier = feature.properties?.rnb_id ?? feature.properties?.id;
     if (typeof identifier !== 'string') return;
     // La suggestion cadastrale voyage avec l'emprise : elle pré-remplit le dialogue de
@@ -511,8 +523,98 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     }, { persisted: false, suggestion });
   }, [authorId, onBuildingSelect, repositories.buildings]);
 
+  const placeBuilding = useCallback((location: GeoPoint) => {
+    placingBuilding.current = false;
+    setPlacing(false);
+    const canvas = map.current?.getCanvas();
+    if (canvas) canvas.style.cursor = '';
+    canvasMap.current?.setCursor('');
+    const zone = footprintContext.current.zone;
+    if (!zone) {
+      setMessage('Choisis une zone avant de poser un bâtiment.');
+      return;
+    }
+    const building: Building = {
+      id: `local_${crypto.randomUUID()}`,
+      addressLabel: MANUAL_BUILDING_LABEL,
+      location,
+      geohash: geohashForLocation([location.latitude, location.longitude]),
+      zoneId: zone.id,
+      createdBy: authorId,
+      structureRevision: 0
+    };
+    pendingLocalBuildings.current.set(building.id, building);
+    if (pendingLocalBuildings.current.size > 25) pendingLocalBuildings.current.delete(pendingLocalBuildings.current.keys().next().value!);
+    paintFootprints();
+    setMode('terrain');
+    onBuildingSelect?.(building, { persisted: false, suggestion: null });
+    setMessage('Bâtiment local posé. Décris sa structure pour l’enregistrer.');
+  }, [authorId, onBuildingSelect, paintFootprints]);
+
   useEffect(() => {
-    if (!element.current || map.current) return;
+    if (!element.current || map.current || canvasMap.current) return;
+    const container = element.current;
+    if (renderer === 'canvas') {
+      let disposed = false;
+      let instance: CanvasMap | null = null;
+      let failed = false;
+      let moveTimer: ReturnType<typeof setTimeout> | undefined;
+      const showError = (message: string) => {
+        if (disposed) return;
+        failed = true; setMapError(true); setMessage(message);
+      };
+      void import('../infrastructure/canvas-map').then(({ CanvasMap }) => {
+        if (disposed) return;
+        instance = new CanvasMap(container, {
+          camera: savedCamera.current, footprintArchives,
+          onError: showError,
+          onMove: () => {
+            viewportRequest.current?.abort(); clearTimeout(moveTimer);
+            moveTimer = setTimeout(() => { void refreshViewport().catch(() => undefined); }, 180);
+          },
+          onDrag: () => {
+            if (!cameraFollows.current) return;
+            cameraFollows.current = false;
+            setFollowing(current => current === 'centered' ? 'detached' : current);
+          },
+          onFootprints: features => {
+            footprintSuggestions.current.clear();
+            for (const feature of features) {
+              const id = feature.properties?.rnb_id;
+              const suggestion = cadastralSuggestion(feature.properties ?? {});
+              if (typeof id === 'string' && suggestion) footprintSuggestions.current.set(id, suggestion);
+            }
+          },
+          onClick: (longitude, latitude, feature) => {
+            if (placingBuilding.current) { placeBuilding({ longitude, latitude }); return; }
+            if (!feature) return;
+            setPickingFootprint(false);
+            void openFootprint(feature).catch(() => setMessage('Bâtiment indisponible. Vérifie le réseau ou la préparation hors ligne puis réessaie.'));
+          }
+        });
+        canvasMap.current = instance;
+        instance.setZones(zones.current, zoneLabels.current);
+        instance.setContext(footprintContext.current, [...pendingLocalBuildings.current.values()]);
+        instance.setPosition(lastFix.current);
+        void refreshViewport().catch(() => undefined);
+        return instance.ready;
+      }).then(() => {
+        if (!disposed && !failed) { setMapError(false); setMessage(''); }
+      }).catch(() => showError('Carte indisponible. Réessaie ou utilise la liste des bâtiments.'));
+      return () => {
+        disposed = true; clearTimeout(moveTimer); viewportRequest.current?.abort();
+        if (instance) {
+          const center = instance.getCenter();
+          savedCamera.current = { center: [center.lng, center.lat], zoom: instance.getZoom() };
+          instance.remove();
+        }
+        canvasMap.current = null;
+      };
+    }
+    if (!supportsWebGL2()) {
+      queueMicrotask(() => { setRenderer('canvas'); setMessage('Chargement de la carte…'); });
+      return;
+    }
     // Un nouvel essai doit aussi oublier les promesses PMTiles rejetées.
     const archive = new PMTiles(new LocalPmtilesSource(withBasePath('/fixtures/toulouse.pmtiles'), 'athar-toulouse-local'), new SharedPromiseCache(64));
     protocol.add(archive);
@@ -521,11 +623,17 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     try { instance = new MapLibreMap({
       container: element.current,
       // Zoom 16 minimum : en dessous, `03-CARTO.md` n'affiche plus les emprises individuelles.
-      center: [1.4468, 43.6064], zoom: 16.1, pitch: 0, bearing: 0,
+      ...savedCamera.current, pitch: 0, bearing: 0,
       attributionControl: { compact: true },
       style: localMapStyle, maxTileCacheSize: 64, maxTileCacheZoomLevels: 2
     });
-    } catch { queueMicrotask(() => setMapError(true)); return; }
+    } catch { queueMicrotask(() => { setRenderer('canvas'); setMessage('Chargement de la carte…'); }); return; }
+    // A successful probe does not guarantee that the map's own GPU allocation succeeds.
+    // MapLibre 6 emits this constructor error before listeners can be attached.
+    if (!instance.getCanvas().getContext('webgl2')) {
+      queueMicrotask(() => { setRenderer('canvas'); setMessage('Chargement de la carte…'); });
+      return;
+    }
     map.current = instance;
     element.current.dataset.basemap = 'local-pmtiles';
     let disposed = false;
@@ -533,7 +641,14 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     const initRequest = new AbortController();
     const mapFailed = () => { if (!disposed) { setMapError(true); setMessage('Carte indisponible. Réessaie ou utilise la liste des bâtiments.'); } };
     instance.on('error', mapFailed);
-    instance.getCanvas().addEventListener('webglcontextlost', mapFailed);
+    const useCanvas = () => {
+      if (disposed) return;
+      const center = instance.getCenter();
+      savedCamera.current = { center: [center.lng, center.lat], zoom: instance.getZoom() };
+      setEditing(null); setMapError(false); setRenderer('canvas'); setMessage('Chargement de la carte…');
+    };
+    instance.getCanvas().addEventListener('webglcontextlost', useCanvas);
+
     const initializeWorkspaceLayers = async () => {
       if (instance.getSource(ZONE_SOURCE)) return;
       {
@@ -597,30 +712,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
 
       instance.on('click', (event) => {
         if (placingBuilding.current) {
-          placingBuilding.current = false;
-          setPlacing(false);
-          instance.getCanvas().style.cursor = '';
-          const zone = footprintContext.current.zone;
-          if (!zone) {
-            setMessage('Choisis une zone avant de poser un bâtiment.');
-            return;
-          }
-          const location: GeoPoint = { latitude: event.lngLat.lat, longitude: event.lngLat.lng };
-          const building: Building = {
-            id: `local_${crypto.randomUUID()}`,
-            addressLabel: MANUAL_BUILDING_LABEL,
-            location,
-            geohash: geohashForLocation([location.latitude, location.longitude]),
-            zoneId: zone.id,
-            createdBy: authorId,
-            structureRevision: 0
-          };
-          pendingLocalBuildings.current.set(building.id, building);
-          if (pendingLocalBuildings.current.size > 25) pendingLocalBuildings.current.delete(pendingLocalBuildings.current.keys().next().value!);
-          paintFootprints();
-          setMode('terrain');
-          onBuildingSelect?.(building, { persisted: false, suggestion: null });
-          setMessage('Bâtiment local posé. Décris sa structure pour l’enregistrer.');
+          placeBuilding({ latitude: event.lngLat.lat, longitude: event.lngLat.lng });
           return;
         }
         const activeZone = footprintContext.current.zone;
@@ -665,10 +757,10 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     });
     return () => {
       disposed = true; initRequest.abort(); clearTimeout(moveTimer); viewportRequest.current?.abort();
-      draw.current?.stop(); draw.current = null; instance.remove(); map.current = null;
+      draw.current?.stop(); draw.current = null; instance.getCanvas().removeEventListener('webglcontextlost', useCanvas); instance.remove(); map.current = null;
       suggestions.clear(); paintedIds.current.clear();
     };
-  }, [authorId, footprintArchives, onBuildingSelect, openFootprint, paintFootprints, refreshViewport, mapVersion]);
+  }, [authorId, footprintArchives, onBuildingSelect, openFootprint, paintFootprints, refreshViewport, mapVersion, renderer, placeBuilding]);
 
   const stopFollowing = useCallback(() => {
     locationRequest.current?.abort();
@@ -676,11 +768,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     cameraFollows.current = false;
     lastFix.current = null;
     setFollowing('off');
+    canvasMap.current?.setPosition(null);
     (map.current?.getSource(POSITION_SOURCE) as GeoJSONSource | undefined)?.setData(EMPTY_FEATURES);
   }, []);
 
   const centerOn = (fix: PositionFix, first: boolean) => {
-    const instance = map.current;
+    const instance = map.current ?? canvasMap.current;
     if (!instance) return;
     instance.easeTo({
       center: [fix.longitude, fix.latitude],
@@ -711,6 +804,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     followPosition(navigator.geolocation, controller.signal, (fix) => {
       const first = lastFix.current === null;
       lastFix.current = fix;
+      canvasMap.current?.setPosition(fix);
       (map.current?.getSource(POSITION_SOURCE) as GeoJSONSource | undefined)?.setData(positionFeatures(fix));
       if (cameraFollows.current) centerOn(fix, first);
       if (first) setMessage(`Position suivie · précision d’environ ${Math.ceil(fix.accuracy)} m. Touche le bouton pour arrêter.`);
@@ -764,6 +858,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     setPanelHeight('peek');
     const canvas = map.current?.getCanvas();
     if (canvas) canvas.style.cursor = 'crosshair';
+    canvasMap.current?.setCursor('crosshair');
     // La consigne vit dans le bandeau : la ligne d'état ne la répète pas.
     setMessage('');
   };
@@ -773,6 +868,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
     setPlacing(false);
     const canvas = map.current?.getCanvas();
     if (canvas) canvas.style.cursor = '';
+    canvasMap.current?.setCursor('');
     setMessage('Pose annulée. Rien n’a été créé.');
   };
 
@@ -875,11 +971,12 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
   const openListedBuilding = (building: Building) => {
     lastBuilding.current = building.id;
     setMarkingOpen(false);
-    flyToBuilding(building);
     onBuildingSelect?.(building, { persisted: true, suggestion: footprintSuggestions.current.get(building.id) ?? null });
+    // A camera failure must never block opening a building from the list.
+    try { flyToBuilding(building); } catch { /* The sheet is already open. */ }
   };
   const startMarking = () => {
-    const centre = map.current?.getCenter();
+    const centre = (map.current ?? canvasMap.current)?.getCenter();
     if (centre) setMarkingCentre({ latitude: centre.lat, longitude: centre.lng });
     const previous = candidates.find(entry => entry.building.id === lastBuilding.current);
     const single = candidates.length === 1 ? candidates[0] : null;
@@ -909,7 +1006,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
             <button onClick={() => setPickingFootprint(false)} type="button">Annuler</button>
           </p>
         )}
-        <div aria-label="Carte MapLibre des zones" className={placing ? 'workspace-map placing' : 'workspace-map'} ref={element} />
+        <div key={`${renderer}-${mapVersion}`} data-renderer={renderer} aria-label={renderer === 'canvas' ? 'Carte des zones sans WebGL' : 'Carte MapLibre des zones'} className={placing ? 'workspace-map placing' : 'workspace-map'} ref={element} />
       </div>
 
       <header className="terrain-topbar">
@@ -1086,12 +1183,13 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
       {mode === 'edition' && (
         <div className="terrain-editbar" aria-label="Outils de zone">
           <span className="terrain-editbar-mode">Mode Édition</span>
+          {renderer === 'canvas' && canEditZones && <span>Le tracé des zones nécessite un navigateur compatible WebGL2.</span>}
           <select aria-label="Zone a modifier" value={selectedZoneId ?? ''} onChange={(event) => selectZone(event.target.value || null)}>
             {!selectedZoneId && <option value="">Choisir une zone</option>}
             {zoneList.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
           </select>
-          {canEditZones && <button disabled={editing !== null || savingZone} onClick={startDrawing} type="button">Créer une zone</button>}
-          {canEditZones && <button disabled={editing !== null || !selectedZoneId} onClick={startEditing} type="button">Redessiner</button>}
+          {canEditZones && <button disabled={renderer === 'canvas' || editing !== null || savingZone} onClick={startDrawing} type="button">Créer une zone</button>}
+          {canEditZones && <button disabled={renderer === 'canvas' || editing !== null || !selectedZoneId} onClick={startEditing} type="button">Redessiner</button>}
           {canCreateBuildings && <button disabled={editing !== null || placing} onClick={startBuildingPlacement} type="button">Ajouter un bâtiment</button>}
           {canEditZones && selectedZone && <button className="terrain-editbar-danger" disabled={editing !== null || savingZone} onClick={() => void deleteSelectedZone()} type="button">Supprimer</button>}
           {editing && <button className="terrain-editbar-save" disabled={savingZone} onClick={() => void saveZone()} type="button">Enregistrer la zone</button>}
@@ -1130,7 +1228,7 @@ export function WorkspaceMap({ repositories, authorId, canEditZones, initialZone
         <button className="ds-button ds-button--ghost" type="button" onClick={() => setMarkingOpen(false)}>Annuler</button>
       </Dialog>
       <Dialog open={confirmZoneDeletion && selectedZone !== null} title="Supprimer cette zone ?" onClose={() => setConfirmZoneDeletion(false)}><p>Supprimer « {selectedZone?.name} » ? Aucun bâtiment, aucune porte et aucun passage ne sera supprimé.</p><button className="ds-button ds-button--brand" disabled={savingZone} onClick={() => void deleteSelectedZone(true)} type="button">Supprimer la zone</button><button className="ds-button ds-button--ghost" onClick={() => setConfirmZoneDeletion(false)} type="button">Annuler</button></Dialog>
-      {(mapError || metadataError || viewportPartial) && <aside className="terrain-read-alert" aria-label="État de la carte"><p>{mapError ? 'Carte indisponible. La liste reste utilisable.' : metadataError ? 'Zones indisponibles. Vérifie le réseau ou la préparation hors ligne.' : 'Données du cadrage incomplètes. Les pointillés indiquent les bâtiments à vérifier. Rapproche la carte ou vérifie la préparation hors ligne.'}</p><button type="button" onClick={() => { if (mapError) setMapVersion(value => value + 1); else { metadata.current = null; void ensureMetadata().then(() => refreshViewport()).catch(() => undefined); } }}>Réessayer la carte</button></aside>}
+      {(mapError || metadataError || viewportPartial) && <aside className="terrain-read-alert" aria-label="État de la carte"><p>{mapError ? 'Carte indisponible. La liste reste utilisable.' : metadataError ? 'Zones indisponibles. Vérifie le réseau ou la préparation hors ligne.' : 'Données du cadrage incomplètes. Les pointillés indiquent les bâtiments à vérifier. Rapproche la carte ou vérifie la préparation hors ligne.'}</p><button type="button" onClick={() => { if (mapError) { setMapError(false); setMapVersion(value => value + 1); } else { metadata.current = null; void ensureMetadata().then(() => refreshViewport()).catch(() => undefined); } }}>Réessayer la carte</button></aside>}
       <p className="terrain-status" role="status">{message}</p>
     </section>
   );

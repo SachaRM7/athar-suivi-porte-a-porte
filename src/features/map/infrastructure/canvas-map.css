@@ -1,0 +1,8 @@
+/* Leaflet's internal panes must stay below Athar's floating controls and sheets. */
+.terrain-map-stage .leaflet-container { isolation: isolate; background: var(--map-bg); font-family: var(--font-ui); }
+.terrain-map-stage .leaflet-top.leaflet-right { top: 66px; right: 8px; }
+.terrain-map-stage .leaflet-control-zoom { overflow: hidden; border: 1px solid var(--hairline); border-radius: var(--r-pill); box-shadow: var(--shadow); }
+.terrain-map-stage .leaflet-control-zoom a { width: var(--touch); height: var(--touch); line-height: var(--touch); background: var(--paper); color: var(--ink); }
+.terrain-map-stage .leaflet-control-attribution { font-size: var(--t-10); background: var(--paper); }
+.terrain-map-stage .canvas-zone-label { max-width: min(70vw, 320px); white-space: normal; color: var(--brand); background: var(--paper); border-color: var(--hairline); font-family: var(--font-data); box-shadow: var(--shadow); }
+.terrain-map-stage path[role="button"]:focus-visible { outline: 3px solid var(--brand); }

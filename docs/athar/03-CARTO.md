@@ -157,3 +157,40 @@ Le tuileset sert au dessin. Le dénominateur de couverture vient du catalogue co
 produit **avant** tippecanoe par `scripts/carto/catalogue.mjs`. La procédure, les limites
 incluses, les chevauchements et l'import versionné sont définis dans
 [06-VERITE-DONNEES.md](06-VERITE-DONNEES.md). Aucun nombre de tuiles visibles ne sert de total.
+
+## Carte automatique sans WebGL2
+
+La carte terrain essaie MapLibre quand WebGL2 est disponible. Une capacité absente,
+un échec d'allocation du contexte propre à MapLibre (qui peut retourner une instance
+incomplète sans exception), ou une perte de contexte en cours d'utilisation déclenche
+le rendu de secours automatiquement. Le cadrage, la zone, les fiches ouvertes et le
+suivi GPS explicite sont conservés. Le choix est limité à la session, sans préférence
+persistante ni détection du navigateur par son nom.
+
+Le module différé `canvas-map.ts` utilise Leaflet pour les interactions, le rendu
+Canvas de Protomaps pour le fond et SVG pour les emprises. Il lit **les mêmes PMTiles
+locaux** via `LocalPmtilesSource`, avec les mêmes limites de plages et le cache du
+service worker. Aucun fournisseur externe de tuiles ou géocodage n'est ajouté.
+`@mapbox/vector-tile` et `pbf` décodent les emprises en conservant leurs ID-RNB et
+suggestions cadastrales. Ces dépendances sont nécessaires au rendu sans GPU.
+
+Les statuts, les pointillés d'incertitude, l'anneau sœurs et les lectures Firestore
+bornées utilisent le modèle terrain existant. Le mode de secours lit au maximum
+64 tuiles visibles et 15 000 emprises, quatre tuiles simultanément ; un dépassement
+invite à rapprocher la carte. Sous le zoom terrain 16, les emprises disparaissent.
+Déplacer la carte annule la génération précédente et fermer la carte annule les
+lectures de fichiers. La préparation hors ligne inclut le module de secours.
+
+La sélection d'une emprise, les fiches, les passages, le choix de zone, la position
+et la pose d'un bâtiment restent disponibles. Le tracé et le redessin de zones
+restent réservés au moteur WebGL : les deux commandes sont désactivées avec une
+explication en mode Édition. Les propriétés d'une zone restent modifiables.
+Une indisponibilité de fichier n'est pas assimilée à une panne GPU : elle conserve
+la liste et propose de réessayer le moteur actif. Ouvrir depuis la liste précède
+le déplacement de caméra et reste possible même si celui-ci échoue.
+
+Recette automatisée : `tests/canvas-map.spec.ts` (WebGL absent, allocation partielle,
+perte de contexte, fiche et passage, emprise non décrite, zoom, panne réseau et
+reprise, rechargement hors ligne), `tests/mobile/canvas-map.spec.ts` (Chromium et
+WebKit mobiles, fiches et GPS explicite). Cette recette ne remplace pas une sortie
+sur téléphone physique.
