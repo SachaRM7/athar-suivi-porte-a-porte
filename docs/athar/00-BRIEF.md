@@ -43,6 +43,7 @@ Ces libellés sont ceux affichés à l'utilisateur. Ne pas les reformuler.
 | `linked` | Attaché à l'effort | **Sort la porte du cycle de suivi** (lien établi) |
 | `dnd` | Ne pas déranger | La personne a demandé à ne plus être sollicitée — **sort aussi la porte du cycle de suivi** |
 | `locked` | Accès bloqué | Interphone, digicode, portail |
+| `heard` | Présence mais sans réponse | Bruit perçu derrière la porte, aucune réponse au passage |
 
 Marqueur séparé (booléen, cumulable avec n'importe quel statut) : **À confier aux sœurs**.
 

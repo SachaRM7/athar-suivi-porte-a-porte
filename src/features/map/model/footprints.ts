@@ -14,7 +14,7 @@ import { zoneProgressDate, zoneProgressSummary } from '../../zones/model/zone-pr
  */
 
 /** Priorité de dominance de `02-DATA-MODEL.md` : linked > open > away > locked > dnd. */
-const STATUS_DOMINANCE: readonly string[] = ['linked', 'contacted', 'retry', 'locked', 'do-not-return'];
+const STATUS_DOMINANCE: readonly string[] = ['linked', 'contacted', 'heard-no-answer', 'retry', 'locked', 'do-not-return'];
 
 function dominanceRank(statusId: string): number {
   const index = STATUS_DOMINANCE.indexOf(statusId);

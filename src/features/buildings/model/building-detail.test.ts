@@ -23,11 +23,14 @@ describe('building detail progress', () => {
     expect(progress.slice().reverse().map((item) => floorLabel(item.floor))).toEqual(['2ème', '1er', 'RDC']);
   });
 
-  it('never calls a floor of absent or locked doors finished', () => {
+  it('keeps absent, locked and unanswered doors with audible noise in the revisit count', () => {
     const [absent] = floorProgress([door('01', 0, 'retry'), door('02', 0, 'contacted')]);
     expect(absent).toMatchObject({ treatedCount: 2, toRevisitCount: 1 });
     expect(isFloorComplete(absent!)).toBe(false);
     expect(isFloorComplete(floorProgress([door('01', 0, 'locked')])[0]!)).toBe(false);
+    const [heard] = floorProgress([door('01', 0, 'heard-no-answer')]);
+    expect(heard).toMatchObject({ treatedCount: 1, toRevisitCount: 1 });
+    expect(isFloorComplete(heard!)).toBe(false);
     expect(isFloorComplete(floorProgress([door('01', 0, 'contacted'), door('02', 0, 'linked'), door('03', 0, 'do-not-return')])[0]!)).toBe(true);
     expect(isFloorComplete(floorProgress([door('01', 0, 'contacted'), door('02', 0, 'unvisited')])[0]!)).toBe(false);
   });

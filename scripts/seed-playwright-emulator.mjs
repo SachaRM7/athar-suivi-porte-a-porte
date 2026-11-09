@@ -47,7 +47,8 @@ for (const [id, label, color, order] of [
   ['retry', 'Absent', '#C87A0A', 2],
   ['linked', "Attaché à l'effort", '#2456A6', 3],
   ['do-not-return', 'Ne pas déranger', '#A93B2E', 4],
-  ['locked', 'Accès bloqué', '#6B5AA8', 5]
+  ['locked', 'Accès bloqué', '#6B5AA8', 5],
+  ['heard-no-answer', 'Présence mais sans réponse', '#147D92', 6]
 ]) {
   batch.set(workspace.collection('statuses').doc(id), { label, color, order, active: true });
 }

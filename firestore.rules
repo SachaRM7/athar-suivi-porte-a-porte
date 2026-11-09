@@ -51,7 +51,8 @@ service cloud.firestore {
         (statusId == 'retry' && data.label == 'Absent' && data.color == '#C87A0A' && data.order == 2 && data.active == true) ||
         (statusId == 'linked' && data.label == "Attaché à l'effort" && data.color == '#2456A6' && data.order == 3 && data.active == true) ||
         (statusId == 'do-not-return' && data.label == 'Ne pas déranger' && data.color == '#A93B2E' && data.order == 4 && data.active == true) ||
-        (statusId == 'locked' && data.label == 'Accès bloqué' && data.color == '#6B5AA8' && data.order == 5 && data.active == true);
+        (statusId == 'locked' && data.label == 'Accès bloqué' && data.color == '#6B5AA8' && data.order == 5 && data.active == true) ||
+        (statusId == 'heard-no-answer' && data.label == 'Présence mais sans réponse' && data.color == '#147D92' && data.order == 6 && data.active == true);
     }
 
     function validZone() {

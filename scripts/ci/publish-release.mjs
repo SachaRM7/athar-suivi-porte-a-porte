@@ -17,7 +17,9 @@ const serviceAccount = JSON.parse(process.env.ATHAR_FIREBASE_SERVICE_ACCOUNT ?? 
 if (serviceAccount.project_id !== expected.project) throw new Error('Compte de publication associé à un autre projet.');
 const credential = cert(serviceAccount);
 const app = initializeApp({ credential, projectId: expected.project });
-const receiptRef = getFirestore(app).doc('deployment/backend');
+const firestore = getFirestore(app);
+const receiptRef = firestore.doc('deployment/backend');
+const heardNoAnswerRef = firestore.doc('workspaces/main/statuses/heard-no-answer');
 const temporary = mkdtempSync(join(tmpdir(), 'athar-release-'));
 const credentialsPath = join(temporary, 'credentials.json');
 writeFileSync(credentialsPath, JSON.stringify(serviceAccount), { mode: 0o600 });
@@ -55,7 +57,15 @@ async function inspectBackend() {
 }
 try {
   await publishRelease({ expected, includeBackend: process.env.ATHAR_PUBLISH_BACKEND === 'true',
-    deployBackend: async () => deploy('firestore:rules,firestore:indexes,functions'), inspectBackend,
+    deployBackend: async () => {
+      deploy('firestore:rules,firestore:indexes,functions');
+      await firestore.runTransaction(async transaction => {
+        if ((await transaction.get(heardNoAnswerRef)).exists) return;
+        transaction.create(heardNoAnswerRef, {
+          label: 'Présence mais sans réponse', color: '#147D92', order: 6, active: true
+        });
+      });
+    }, inspectBackend,
     readReceipt: async () => (await receiptRef.get()).data(),
     writeReceipt: async receipt => { await receiptRef.set(receipt); },
     deployHosting: async () => deploy('hosting') });

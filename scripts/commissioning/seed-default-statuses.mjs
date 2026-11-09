@@ -8,7 +8,8 @@ const defaults = [
   ['retry', 'Absent', '#C87A0A', 2],
   ['linked', "Attach\u00e9 \u00e0 l'effort", '#2456A6', 3],
   ['do-not-return', 'Ne pas d\u00e9ranger', '#A93B2E', 4],
-  ['locked', 'Acc\u00e8s bloqu\u00e9', '#6B5AA8', 5]
+  ['locked', 'Acc\u00e8s bloqu\u00e9', '#6B5AA8', 5],
+  ['heard-no-answer', 'Présence mais sans réponse', '#147D92', 6]
 ];
 const bearer = await cliBearer();
 const headers = { Authorization: `Bearer ${bearer}`, 'x-goog-user-project': projectId };

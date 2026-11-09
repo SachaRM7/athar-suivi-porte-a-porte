@@ -322,7 +322,8 @@ h2 { font-size: 22px; }
 .door-detail-sheet .dnd-result span { background: var(--st-dnd); }
 .door-detail-sheet .linked-result { border-color: color-mix(in srgb, var(--st-linked) 55%, var(--hairline)); }
 .door-detail-sheet .linked-result span { background: var(--st-linked); }
-.door-detail-sheet .locked-result { grid-column: 1 / -1; }
+.door-detail-sheet .locked-result, .door-detail-sheet .heard-result { grid-column: 1 / -1; }
+.door-detail-sheet .heard-result span { background: var(--st-heard); }
 .door-detail-sheet .locked-result span { background: var(--st-locked); }
 .foyer-chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .foyer-chips button { background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-pill); color: var(--ink); cursor: pointer; font: var(--t-125) var(--font-ui); min-height: var(--touch); padding: 7px 11px; }

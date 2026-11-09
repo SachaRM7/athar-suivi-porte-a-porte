@@ -52,7 +52,8 @@ Ouverte au tap sur une case. Sheet `detail`.
 
 - Retour vers le bâtiment, titre `Porte 12 · 1er` en mono 17px, sous-ligne descriptive.
 - **Résultat du passage** : grille 2×2 (Contact établi · Absent · Attaché à l'effort · Ne pas déranger)
-  + une ligne pleine largeur « Accès bloqué (interphone / code) ».
+  + deux lignes pleine largeur « Accès bloqué (interphone / code) » et « Présence mais sans réponse ».
+  Ce dernier résultat garde la porte à revisiter. Le bruit peut venir d’un appareil et on ignore si quelqu’un a entendu frapper.
   `Attaché à l'effort` est mis en avant : avec `Ne pas déranger`, il sort la porte du cycle de suivi.
   Changer le résultat d'une porte « Ne pas déranger » demande une confirmation dans la fiche
   (« Oui, corriger ») ; le passage précédent reste dans l'historique.

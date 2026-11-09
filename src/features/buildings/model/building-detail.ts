@@ -14,7 +14,7 @@ export type FloorProgress = {
 };
 
 /** « Absent » et « Accès bloqué » restent dans le cycle : il faudra repasser. */
-const TO_REVISIT_STATUS_IDS: readonly string[] = ['retry', 'locked'];
+const TO_REVISIT_STATUS_IDS: readonly string[] = ['retry', 'locked', 'heard-no-answer'];
 
 function countFollowUp(doors: readonly Door[]): Pick<FloorProgress, 'firstVisitCount' | 'toRevisitCount'> {
   return {

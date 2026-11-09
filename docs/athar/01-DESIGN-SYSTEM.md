@@ -29,6 +29,7 @@ Ce qui est explicitement écarté : le fond crème + serif à fort contraste + a
   --st-linked:#2456A6;
   --st-dnd:#A93B2E;
   --st-locked:#6B5AA8;
+  --st-heard:#147D92;
 
   /* marqueur */
   --st-sisters:#C25B7C;
@@ -74,7 +75,7 @@ Le wordmark associe أثر (Noto Kufi Arabic 600, `--brand`) et ATHAR (Space Gro
 Une bande de traits verticaux, un par porte marquée pendant la sortie en cours. Hauteur et couleur selon le résultat.
 Placée en haut du panneau (desktop) et de la bottom sheet (mobile).
 
-Hauteurs : `linked` 26 px · `open` 21 px · `again`/n-a 17 px · `away` 13 px · `locked` 11 px · `dnd` 10 px.
+Hauteurs : `linked` 26 px · `open` 21 px · `heard`/n-a 17 px · `away` 13 px · `locked` 11 px · `dnd` 10 px.
 Largeur de trait 4 px, gouttière 2 px, coin 1 px. Une pause de sortie s'affiche par un vide de 9 px.
 
 C'est le seul endroit où l'interface se permet de l'audace. Tout le reste reste discipliné.

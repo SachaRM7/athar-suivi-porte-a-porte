@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { DOOR_STATUSES, STATUS_LABEL, TRACE_FALLBACK_HEIGHT, statusColorVar, traceHeight } from './status';
 
 describe('vocabulaire des statuts', () => {
-  it('expose exactement les six statuts figés', () => {
-    expect(DOOR_STATUSES).toEqual(['todo', 'open', 'away', 'linked', 'dnd', 'locked']);
+  it('expose exactement les sept statuts figés', () => {
+    expect(DOOR_STATUSES).toEqual(['todo', 'open', 'away', 'linked', 'dnd', 'locked', 'heard']);
   });
 
   it('reprend les libellés d’AGENTS.md sans les reformuler', () => {
@@ -14,6 +14,7 @@ describe('vocabulaire des statuts', () => {
       linked: "Attaché à l'effort",
       dnd: 'Ne pas déranger',
       locked: 'Accès bloqué',
+      heard: 'Présence mais sans réponse',
     });
   });
 
@@ -31,6 +32,7 @@ describe('hauteurs de la barre de trace', () => {
   it('suit les hauteurs de 01-DESIGN-SYSTEM.md', () => {
     expect(traceHeight('linked')).toBe(26);
     expect(traceHeight('open')).toBe(21);
+    expect(traceHeight('heard')).toBe(17);
     expect(traceHeight('away')).toBe(13);
     expect(traceHeight('locked')).toBe(11);
     expect(traceHeight('dnd')).toBe(10);

@@ -17,6 +17,15 @@ test('100 detected, 1 visited is 1%; door progression and follow-up exclusions a
 test('replays are deterministic and never count an event twice', () => {
   const f = fixture(); assert.deepEqual(result(f), result(structuredClone(f)));
 });
+test('counts an unanswered visit with audible noise while keeping the door eligible for follow-up', () => {
+  const f = fixture();
+  f.doors[0].currentStatusId = f.visits[0].statusId = 'heard-no-answer';
+  const stats = result(f);
+  assert.equal(stats.countsByStatus['heard-no-answer'], 1);
+  assert.equal(stats.visitedDoorCount, 1);
+  assert.equal(stats.excludedDoorCount, 0);
+  assert.equal(stats.completeness, 'complete');
+});
 test('archives and local buildings cannot inflate geographic coverage', () => {
   const f = fixture(); f.doors[0].active = false; assert.equal(result(f).doorCount, 0);
   f.doors[0].active = true; f.buildings[0].id = 'local_new'; f.doors[0].buildingId = 'local_new';
